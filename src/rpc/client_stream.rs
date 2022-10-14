@@ -19,8 +19,6 @@ impl WebRTCClientStream {
         self.headers_received.store(true, Ordering::Release)
     }
 
-    // processes a response message, returns true if and only if message was actually
-    // processed
     async fn process_message(&mut self, response: ResponseMessage) -> Result<()> {
         if let Some(message) = response.packet_message {
             match self.base_stream.process_message(message) {
