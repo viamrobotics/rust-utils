@@ -1,5 +1,5 @@
 LDFLAGS = -L/usr/local/lib `pkg-config --libs protobuf grpc++ re2 libcares`\
--ldl -L../../../../target/debug -lviam
+-ldl -L../../../../target/debug -lviam_rust_utils
 
 CXX = g++
 CXXFLAGS += `pkg-config --cflags protobuf grpc`
