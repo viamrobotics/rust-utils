@@ -1,7 +1,7 @@
 [package]
 name = "viam-rust-utils"
 version = "0.0.1"
-edition = "2021"
+edition = "2022"
 
 [lib]
 crate-type = ["cdylib","lib"]
