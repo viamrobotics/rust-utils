@@ -50,7 +50,7 @@
     :versions: []
     :when: 2022-09-08 15:39:55.751943000 Z
 - - :approve
-  - viam_rust_utils
+  - viam-rust-utils
   - :who:
     :why: 'this is our library'
     :versions: []
