@@ -1,5 +1,5 @@
 [package]
-edition = "2022"
+edition = "2021"
 name = "example"
 version = "0.0.1"
 
