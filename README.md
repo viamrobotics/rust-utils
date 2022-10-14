@@ -1,5 +1,5 @@
 # Viam Rust Utils
-Generic utilities built in rust with use in various SDKs and beyond
+Utilities built in rust with use in various Viam SDKs and beyond
 
 ## (In)stability Notice
 
@@ -23,7 +23,7 @@ Next run the following command `curl --proto '=https' --tlsv1.2 -sSf https://sh.
 - `examples` A list of examples
 
 ## Getting Started
-The logic in this library is meant for use more generically with Viam's SDKs, Rust and otherwise. To learn more about using the logic contained here, see the `rust-sdk` or `python-sdk`. 
+The logic in this library is meant for use with Viam's SDKs - Rust and otherwise - rather than as a standalone product. To learn more about using the logic contained here, see the [rust-sdk](https://www.github.com/viamrobots/viam-rust-sdk) or [python-sdk](https://www.github.com/viamrobots/viam-python-sdk). 
 If you would like to verify that this code works, you can run one of the examples by navigation to the examples folder and run `cargo run --bin test-echo` (you will need to provide your own robot's credentials to do so, or see instructions below)
 
 ### Echo Streaming Example
