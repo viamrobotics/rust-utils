@@ -106,4 +106,4 @@ Second: the rust webRTC implementation is still new, and liable to have bugs. At
 ## License 
 Copyright 2021-2022 Viam Inc.
 
-Apache 2.0 - See [LICENSE](https://github.com/viamrobotics/viam-rust-sdk/blob/main/LICENSE) file
+Apache 2.0 - See [LICENSE](https://github.com/viamrobotics/rust-utils/blob/main/LICENSE) file
