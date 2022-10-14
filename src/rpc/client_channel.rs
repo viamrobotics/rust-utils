@@ -117,14 +117,12 @@ impl WebRTCClientChannel {
         Ok(())
     }
 
-    pub(crate) async fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
-        let body = self
-            .receiver_bodies
+    pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
+        self.receiver_bodies
             .remove(&stream_id)
             .ok_or(anyhow::anyhow!(
                 "Tried to receive stream {stream_id} but it didn't exist!"
-            ))?;
-        Ok(body)
+            ))
     }
 
     pub(crate) async fn write_headers(

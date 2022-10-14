@@ -114,11 +114,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         status_code = STATUS_CODE_UNKNOWN;
                     };
 
-                    let resp_body = channel.resp_body_from_stream(stream_id);
-                    let body = match webrtc_action_with_timeout(resp_body)
-                        .await
-                        .and_then(|body| body)
-                    {
+                    let body = match channel.resp_body_from_stream(stream_id) {
                         Ok(body) => body,
                         Err(e) => {
                             log::error!("error receiving response from stream: {e}");
