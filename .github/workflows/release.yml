@@ -33,7 +33,7 @@ jobs:
           command: build
           args: --release --target=${{ matrix.target }}
       - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam.dylib builds/libviam-${{ matrix.platform }}.dylib
+        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -76,7 +76,7 @@ jobs:
           command: build
           args: --release --target=${{ matrix.target }}
       - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam.${{ matrix.ext }} builds/libviam-${{ matrix.platform }}.${{ matrix.ext }}
+        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.${{ matrix.ext }} builds/libviam_rust_utils-${{ matrix.platform }}.${{ matrix.ext }}
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
