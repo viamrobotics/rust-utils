@@ -18,6 +18,8 @@ byteorder = "1.4.3"
 bytes = "1.1.0"
 chashmap = "2.2.2"
 derivative = "2.2.0"
+ffi_helpers = "0.3.0"
+float-cmp = "0.9.0"
 futures = {version = "0.3", default-features = false, features = ["alloc", "executor"]}
 futures-core = "0.3"
 futures-util = "0.3"
