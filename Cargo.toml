@@ -4,6 +4,8 @@ version = "0.0.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "Utilities designed for use with Viamrobotics's SDKs"
+repostitory = "https://github.com/viamrobotics/rust-utils"
+authors = ["Viam, inc. <contact@viam.com>"]
 
 [lib]
 crate-type = ["cdylib","lib"]
