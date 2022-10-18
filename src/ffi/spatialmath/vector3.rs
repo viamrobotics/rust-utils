@@ -9,13 +9,11 @@ pub extern "C" fn new_vector3(x: f64, y: f64, z: f64) -> *mut Vector3 {
 }
 
 #[no_mangle]
-pub extern "C" fn free_vector_memory(ptr: *mut Vector3) {
+pub unsafe extern "C" fn free_vector_memory(ptr: *mut Vector3) {
     if ptr.is_null() {
         return;
     }
-    unsafe {
-        Box::from_raw(ptr);
-    }
+    Box::from_raw(ptr);
 }
 
 #[no_mangle]
@@ -59,7 +57,7 @@ pub unsafe extern "C" fn vector_get_normalized(vec_ptr: *const Vector3) -> *mut 
     null_pointer_check!(vec_ptr);
     let vec1 = &*vec_ptr;
     let vec = vec1.get_normalized();
-    return vec.to_raw_pointer()
+    vec.to_raw_pointer()
 }
 
 #[no_mangle]
@@ -74,7 +72,7 @@ pub unsafe extern "C" fn vector_get_scaled(vec_ptr: *const Vector3, factor: f64)
     null_pointer_check!(vec_ptr);
     let vec1 = &*vec_ptr;
     let vec = vec1.get_scaled(factor);
-    return vec.to_raw_pointer()
+    vec.to_raw_pointer()
 }
 
 #[no_mangle]
@@ -85,7 +83,7 @@ pub unsafe extern "C" fn vector_add(
     null_pointer_check!(vec_ptr_2);
     let vec1 = &*vec_ptr_1;
     let vec2 = &*vec_ptr_2;
-    return (*vec1 + *vec2).to_raw_pointer()
+    (*vec1 + *vec2).to_raw_pointer()
 }
 
 #[no_mangle]
@@ -96,7 +94,7 @@ pub unsafe extern "C" fn vector_subtract(
     null_pointer_check!(vec_ptr_2);
     let vec1 = &*vec_ptr_1;
     let vec2 = &*vec_ptr_2;
-    return (*vec1 - *vec2).to_raw_pointer()
+    (*vec1 - *vec2).to_raw_pointer()
 }
 
 #[no_mangle]
@@ -105,7 +103,7 @@ pub unsafe extern "C" fn vector_dot_product(vec_ptr_1: *const Vector3, vec_ptr_2
     null_pointer_check!(vec_ptr_2, f64::NAN);
     let vec1 = &*vec_ptr_1;
     let vec2 = &*vec_ptr_2;
-    return vec1.dot(vec2);
+    vec1.dot(vec2)
 }
 
 #[no_mangle]
@@ -117,5 +115,5 @@ pub unsafe extern "C" fn vector_cross_product(
     let vec1 = &mut*vec_ptr_1;
     let vec2 = &mut*vec_ptr_2;
     let vec = vec1.cross(vec2);
-    return vec.to_raw_pointer()
+    vec.to_raw_pointer()
 }

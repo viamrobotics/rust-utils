@@ -10,17 +10,17 @@ pub struct Vector3 {
 
 impl Vector3 {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
-        return Vector3{x: x, y: y, z: z}
+        Vector3{x, y, z}
     }
 
     fn norm2(&self) -> f64 {
-        return self.dot(self)
+        self.dot(self)
     }
 
     pub fn get_normalized(&self) -> Self {
         let mut copy_vec = self.clone();
         copy_vec.normalize();
-        return copy_vec
+        copy_vec
     }
 
     pub fn normalize(&mut self) {
@@ -35,15 +35,15 @@ impl Vector3 {
     }
 
     pub fn is_normalized(&self) -> bool {
-        return approx_eq!(f64, self.norm2(), 1.0)
+        approx_eq!(f64, self.norm2(), 1.0)
     }
 
     pub fn dot(&self, other: &Self) -> f64 {
-        return self.x * other.x + self.y * other.y + self.z * other.z;
+        self.x * other.x + self.y * other.y + self.z * other.z
     }
 
     pub fn cross(&self, other: &Self) -> Self {
-        return Self::new(
+        Self::new(
             self.y * other.z - self.z * other.y,
             self.z * other.x - self.x * other.z,
             self.x * other.y - self.y * other.x, 
@@ -59,7 +59,7 @@ impl Vector3 {
     pub fn get_scaled(&self, factor: f64) -> Self {
         let mut copy_vec = self.clone();
         copy_vec.scale(factor);
-        return copy_vec
+        copy_vec
     }
 
     /// Allocates the vector to the heap with a stable memory address and
@@ -73,14 +73,14 @@ impl Vector3 {
 impl std::ops::Add<Vector3> for Vector3 {
     type Output = Vector3;
     fn add(self, _rhs: Vector3) -> Vector3 {
-        return Self { x: self.x + _rhs.x, y: self.y + _rhs.y, z: self.z + _rhs.z }
+        Self { x: self.x + _rhs.x, y: self.y + _rhs.y, z: self.z + _rhs.z }
     }
 }
 
 impl std::ops::Sub<Vector3> for Vector3 {
     type Output = Vector3;
     fn sub(self, _rhs: Vector3) -> Vector3 {
-        return Self { x: self.x - _rhs.x, y: self.y - _rhs.y, z: self.z - _rhs.z }
+        Self { x: self.x - _rhs.x, y: self.y - _rhs.y, z: self.z - _rhs.z }
     }
 }
 
@@ -90,7 +90,7 @@ impl ApproxEq for Vector3 {
     fn approx_eq<T: Into<Self::Margin>>(self, other: Self, margin: T) -> bool {
         let margin = margin.into();
         let diff = other - self;
-        return diff.norm2().sqrt().approx_eq(0.0, margin)
+        diff.norm2().sqrt().approx_eq(0.0, margin)
     }
 }
 
