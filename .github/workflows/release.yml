@@ -37,26 +37,18 @@ jobs:
           path: builds
 
   build_in_container:
-    runs-on: ${{ matrix.arch }}
+    runs-on: [x64, qemu-host]
     container:
-      image: ${{ matrix.image }}
-      options: ${{ matrix.opts }}
+      image: ghcr.io/viamrobotics/canon:arm64-cache
+      options: --platform linux/arm64
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: [arm64, qemu-host]
-            target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            ext: so
-            image: 'ghcr.io/viamrobotics/canon:arm64-cache'
-            opts: '--platform linux/arm64'
-          - arch: [x64, qemu-host]
-            target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
-            ext: so
-            image: 'ghcr.io/viamrobotics/canon:amd64-cache'
-            opts: '--platform linux/amd64'
     steps:
       - uses: actions/checkout@v2
       - name: Setup rust toolchain
@@ -70,9 +62,10 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
+          use-cross: true
           args: --release --target=${{ matrix.target }}
       - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.${{ matrix.ext }} builds/libviam_rust_utils-${{ matrix.platform }}.${{ matrix.ext }}
+        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
