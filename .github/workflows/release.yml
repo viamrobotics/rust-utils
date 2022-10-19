@@ -5,6 +5,7 @@ on:
 
 jobs:
   build_native:
+    if: github.repository_owner == 'viamrobotics'
     runs-on: [self-hosted, ARM64, macOS]
     strategy:
       fail-fast: false
@@ -37,7 +38,8 @@ jobs:
           path: builds
 
   build_in_container:
-    runs-on: [x64, qemu-host]
+    if: github.repository_owner == 'viamrobotics'
+    runs-on: [self-hosted, x64]
     container:
       image: ghcr.io/viamrobotics/canon:arm64-cache
     strategy:
