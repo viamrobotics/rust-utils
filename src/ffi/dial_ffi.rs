@@ -229,6 +229,7 @@ pub unsafe extern "C" fn free_string(s: *mut c_char) {
     if s.is_null() {
         return;
     }
+    log::debug!("freeing string: {s:?}");
     let _ = CString::from_raw(s);
 }
 
@@ -255,5 +256,6 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<Ffi>>) -> i32 {
         }
         None => {}
     }
+    log::debug!("Freeing rust runtime");
     0
 }
