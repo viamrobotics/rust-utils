@@ -42,7 +42,7 @@ jobs:
     runs-on: [self-hosted, x64]
     container:
       image: ghcr.io/viamrobotics/canon:amd64-cache
-      options: -v /var/run/docker.sock:/var/run/docker.sock -v $(GITHUB_WORKSPACE):/project -w /project
+      options: -v /var/run/docker.sock:/var/run/docker.sock -v ${{ github.workspace }}:/project -w /project
     strategy:
       fail-fast: false
       matrix:
