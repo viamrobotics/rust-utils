@@ -70,7 +70,7 @@ jobs:
           args: --release --target=${{ matrix.target }}
           use-cross: ${{ matrix.cross }}
         env:
-          CROSS_CONTAINER_IN_CONTAINER=${{ matrix.cross }}
+          CROSS_CONTAINER_IN_CONTAINER: ${{ matrix.cross }}
       - name: Copy
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
       - name: Upload artifacts
