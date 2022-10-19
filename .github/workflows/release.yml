@@ -63,7 +63,6 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          use-cross: true
           args: --release --target=${{ matrix.target }}
       - name: Copy
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
