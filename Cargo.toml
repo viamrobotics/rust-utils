@@ -1,6 +1,6 @@
 [package]
 name = "viam-rust-utils"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "Utilities designed for use with Viamrobotics's SDKs"
@@ -48,4 +48,3 @@ webrtc = "0.5.0"
 
 [build-dependencies]
 tonic-build = {version = "0.7.2",features = ["prost", "compression"]}
-
