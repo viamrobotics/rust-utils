@@ -1,80 +1,78 @@
-name: Build release binaries
+name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'The new version of the crate. You can specify a version or a bump type (major/minor/patch)'
+        type: string
+        required: true
 
 jobs:
-  build_macos:
-    if: github.repository_owner == 'viamrobotics'
-    runs-on: [self-hosted, ARM64, macOS]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            platform: macosx_arm64
-          - target: x86_64-apple-darwin
-            platform: macosx_x86_64
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-      - name: Setup build directory
-        run: mkdir builds
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target=${{ matrix.target }}
-      - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: builds
-          path: builds
-
-  build_linux:
-    if: github.repository_owner == 'viamrobotics'
+  prepare:
+    if: github.repository_owner == 'viamrobotics' && github.ref == 'refs/heads/main' && contains(fromJson('["njooma"]'), github.actor)
     runs-on: [self-hosted, x64]
     container:
-      image: ghcr.io/viamrobotics/canon:amd64-cache
-      options: -v /var/run/docker.sock:/var/run/docker.sock -v ${{ github.workspace }}:/project -w /project
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-unknown-linux-gnu
-            platform: linux_aarch64
-            cross: true
-          - target: x86_64-unknown-linux-gnu
-            platform: linux_x86_64
-            cross: false
+      image: ghcr.io/viamrobotics/canon:amd64
+    outputs:
+      sha: ${{ steps.commit.outputs.commit_long_sha }}
+      version: ${{ steps.bump_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.REPO_READ_TOKEN }}
+
       - name: Setup rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      - name: Setup build directory
-        run: mkdir builds
-      - name: Build
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install cargo-bump
+
+      - name: Bump Version
+        id: bump_version
         uses: actions-rs/cargo@v1
         with:
-          command: build
-          args: --release --target=${{ matrix.target }}
-          use-cross: ${{ matrix.cross }}
-        env:
-          CROSS_CONTAINER_IN_CONTAINER: ${{ matrix.cross }}
-      - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+          command: bump ${{ inputs.version }}
+
+      - name: Output version
+        uses: sergeysova/jq-action@v2
+        id: version
         with:
-          name: builds
-          path: builds
+          cmd: "cargo metadata --format-version=1 --quiet --no-deps | jq '. | .packages | .[0].version'"
+
+      - name: Commit + Push
+        id: commit
+        uses: EndBug/add-and-commit@v9.0.0
+        with:
+          default_author: github_actions
+          message: Bumping version to v${{ env.SDK_VERSION }} [skip ci]
+
+  build:
+    if: github.repository_owner == 'viamrobotics' && github.ref == 'refs/heads/main' && contains(fromJson('["njooma"]'), github.actor)
+    runs-on: [self-hosted, x64]
+    container:
+      image: ghcr.io/viamrobotics/canon:amd64
+    uses: viamrobotics/rust-utils/.github/workflows/build_binaries.yml@main
+
+  release:
+    needs: [prepare, build]
+    if: github.repository_owner == 'viamrobotics' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, x64]
+    container:
+      image: ghcr.io/viamrobotics/canon:amd64
+
+    steps:
+      - uses: actions/download-artifact@v3
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          files: dist/*
+          draft: true
+          prerelease: ${{ contains(inputs.version, 'pre') }}
+          fail_on_unmatched_files: true
