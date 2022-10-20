@@ -4,22 +4,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_native:
-    runs-on: ${{ matrix.os }}
+  build_macos:
+    if: github.repository_owner == 'viamrobotics'
+    runs-on: [self-hosted, ARM64, macOS]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            arch: arm64
-            target: aarch64-apple-darwin
+          - target: aarch64-apple-darwin
             platform: macosx_arm64
-          - os: macos-latest
-            arch: x86_64
-            target: x86_64-apple-darwin
+          - target: x86_64-apple-darwin
             platform: macosx_x86_64
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -40,34 +37,30 @@ jobs:
           name: builds
           path: builds
 
-  build_in_container:
-    runs-on: ${{ matrix.arch }}
+  build_linux:
+    if: github.repository_owner == 'viamrobotics'
+    runs-on: [self-hosted, x64]
     container:
-      image: ${{ matrix.image }}
-      options: ${{ matrix.opts }}
+      image: ghcr.io/viamrobotics/canon:amd64-cache
+      options: -v /var/run/docker.sock:/var/run/docker.sock -v ${{ github.workspace }}:/project -w /project
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: [arm64, qemu-host]
-            target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            ext: so
-            image: 'ghcr.io/viamrobotics/canon:arm64-cache'
-            opts: '--platform linux/arm64'
-          - arch: [x64, qemu-host]
-            target: x86_64-unknown-linux-gnu
+            cross: true
+          - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
-            ext: so
-            image: 'ghcr.io/viamrobotics/canon:amd64-cache'
-            opts: '--platform linux/amd64'
+            cross: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: ${{ matrix.target }}
+          override: true
       - name: Setup build directory
         run: mkdir builds
       - name: Build
@@ -75,8 +68,11 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
+          use-cross: ${{ matrix.cross }}
+        env:
+          CROSS_CONTAINER_IN_CONTAINER: ${{ matrix.cross }}
       - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.${{ matrix.ext }} builds/libviam_rust_utils-${{ matrix.platform }}.${{ matrix.ext }}
+        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
