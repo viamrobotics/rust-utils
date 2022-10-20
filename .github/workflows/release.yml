@@ -53,6 +53,9 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
             cross: false
+          - target: arm-unknown-linux-gnueabihf
+            platform: linux_armv6l
+            cross: true
     steps:
       - uses: actions/checkout@v3
       - name: Setup rust toolchain
