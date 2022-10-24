@@ -28,13 +28,13 @@ use anyhow::Result;
 
 use crate::proxy::grpc_proxy::GRPCProxy;
 
-/// The Ffi interface, returned as a pointer by init_rust_runtime. User should keep this pointer until freeing the runtime.
-pub struct Ffi {
+/// The DialFfi interface, returned as a pointer by init_rust_runtime. User should keep this pointer until freeing the runtime.
+pub struct DialFfi {
     runtime: Option<Runtime>,
     sigs: Option<Vec<oneshot::Sender<()>>>,
 }
 
-impl Drop for Ffi {
+impl Drop for DialFfi {
     fn drop(&mut self) {
         log::debug!("FFI runtime closing");
         if let Some(r) = self.runtime.take() {
@@ -43,7 +43,7 @@ impl Drop for Ffi {
     }
 }
 
-impl Ffi {
+impl DialFfi {
     fn new() -> Self {
         Self {
             runtime: Some(Runtime::new().unwrap()),
@@ -61,11 +61,11 @@ impl Ffi {
     }
 }
 /// Initialize a tokio runtime to run a gRPC client/sever, user should call this function before trying to dial to a Robot
-/// Returns a pointer to a [`Ffi`]
+/// Returns a pointer to a [`DialFfi`]
 #[no_mangle]
-pub extern "C" fn init_rust_runtime() -> Box<Ffi> {
+pub extern "C" fn init_rust_runtime() -> Box<DialFfi> {
     let _ = tracing_subscriber::fmt::try_init();
-    Box::new(Ffi::new())
+    Box::new(DialFfi::new())
 }
 
 fn dial_without_cred(
@@ -115,7 +115,7 @@ pub unsafe extern "C" fn dial(
     c_uri: *const c_char,
     c_payload: *const c_char,
     c_allow_insec: bool,
-    rt_ptr: Option<&mut Ffi>,
+    rt_ptr: Option<&mut DialFfi>,
 ) -> *mut c_char {
     let uri = {
         if c_uri.is_null() {
@@ -229,6 +229,7 @@ pub unsafe extern "C" fn free_string(s: *mut c_char) {
     if s.is_null() {
         return;
     }
+    log::debug!("freeing string: {s:?}");
     let _ = CString::from_raw(s);
 }
 
@@ -240,7 +241,7 @@ pub unsafe extern "C" fn free_string(s: *mut c_char) {
 /// # Arguments
 /// * `rt_prt` a pointer to the string returned by [`init_rust_runtime`]
 #[no_mangle]
-pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<Ffi>>) -> i32 {
+pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
     let mut ctx = match rt_ptr {
         Some(ctx) => ctx,
         None => {
@@ -255,5 +256,6 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<Ffi>>) -> i32 {
         }
         None => {}
     }
+    log::debug!("Freeing rust runtime");
     0
 }
