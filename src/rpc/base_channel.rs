@@ -1,7 +1,10 @@
 use anyhow::Result;
-use std::sync::{
-    atomic::{AtomicBool, AtomicPtr, Ordering},
-    Arc,
+use std::{
+    fmt::Debug,
+    sync::{
+        atomic::{AtomicBool, AtomicPtr, Ordering},
+        Arc,
+    },
 };
 use webrtc::{data_channel::RTCDataChannel, peer_connection::RTCPeerConnection};
 
@@ -14,16 +17,48 @@ pub struct WebRTCBaseChannel {
     closed: AtomicBool,
 }
 
+impl Debug for WebRTCBaseChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebRTCBaseChannel")
+            .field(
+                "Peer connection counter",
+                &Arc::strong_count(&self.peer_connection),
+            )
+            .field(
+                "Data channel counter",
+                &Arc::strong_count(&self.data_channel),
+            )
+            .finish()
+    }
+}
+
+impl Drop for WebRTCBaseChannel {
+    fn drop(&mut self) {
+        self.closed.store(true, Ordering::Release);
+        let pc = self.peer_connection.clone();
+        let dc = self.data_channel.clone();
+        tokio::spawn(async move {
+            let _ = dc.close().await;
+            let _ = pc.close().await;
+            log::debug!("peer connection & data channel are closed");
+        });
+        log::debug!("Dropping base channel {:?}", &self);
+    }
+}
+
 impl WebRTCBaseChannel {
     pub(crate) async fn new(
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
     ) -> Arc<Self> {
-        let dc = data_channel.clone();
-        let pc = peer_connection.clone();
+        let dc = data_channel;
+        let pc = Arc::downgrade(&peer_connection);
         peer_connection
             .on_ice_connection_state_change(Box::new(move |conn_state| {
-                let pc = pc.clone();
+                let pc = match pc.upgrade(){
+                    Some(pc) => pc,
+                    None => return Box::pin(async  {}),
+                };
                 Box::pin(async move {
                     let sctp = pc.sctp();
                     let transport = sctp.transport();
@@ -39,14 +74,17 @@ impl WebRTCBaseChannel {
 
         let channel = Arc::new(Self {
             peer_connection,
-            data_channel,
+            data_channel: dc.clone(),
             closed_reason: AtomicPtr::new(&mut None),
             closed: AtomicBool::new(false),
         });
 
-        let c = channel.clone();
+        let c = Arc::downgrade(&channel.clone());
         dc.on_error(Box::new(move |err: webrtc::Error| {
-            let c = c.clone();
+            let c = match c.upgrade() {
+                Some(c) => c,
+                None => return Box::pin(async {}),
+            };
             Box::pin(async move {
                 if let Err(e) = c.close_with_reason(Some(anyhow::Error::from(err))).await {
                     log::error!("error closing channel: {e}")

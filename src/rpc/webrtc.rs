@@ -230,19 +230,22 @@ pub(crate) async fn new_peer_connection_for_client(
     let data_channel = peer_connection
         .create_data_channel("data", Some(data_channel_init))
         .await?;
-
     let negotiation_channel = peer_connection
         .create_data_channel("negotiation", Some(negotiation_channel_init))
         .await?;
 
     let nc = negotiation_channel.clone();
-    let pc = peer_connection.clone();
+    let pc = Arc::downgrade(&peer_connection);
 
     negotiation_channel
         .on_message(Box::new(move |msg: DataChannelMessage| {
-            let pc = pc.clone();
+            let wpc = pc.clone();
             let nc = nc.clone();
             Box::pin(async move {
+                let pc = match wpc.upgrade() {
+                    Some(pc) => pc,
+                    None => return,
+                };
                 let sdp_vec = msg.data.to_vec();
                 let maybe_err = async move {
                     let sdp = serde_json::from_slice::<RTCSessionDescription>(&sdp_vec)
