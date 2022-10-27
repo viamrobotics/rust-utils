@@ -29,14 +29,11 @@ use anyhow::{Context, Result};
 use core::fmt;
 use std::{
     collections::HashMap,
-    process,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock,
     },
     task::{Context as TaskContext, Poll},
-    thread::sleep,
-    time::Duration,
 };
 use tonic::body::BoxBody;
 use tonic::codegen::{http, BoxFuture};
