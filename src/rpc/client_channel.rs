@@ -49,7 +49,7 @@ impl Drop for WebRTCClientChannel {
                 }
             });
         };
-        log::info!("Dropping client channel {:?}", &self);
+        log::debug!("Dropping client channel {:?}", &self);
     }
 }
 
@@ -91,7 +91,7 @@ impl WebRTCClientChannel {
                 })
             }))
             .await;
-        log::info!("Client channel created");
+        log::debug!("Client channel created");
         ret_channel
     }
 

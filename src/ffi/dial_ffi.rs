@@ -212,7 +212,7 @@ pub unsafe extern "C" fn dial(
             return ptr::null_mut();
         }
     };
-    ctx.channels.append(&mut vec![channel]);
+    ctx.channels.push(channel);
     let server = server.with_graceful_shutdown(async {
         rx.await.ok();
     });
