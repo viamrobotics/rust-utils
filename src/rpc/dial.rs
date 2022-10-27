@@ -29,11 +29,14 @@ use anyhow::{Context, Result};
 use core::fmt;
 use std::{
     collections::HashMap,
+    process,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock,
     },
     task::{Context as TaskContext, Poll},
+    thread::sleep,
+    time::Duration,
 };
 use tonic::body::BoxBody;
 use tonic::codegen::{http, BoxFuture};
@@ -583,7 +586,7 @@ async fn maybe_connect_via_webrtc(
     };
 
     let client_channel = WebRTCClientChannel::new(peer_connection, data_channel).await;
-    let client_channel_for_ice_gathering_thread = Arc::downgrade(&client_channel.clone());
+    let client_channel_for_ice_gathering_thread = Arc::downgrade(&client_channel);
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let mut call_client = signaling_client.call(call_request).await?.into_inner();
 

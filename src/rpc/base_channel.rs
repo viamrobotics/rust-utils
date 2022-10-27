@@ -20,29 +20,9 @@ pub struct WebRTCBaseChannel {
 impl Debug for WebRTCBaseChannel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WebRTCBaseChannel")
-            .field(
-                "Peer connection counter",
-                &Arc::strong_count(&self.peer_connection),
-            )
-            .field(
-                "Data channel counter",
-                &Arc::strong_count(&self.data_channel),
-            )
+            .field("Peer connection id", &self.peer_connection.get_stats_id())
+            .field("Data channel id", &self.data_channel.id())
             .finish()
-    }
-}
-
-impl Drop for WebRTCBaseChannel {
-    fn drop(&mut self) {
-        self.closed.store(true, Ordering::Release);
-        let pc = self.peer_connection.clone();
-        let dc = self.data_channel.clone();
-        tokio::spawn(async move {
-            let _ = dc.close().await;
-            let _ = pc.close().await;
-            log::debug!("peer connection & data channel are closed");
-        });
-        log::debug!("Dropping base channel {:?}", &self);
     }
 }
 
@@ -51,7 +31,7 @@ impl WebRTCBaseChannel {
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
     ) -> Arc<Self> {
-        let dc = data_channel;
+        let dc = data_channel.clone();
         let pc = Arc::downgrade(&peer_connection);
         peer_connection
             .on_ice_connection_state_change(Box::new(move |conn_state| {
@@ -74,12 +54,12 @@ impl WebRTCBaseChannel {
 
         let channel = Arc::new(Self {
             peer_connection,
-            data_channel: dc.clone(),
+            data_channel,
             closed_reason: AtomicPtr::new(&mut None),
             closed: AtomicBool::new(false),
         });
 
-        let c = Arc::downgrade(&channel.clone());
+        let c = Arc::downgrade(&channel);
         dc.on_error(Box::new(move |err: webrtc::Error| {
             let c = match c.upgrade() {
                 Some(c) => c,

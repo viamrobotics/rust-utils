@@ -11,15 +11,16 @@ use tokio::sync::oneshot;
 use tracing::Level;
 
 use crate::rpc::dial::{
-    CredentialsExt, DialBuilder, DialOptions, WithCredentials, WithoutCredentials,
+    CredentialsExt, DialBuilder, DialOptions, ViamChannel, WithCredentials, WithoutCredentials,
 };
 use libc::c_char;
 
 use crate::proxy;
 use hyper::Server;
 use std::ffi::{CStr, CString};
-use tower::{make::Shared, ServiceBuilder};
+use tower::{make::Shared, util::Either, ServiceBuilder};
 use tower_http::{
+    auth::AddAuthorization,
     trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
     LatencyUnit,
 };
@@ -32,6 +33,7 @@ use crate::proxy::grpc_proxy::GRPCProxy;
 pub struct DialFfi {
     runtime: Option<Runtime>,
     sigs: Option<Vec<oneshot::Sender<()>>>,
+    channels: Vec<Either<AddAuthorization<ViamChannel>, ViamChannel>>,
 }
 
 impl Drop for DialFfi {
@@ -48,6 +50,7 @@ impl DialFfi {
         Self {
             runtime: Some(Runtime::new().unwrap()),
             sigs: None,
+            channels: vec![],
         }
     }
     fn push_signal(&mut self, sig: oneshot::Sender<()>) {
@@ -172,18 +175,19 @@ pub unsafe extern "C" fn dial(
     } else {
         disable_webrtc = uri_str.contains(".local") || uri_str.contains("localhost");
     }
-    let server = match runtime.block_on(async move {
+    let (server, channel) = match runtime.block_on(async move {
         let dial = match payload {
-            Some(p) => tower::util::Either::A(
+            Some(p) => Either::A(
                 dial_with_cred(uri_str, p.to_str()?, allow_insec, disable_webrtc)?
                     .connect()
                     .await?,
             ),
             None => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
-                tower::util::Either::B(c.connect().await?)
+                Either::B(c.connect().await?)
             }
         };
+        let channel = dial.clone();
         let g = GRPCProxy::new(dial, uri);
         let service = ServiceBuilder::new()
             .layer(
@@ -200,7 +204,7 @@ pub unsafe extern "C" fn dial(
         let server = Server::builder(conn)
             .http2_only(true)
             .serve(Shared::new(service));
-        Ok::<_, Box<dyn std::error::Error>>(server)
+        Ok::<_, Box<dyn std::error::Error>>((server, channel))
     }) {
         Ok(s) => s,
         Err(e) => {
@@ -208,6 +212,7 @@ pub unsafe extern "C" fn dial(
             return ptr::null_mut();
         }
     };
+    ctx.channels.append(&mut vec![channel]);
     let server = server.with_graceful_shutdown(async {
         rx.await.ok();
     });
@@ -248,14 +253,26 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
             return -1;
         }
     };
-    match ctx.sigs.take() {
-        Some(sigs) => {
-            for sig in sigs {
-                let _ = sig.send(());
-            }
+    for channel in &ctx.channels {
+        let channel = match channel {
+            Either::A(chan) => chan.get_ref(),
+            Either::B(chan) => chan,
+        };
+        match channel {
+            ViamChannel::Direct(_) => (),
+            ViamChannel::WebRTC(chan) => ctx
+                .runtime
+                .as_ref()
+                .map(|rt| rt.block_on(async move { chan.close().await }))
+                .unwrap_or_default(),
         }
-        None => {}
     }
+    if let Some(sigs) = ctx.sigs.take() {
+        for sig in sigs {
+            let _ = sig.send(());
+        }
+    }
+
     log::debug!("Freeing rust runtime");
     0
 }

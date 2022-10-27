@@ -34,7 +34,6 @@ impl Debug for WebRTCClientChannel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WebRTCClientChannel")
             .field("stream_id_counter", &self.stream_id_counter)
-            .field("base channel", &self.base_channel.data_channel.id())
             .field("base channel", &self.base_channel)
             .finish()
     }
@@ -42,7 +41,15 @@ impl Debug for WebRTCClientChannel {
 
 impl Drop for WebRTCClientChannel {
     fn drop(&mut self) {
-        log::error!("Dropping client counts  {:?}", &self.base_channel);
+        let bc = self.base_channel.clone();
+        if !bc.is_closed() {
+            let _ = tokio::spawn(async move {
+                if let Err(e) = bc.close().await {
+                    log::error!("Error closing base channel: {e}");
+                }
+            });
+        };
+        log::info!("Dropping client channel {:?}", &self);
     }
 }
 
@@ -84,7 +91,7 @@ impl WebRTCClientChannel {
                 })
             }))
             .await;
-        log::error!("Channel created");
+        log::info!("Client channel created");
         ret_channel
     }
 
