@@ -253,6 +253,12 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
             return -1;
         }
     };
+    if let Some(sigs) = ctx.sigs.take() {
+        for sig in sigs {
+            let _ = sig.send(());
+        }
+    }
+
     for channel in &ctx.channels {
         let channel = match channel {
             Either::A(chan) => chan.get_ref(),
@@ -267,12 +273,6 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
                 .unwrap_or_default(),
         }
     }
-    if let Some(sigs) = ctx.sigs.take() {
-        for sig in sigs {
-            let _ = sig.send(());
-        }
-    }
-
     log::debug!("Freeing rust runtime");
     0
 }
