@@ -176,7 +176,7 @@ pub unsafe extern "C" fn dial(
         disable_webrtc = uri_str.contains(".local") || uri_str.contains("localhost");
     }
     let (server, channel) = match runtime.block_on(async move {
-        let dial = match payload {
+        let channel = match payload {
             Some(p) => Either::A(
                 dial_with_cred(uri_str, p.to_str()?, allow_insec, disable_webrtc)?
                     .connect()
@@ -187,7 +187,7 @@ pub unsafe extern "C" fn dial(
                 Either::B(c.connect().await?)
             }
         };
-        let channel = dial.clone();
+        let dial = channel.clone();
         let g = GRPCProxy::new(dial, uri);
         let service = ServiceBuilder::new()
             .layer(
