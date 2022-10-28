@@ -494,7 +494,6 @@ async fn maybe_connect_via_webrtc(
     let uuid_for_ice_gathering_thread = uuid_lock.clone();
     let is_open = Arc::new(AtomicBool::new(false));
     let is_open_read = is_open.clone();
-
     data_channel
         .on_open(Box::new(move || {
             is_open.store(true, Ordering::Release);
@@ -584,7 +583,7 @@ async fn maybe_connect_via_webrtc(
     };
 
     let client_channel = WebRTCClientChannel::new(peer_connection, data_channel).await;
-    let client_channel_for_ice_gathering_thread = client_channel.clone();
+    let client_channel_for_ice_gathering_thread = Arc::downgrade(&client_channel);
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let mut call_client = signaling_client.call(call_request).await?.into_inner();
 
@@ -646,17 +645,29 @@ async fn maybe_connect_via_webrtc(
                             break;
                         }
                     };
-
-                    if let Err(e) = client_channel
-                        .base_channel
-                        .peer_connection
-                        .set_remote_description(answer)
-                        .await
                     {
-                        let e = anyhow::Error::from(e);
-                        send_error_once(sent_done.clone(), &response.uuid, &e, channel2.clone())
+                        let cc = match client_channel.upgrade() {
+                            Some(cc) => cc,
+                            None => {
+                                break;
+                            }
+                        };
+                        if let Err(e) = cc
+                            .base_channel
+                            .peer_connection
+                            .set_remote_description(answer)
+                            .await
+                        {
+                            let e = anyhow::Error::from(e);
+                            send_error_once(
+                                sent_done.clone(),
+                                &response.uuid,
+                                &e,
+                                channel2.clone(),
+                            )
                             .await;
-                        break;
+                            break;
+                        }
                     }
                     remote_description_set.store(true, Ordering::Release);
                     if webrtc_options.disable_trickle_ice {
@@ -684,6 +695,12 @@ async fn maybe_connect_via_webrtc(
                     }
                     match ice_candidate_from_proto(update.candidate) {
                         Ok(candidate) => {
+                            let client_channel = match client_channel.upgrade() {
+                                Some(cc) => cc,
+                                None => {
+                                    break;
+                                }
+                            };
                             if let Err(e) = client_channel
                                 .base_channel
                                 .peer_connection

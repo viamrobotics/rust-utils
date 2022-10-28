@@ -1,7 +1,10 @@
 use anyhow::Result;
-use std::sync::{
-    atomic::{AtomicBool, AtomicPtr, Ordering},
-    Arc,
+use std::{
+    fmt::Debug,
+    sync::{
+        atomic::{AtomicBool, AtomicPtr, Ordering},
+        Arc,
+    },
 };
 use webrtc::{data_channel::RTCDataChannel, peer_connection::RTCPeerConnection};
 
@@ -14,16 +17,28 @@ pub struct WebRTCBaseChannel {
     closed: AtomicBool,
 }
 
+impl Debug for WebRTCBaseChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebRTCBaseChannel")
+            .field("Peer connection id", &self.peer_connection.get_stats_id())
+            .field("Data channel id", &self.data_channel.id())
+            .finish()
+    }
+}
+
 impl WebRTCBaseChannel {
     pub(crate) async fn new(
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
     ) -> Arc<Self> {
         let dc = data_channel.clone();
-        let pc = peer_connection.clone();
+        let pc = Arc::downgrade(&peer_connection);
         peer_connection
             .on_ice_connection_state_change(Box::new(move |conn_state| {
-                let pc = pc.clone();
+                let pc = match pc.upgrade(){
+                    Some(pc) => pc,
+                    None => return Box::pin(async  {}),
+                };
                 Box::pin(async move {
                     let sctp = pc.sctp();
                     let transport = sctp.transport();
@@ -44,9 +59,12 @@ impl WebRTCBaseChannel {
             closed: AtomicBool::new(false),
         });
 
-        let c = channel.clone();
+        let c = Arc::downgrade(&channel);
         dc.on_error(Box::new(move |err: webrtc::Error| {
-            let c = c.clone();
+            let c = match c.upgrade() {
+                Some(c) => c,
+                None => return Box::pin(async {}),
+            };
             Box::pin(async move {
                 if let Err(e) = c.close_with_reason(Some(anyhow::Error::from(err))).await {
                     log::error!("error closing channel: {e}")

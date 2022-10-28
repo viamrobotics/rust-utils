@@ -7,9 +7,12 @@ use anyhow::Result;
 use chashmap::CHashMap;
 use hyper::Body;
 use prost::Message;
-use std::sync::{
-    atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
-    Arc,
+use std::{
+    fmt::Debug,
+    sync::{
+        atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
+        Arc,
+    },
 };
 use webrtc::{
     data_channel::{data_channel_message::DataChannelMessage, RTCDataChannel},
@@ -27,7 +30,35 @@ pub struct WebRTCClientChannel {
     pub(crate) receiver_bodies: CHashMap<u64, hyper::Body>,
 }
 
+impl Debug for WebRTCClientChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebRTCClientChannel")
+            .field("stream_id_counter", &self.stream_id_counter)
+            .field("base channel", &self.base_channel)
+            .finish()
+    }
+}
+
+impl Drop for WebRTCClientChannel {
+    fn drop(&mut self) {
+        let bc = self.base_channel.clone();
+        if !bc.is_closed() {
+            let _ = tokio::spawn(async move {
+                if let Err(e) = bc.close().await {
+                    log::error!("Error closing base channel: {e}");
+                }
+            });
+        };
+        log::debug!("Dropping client channel {:?}", &self);
+    }
+}
+
 impl WebRTCClientChannel {
+    pub async fn close(&self) {
+        self.base_channel.close().await.unwrap();
+        self.base_channel.data_channel.close().await.unwrap();
+        self.base_channel.peer_connection.close().await.unwrap();
+    }
     pub(crate) async fn new(
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
@@ -42,17 +73,25 @@ impl WebRTCClientChannel {
 
         let channel = Arc::new(channel);
         let ret_channel = channel.clone();
+        let channel = Arc::downgrade(&channel);
 
         data_channel
             .on_message(Box::new(move |msg: DataChannelMessage| {
                 let channel = channel.clone();
                 Box::pin(async move {
+                    let channel = match channel.upgrade() {
+                        Some(channel) => channel,
+                        None => {
+                            return;
+                        }
+                    };
                     if let Err(e) = channel.on_channel_message(msg).await {
                         log::error!("error deserializing message: {e}");
                     }
                 })
             }))
             .await;
+        log::debug!("Client channel created");
         ret_channel
     }
 
