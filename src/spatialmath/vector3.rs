@@ -111,7 +111,6 @@ mod tests {
         assert_eq!(vector.x, 1.0);
         assert_eq!(vector.y, 1.0);
         assert_eq!(vector.z, 1.0);
-        assert!(!vector.is_normalized())
     }
 
     #[test]
