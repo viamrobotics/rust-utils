@@ -1,17 +1,20 @@
 use ffi_helpers::null_pointer_check;
 use libc::c_double;
+use nalgebra::{Quaternion, Vector3, UnitQuaternion, Normed, UnitVector3};
 
-use crate::spatialmath::{quaternion::Quaternion, vector3::Vector3};
+use crate::spatialmath::utils::to_euler_angles;
+use crate::ffi::spatialmath::vector3::to_raw_pointer as vec_to_raw_pointer;
 
-/// The FFI interface for Quaternion functions and initialization. All public 
-/// functions are meant to be called externally from other languages. Quaternions
+/// The FFI interface wrapper around the nalgebra crate for Quaternion functions 
+/// and initialization. All public functions are meant to be called externally 
+/// from other languages. Quaternions
 /// use the Real-I-J-K standard, so quaternions in other standards should be
 /// converted in the native language before being used to initialize quaternions
 /// from this library
 
 /// Allocates a copy of the quaternion to the heap with a stable memory address and
 /// returns the raw pointer (for use by the FFI interface)
-fn to_raw_pointer(quat: &Quaternion) -> *mut Quaternion {
+fn to_raw_pointer(quat: &Quaternion<f64>) -> *mut Quaternion<f64> {
     Box::into_raw(Box::new(*quat))
 }
 
@@ -24,7 +27,7 @@ fn to_raw_pointer(quat: &Quaternion) -> *mut Quaternion {
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub extern "C" fn new_quaternion(real: f64, i: f64, j: f64, k: f64) -> *mut Quaternion {
+pub extern "C" fn new_quaternion(real: f64, i: f64, j: f64, k: f64) -> *mut Quaternion<f64> {
     to_raw_pointer(&Quaternion::new(real, i, j, k))
 }
 
@@ -38,10 +41,10 @@ pub extern "C" fn new_quaternion(real: f64, i: f64, j: f64, k: f64) -> *mut Quat
 /// free_quaternion_memory FFI function
 #[no_mangle]
 pub unsafe extern "C" fn new_quaternion_from_vector(
-    real: f64, imag_ptr: *const Vector3
-) -> *mut Quaternion {
+    real: f64, imag_ptr: *const Vector3<f64>
+) -> *mut Quaternion<f64> {
     null_pointer_check!(imag_ptr);
-    to_raw_pointer(&Quaternion::new_from_vector(real, *imag_ptr))
+    to_raw_pointer(&Quaternion::new(real, (*imag_ptr).x, (*imag_ptr).y, (*imag_ptr).z))
 }
 
 /// Free memory at the address of the quaternion pointer. Outer processes
@@ -50,7 +53,7 @@ pub unsafe extern "C" fn new_quaternion_from_vector(
 /// 
 /// # Safety
 #[no_mangle]
-pub unsafe extern "C" fn free_quaternion_memory(ptr: *mut Quaternion) {
+pub unsafe extern "C" fn free_quaternion_memory(ptr: *mut Quaternion<f64>) {
     if ptr.is_null() {
         return;
     }
@@ -63,7 +66,7 @@ pub unsafe extern "C" fn free_quaternion_memory(ptr: *mut Quaternion) {
 /// 
 /// # Safety
 #[no_mangle]
-pub unsafe extern "C" fn free_euler_angles_memory(ptr: *mut c_double) {
+pub unsafe extern "C" fn free_array_memory(ptr: *mut c_double) {
     if ptr.is_null() {
         return;
     }
@@ -79,9 +82,9 @@ pub unsafe extern "C" fn free_euler_angles_memory(ptr: *mut c_double) {
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_get_components(quat_ptr: *const Quaternion) -> *const c_double {
+pub unsafe extern "C" fn quaternion_get_components(quat_ptr: *const Quaternion<f64>) -> *const c_double {
     null_pointer_check!(quat_ptr);
-    let components: [c_double;4] = [(*quat_ptr).real, (*quat_ptr).i, (*quat_ptr).j, (*quat_ptr).k];
+    let components: [c_double;4] = [(*quat_ptr).w, (*quat_ptr).i, (*quat_ptr).j, (*quat_ptr).k];
     Box::into_raw(Box::new(components)) as *const _
 }
 
@@ -94,9 +97,9 @@ pub unsafe extern "C" fn quaternion_get_components(quat_ptr: *const Quaternion) 
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_set_real(quat_ptr: *mut Quaternion, real: f64) {
+pub unsafe extern "C" fn quaternion_set_real(quat_ptr: *mut Quaternion<f64>, real: f64) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).real = real;
+    (*quat_ptr).w = real;
 }
 
 /// Set the i component of an existing quaternion stored at the address
@@ -108,7 +111,7 @@ pub unsafe extern "C" fn quaternion_set_real(quat_ptr: *mut Quaternion, real: f6
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_set_i(quat_ptr: *mut Quaternion, i: f64) {
+pub unsafe extern "C" fn quaternion_set_i(quat_ptr: *mut Quaternion<f64>, i: f64) {
     null_pointer_check!(quat_ptr);
     (*quat_ptr).i = i;
 }
@@ -122,7 +125,7 @@ pub unsafe extern "C" fn quaternion_set_i(quat_ptr: *mut Quaternion, i: f64) {
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_set_j(quat_ptr: *mut Quaternion, j: f64) {
+pub unsafe extern "C" fn quaternion_set_j(quat_ptr: *mut Quaternion<f64>, j: f64) {
     null_pointer_check!(quat_ptr);
     (*quat_ptr).j = j;
 }
@@ -136,7 +139,7 @@ pub unsafe extern "C" fn quaternion_set_j(quat_ptr: *mut Quaternion, j: f64) {
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_set_k(quat_ptr: *mut Quaternion, k: f64) {
+pub unsafe extern "C" fn quaternion_set_k(quat_ptr: *mut Quaternion<f64>, k: f64) {
     null_pointer_check!(quat_ptr);
     (*quat_ptr).k = k;
 }
@@ -151,10 +154,10 @@ pub unsafe extern "C" fn quaternion_set_k(quat_ptr: *mut Quaternion, k: f64) {
 /// free_quaternion_memory FFI function
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_set_components(
-    quat_ptr: *mut Quaternion, real: f64, i: f64, j: f64, k: f64
+    quat_ptr: *mut Quaternion<f64>, real: f64, i: f64, j: f64, k: f64
 ) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).real = real;
+    (*quat_ptr).w = real;
     (*quat_ptr).i = i;
     (*quat_ptr).j = j;
     (*quat_ptr).k = k;
@@ -171,10 +174,12 @@ pub unsafe extern "C" fn quaternion_set_components(
 /// free_quaternion_memory FFI function (the same applies for the vector
 /// stored at vec_ptr)
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_set_imag_from_vector(quat_ptr: *mut Quaternion, vec_ptr: *const Vector3) {
+pub unsafe extern "C" fn quaternion_set_imag_from_vector(quat_ptr: *mut Quaternion<f64>, vec_ptr: *const Vector3<f64>) {
     null_pointer_check!(quat_ptr);
     null_pointer_check!(vec_ptr);
-    (*quat_ptr).set_imag_from_vector(*vec_ptr);
+    (*quat_ptr).i = (*vec_ptr).x;
+    (*quat_ptr).j = (*vec_ptr).y;
+    (*quat_ptr).k = (*vec_ptr).z;
 }
 
 /// Copies the imaginary components to a 3-vector (using x -> i, y -> j
@@ -187,10 +192,11 @@ pub unsafe extern "C" fn quaternion_set_imag_from_vector(quat_ptr: *mut Quaterni
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_get_imaginary_vector(quat_ptr: *const Quaternion) -> *mut Vector3 {
+pub unsafe extern "C" fn quaternion_get_imaginary_vector(quat_ptr: *const Quaternion<f64>) -> *mut Vector3<f64> {
     null_pointer_check!(quat_ptr);
-    let imag = (*quat_ptr).imag();
-    imag.to_raw_pointer()
+    let imag = (*quat_ptr).vector();
+    let imag_vec = Vector3::new(imag[0], imag[1], imag[2]);
+    vec_to_raw_pointer(imag_vec)
 }
 
 /// Normalizes an existing quaternion stored at the address of 
@@ -202,9 +208,9 @@ pub unsafe extern "C" fn quaternion_get_imaginary_vector(quat_ptr: *const Quater
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn normalize_quaternion(quat_ptr: *mut Quaternion) {
+pub unsafe extern "C" fn normalize_quaternion(quat_ptr: *mut Quaternion<f64>) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).normalize()
+    (*quat_ptr).normalize_mut();
 }
 
 /// Initializes a normalized copy of a quaternion stored at the
@@ -216,10 +222,10 @@ pub unsafe extern "C" fn normalize_quaternion(quat_ptr: *mut Quaternion) {
 /// The caller must remember to free the quaternion memory of 
 /// *both* the input and output quaternions when finished with them 
 /// using the free_quaternion_memory FFI function
-#[no_mangle]
-pub unsafe extern "C" fn quaternion_get_normalized(quat_ptr: *const Quaternion) -> *mut Quaternion {
+// #[no_mangle]
+pub unsafe extern "C" fn quaternion_get_normalized(quat_ptr: *const Quaternion<f64>) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr);
-    to_raw_pointer(&(*quat_ptr).get_normalized())
+    to_raw_pointer(&(*quat_ptr).normalize())
 }
 
 /// Converts from euler angles (in radians) to a quaternion. The euler angles are expected to
@@ -232,8 +238,9 @@ pub unsafe extern "C" fn quaternion_get_normalized(quat_ptr: *const Quaternion) 
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw: f64) -> *mut Quaternion {
-    let quat = Quaternion::from_euler_angles(roll, pitch, yaw);
+pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw: f64) -> *mut Quaternion<f64> {
+    let unit_quat = UnitQuaternion::from_euler_angles(roll, pitch, yaw);
+    let quat = unit_quat.quaternion();
     to_raw_pointer(&quat)
 }
 
@@ -248,12 +255,78 @@ pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw
 /// When finished with the underlying quaternion passed to this function
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function and the euler angles memory using
-/// the free_euler_angles memory function
+/// the free_array_memory function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion) -> *mut c_double {
+pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion<f64>) -> *mut c_double {
     null_pointer_check!(quat_ptr);
-    let euler_angles = (*quat_ptr).to_euler_angles();
+    let euler_angles = to_euler_angles(*quat_ptr);
     Box::into_raw(Box::new(euler_angles)) as *mut _
+}
+
+/// Converts from an axis angle given by a vector's x, y, z components
+/// and a rotation theta (in radians) about the vector into a quaternion
+/// 
+/// # Safety
+/// 
+/// When finished with the underlying quaternion initialized by this function
+/// the caller must remember to free the quaternion memory using the 
+/// free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_from_axis_angle(
+    x: f64, y: f64, z: f64, theta: f64
+) -> *mut Quaternion<f64> {
+    let axis_angle_vec = Vector3::new(x, y, z);
+    let axis_angle_vec_normed = UnitVector3::new_normalize(axis_angle_vec);
+    let unit_quat = UnitQuaternion::from_axis_angle(&axis_angle_vec_normed, theta);
+    to_raw_pointer(unit_quat.quaternion())
+}
+
+/// Converts from an axis angle whose vector is given by a pointer 
+/// to a nalgebra::Vector3<f64> instance and a rotation theta (in radians)
+/// about the vector to a quaternion
+/// 
+/// # Safety
+/// 
+/// When finished with the underlying quaternion initialized by this function
+/// the caller must remember to free the quaternion memory using the 
+/// free_quaternion_memory FFI function. Similarly the free_vector_memory should
+/// be called when finished with the axis angle vector
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_from_axis_angle_vector(
+    theta: f64, axis_angle_vec_ptr: *const Vector3<f64>
+) -> *mut Quaternion<f64> {
+    null_pointer_check!(axis_angle_vec_ptr);
+    let axis_angle_vec_normed = UnitVector3::new_normalize(*axis_angle_vec_ptr);
+    let unit_quat = UnitQuaternion::from_axis_angle(&axis_angle_vec_normed, theta);
+    to_raw_pointer(unit_quat.quaternion())
+}
+
+/// Converts a quaternion into an R4 axis angle. The return value is a pointer
+/// to a list of [x, y, x, theta], where (x,y,z) are the axis vector components
+/// and theta is the rotation about the axis in radians
+/// 
+/// # Safety
+/// 
+/// When finished with the underlying quaternion passed to this function
+/// the caller must remember to free the quaternion memory using the 
+/// free_quaternion_memory FFI function and the axis angle memory using
+/// the free_array_memory function
+#[no_mangle]
+pub unsafe extern "C" fn quatenion_to_axis_angle(
+    quat: *const Quaternion<f64>
+) -> *mut c_double {
+    let unit_quat = UnitQuaternion::from_quaternion(*quat);
+    let axis_opt = unit_quat.axis();
+    let angle = unit_quat.angle();
+    match axis_opt {
+        Some(value) => {
+            let axis_angle: [f64; 4] = [value[0], value[1], value[2], angle];
+            return Box::into_raw(Box::new(axis_angle)) as *mut _
+        },
+        None => {
+            return Box::into_raw(Box::new([0.0, 0.0, 0.0, angle])) as *mut _
+        },
+    }
 }
 
 /// Scales an existing quaternion stored at the address of 
@@ -265,9 +338,9 @@ pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion)
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn scale_quaternion(quat_ptr: *mut Quaternion, factor: f64) {
+pub unsafe extern "C" fn scale_quaternion(quat_ptr: *mut Quaternion<f64>, factor: f64) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).scale(factor);
+    (*quat_ptr).scale_mut(factor);
 }
 
 /// Initializes a copy of the quaternion stored at the address of a pointer (quat_ptr)
@@ -278,10 +351,12 @@ pub unsafe extern "C" fn scale_quaternion(quat_ptr: *mut Quaternion, factor: f64
 /// The caller must remember to free the quaternion memory of 
 /// *both* the input and output quaternions when finished with them 
 /// using the free_quaternion_memory FFI function
-#[no_mangle]
-pub unsafe extern "C" fn quaternion_get_scaled(quat_ptr: *const Quaternion, factor: f64) -> *mut Quaternion {
+// #[no_mangle]
+pub unsafe extern "C" fn quaternion_get_scaled(quat_ptr: *const Quaternion<f64>, factor: f64) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr);
-    to_raw_pointer(&(*quat_ptr).get_scaled(factor))
+    let mut copy_quat = *quat_ptr;
+    copy_quat.scale_mut(factor);
+    to_raw_pointer(&copy_quat)
 }
 
 /// Initializes a quaternion that is the conjugate of one stored 
@@ -294,7 +369,7 @@ pub unsafe extern "C" fn quaternion_get_scaled(quat_ptr: *const Quaternion, fact
 /// *both* the input and output quaternions when finished with them 
 /// using the free_quaternion_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_get_conjugate(quat_ptr: *const Quaternion) -> *mut Quaternion {
+pub unsafe extern "C" fn quaternion_get_conjugate(quat_ptr: *const Quaternion<f64>) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr);
     to_raw_pointer(&(*quat_ptr).conjugate())
 }
@@ -308,9 +383,9 @@ pub unsafe extern "C" fn quaternion_get_conjugate(quat_ptr: *const Quaternion) -
 /// output quaternions when finished with them using the free_quaternion_memory FFI function
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_add(
-    quat_ptr_1: *const Quaternion,
-    quat_ptr_2: *const Quaternion,
-) -> *mut Quaternion {
+    quat_ptr_1: *const Quaternion<f64>,
+    quat_ptr_2: *const Quaternion<f64>,
+) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr_1);
     null_pointer_check!(quat_ptr_2);
     to_raw_pointer(&((*quat_ptr_1) + (*quat_ptr_2)))
@@ -325,9 +400,9 @@ pub unsafe extern "C" fn quaternion_add(
 /// output quaternions when finished with them using the free_quaternion_memory FFI function
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_subtract(
-    quat_ptr_1: *const Quaternion,
-    quat_ptr_2: *const Quaternion,
-) -> *mut Quaternion {
+    quat_ptr_1: *const Quaternion<f64>,
+    quat_ptr_2: *const Quaternion<f64>,
+) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr_1);
     null_pointer_check!(quat_ptr_2);
     to_raw_pointer(&((*quat_ptr_1) - (*quat_ptr_2)))
@@ -342,9 +417,9 @@ pub unsafe extern "C" fn quaternion_subtract(
 /// output quaternions when finished with them using the free_quaternion_memory FFI function
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_hamiltonian_product(
-    quat_ptr_1: *const Quaternion,
-    quat_ptr_2: *const Quaternion,
-) -> *mut Quaternion {
+    quat_ptr_1: *const Quaternion<f64>,
+    quat_ptr_2: *const Quaternion<f64>,
+) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr_1);
     null_pointer_check!(quat_ptr_2);
     to_raw_pointer(&((*quat_ptr_1) * (*quat_ptr_2)))
