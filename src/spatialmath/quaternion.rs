@@ -2,7 +2,6 @@ use float_cmp::{ApproxEq, F64Margin, approx_eq};
 
 use super::vector3::Vector3;
 
-
 /// A Rust implementation of Quaternion, we use this instead of existing packages
 /// because we want a C-safe representational structure. These quaternions use
 /// the Real-I-J-K standard, so those using JPL or other standards should take
@@ -77,8 +76,7 @@ impl Quaternion {
             let roll_cos_pitch_cos = 1.0 - 2.0 * ((quat.i * quat.i) + (quat.j * quat.j));
             roll = roll_sin_pitch_cos.atan2(roll_cos_pitch_cos);
         }
-
-
+        
         [roll, pitch, yaw]
     }
 
@@ -108,7 +106,8 @@ impl Quaternion {
 
     /// Normalizes a quaternion
     pub fn normalize(&mut self) {
-        self.scale(1.0 / self.norm2().sqrt())
+        // let inv_sq_dp = fast_inv_sqrt(self.norm2());
+        self.scale(self.norm2().sqrt().recip())
     }
 
     /// Returns a normalized copy of the quaternion
@@ -135,22 +134,17 @@ impl Quaternion {
         Self { real: self.real, i: self.i * -1.0, j: self.j * -1.0, k: self.k * -1.0 }
     }
 
-    /// Allocates the vector to the heap with a stable memory address and
-    /// returns the raw pointer (for use by the FFI interface)
-    pub(crate) fn to_raw_pointer(&self) -> *mut Self {
-        Box::into_raw(Box::new(*self))
-    }
 }
 
 impl std::ops::Add<Quaternion> for Quaternion {
     type Output = Quaternion;
 
-    fn add(self, _rhs: Quaternion) -> Quaternion {
+    fn add(self, rhs: Quaternion) -> Quaternion {
         Self { 
-            real: self.real + _rhs.real, 
-            i: self.i + _rhs.i,
-            j: self.j + _rhs.j,
-            k: self.k + _rhs.k
+            real: self.real + rhs.real, 
+            i: self.i + rhs.i,
+            j: self.j + rhs.j,
+            k: self.k + rhs.k
         }
     }
 }
@@ -158,12 +152,12 @@ impl std::ops::Add<Quaternion> for Quaternion {
 impl std::ops::Sub<Quaternion> for Quaternion {
     type Output = Quaternion;
 
-    fn sub(self, _rhs: Quaternion) -> Quaternion {
+    fn sub(self, rhs: Quaternion) -> Quaternion {
         Self { 
-            real: self.real - _rhs.real, 
-            i: self.i - _rhs.i,
-            j: self.j - _rhs.j,
-            k: self.k - _rhs.k
+            real: self.real - rhs.real, 
+            i: self.i - rhs.i,
+            j: self.j - rhs.j,
+            k: self.k - rhs.k
         }
     }
 }
@@ -213,7 +207,7 @@ impl PartialEq for Quaternion {
 
 #[cfg(test)]
 mod tests {
-    use float_cmp::{approx_eq};
+    use float_cmp::{assert_approx_eq};
 
     use crate::spatialmath::vector3::Vector3;
     use crate::spatialmath::quaternion::Quaternion;
@@ -244,20 +238,11 @@ mod tests {
 
     #[test]
     fn quaternion_normalizes_successfully() {
-        let mut quat = Quaternion::new(
-            0.0,
-            (1.0_f64 / 3.0_f64).sqrt() * 0.5, 
-            (1.0_f64 / 3.0_f64).sqrt() * -0.5, 
-            (1.0_f64 / 3.0_f64).sqrt() * 0.5
-        );
-        let expected_quat = Quaternion::new(
-            0.0,
-            (1.0_f64 / 3.0_f64).sqrt(), 
-            (1.0_f64 / 3.0_f64).sqrt() * -1.0, 
-            (1.0_f64 / 3.0_f64).sqrt()
-        );
+        let mut quat = Quaternion::new(1.0, 2.0, 3.0, 4.0);
         quat.normalize();
-        assert!(approx_eq!(Quaternion, quat, expected_quat));
+        let length = quat.norm2();
+        assert!(length <= 1.0);
+        assert_approx_eq!(f64, length, 1.0)
     }
 
     #[test]
@@ -284,8 +269,8 @@ mod tests {
         let quat2 = Quaternion::new(0.2, 0.3, 0.4, 0.5);
         let expected_add = Quaternion::new(0.3, 0.5, 0.7, 0.9);
         let expected_sub = Quaternion::new(-0.1, -0.1, -0.1, -0.1);
-        assert!(approx_eq!(Quaternion, quat1 + quat2, expected_add));
-        assert!(approx_eq!(Quaternion, quat1 - quat2, expected_sub));
+        assert_approx_eq!(Quaternion, quat1 + quat2, expected_add);
+        assert_approx_eq!(Quaternion, quat1 - quat2, expected_sub);
     }
 
     #[test]
@@ -294,8 +279,8 @@ mod tests {
         let quat2 = Quaternion::new(0.2, 0.3, 0.4, 0.5);
         let expected_mul = Quaternion::new(-0.36, 0.06, 0.12, 0.12);
         let expected_rev_mul = Quaternion::new(-0.36, 0.08, 0.08, 0.14);
-        assert!(approx_eq!(Quaternion, quat1 * quat2, expected_mul));
-        assert!(approx_eq!(Quaternion, quat2 * quat1, expected_rev_mul));
+        assert_approx_eq!(Quaternion, quat1 * quat2, expected_mul);
+        assert_approx_eq!(Quaternion, quat2 * quat1, expected_rev_mul);
     }
 
     #[test]
@@ -303,24 +288,24 @@ mod tests {
         let mut quat = Quaternion::new(0.1, 0.2, 0.3, 0.4);
         quat.scale(2.0);
         let expected_quat = Quaternion::new(0.2, 0.4, 0.6, 0.8);
-        assert!(approx_eq!(Quaternion, quat, expected_quat));
+        assert_approx_eq!(Quaternion, quat, expected_quat);
     }
 
     #[test]
     fn get_scaled_returns_scaled_quaternion() {
         let quat = Quaternion::new(0.1, 0.2, 0.3, 0.4);
-        let quat_orig = Quaternion::new(0.1, 0.2, 0.3, 0.4);
+        let quat_orig = quat.clone();
         let scaled_quat = quat.get_scaled(2.0);
         let expected_quat = Quaternion::new(0.2, 0.4, 0.6, 0.8);
         assert_eq!(quat, quat_orig);
-        assert!(approx_eq!(Quaternion, scaled_quat, expected_quat));
+        assert_approx_eq!(Quaternion, scaled_quat, expected_quat);
     }
 
     #[test]
     fn conjugate_works() {
         let quat = Quaternion::new(0.1, 0.2, 0.3, 0.4);
         let expected_quat = Quaternion::new(0.1, -0.2, -0.3, -0.4);
-        assert!(approx_eq!(Quaternion, quat.conjugate(), expected_quat));
+        assert_approx_eq!(Quaternion, quat.conjugate(), expected_quat);
     }
 
     #[test]
@@ -332,7 +317,7 @@ mod tests {
         let pitch = std::f64::consts::PI / 2.0;
         let yaw = std::f64::consts::PI;
         let quat = Quaternion::from_euler_angles(roll, pitch, yaw);
-        assert!(approx_eq!(Quaternion, quat, expected_quat));
+        assert_approx_eq!(Quaternion, quat, expected_quat);
 
         let expected_quat2 = Quaternion::new(
             0.4619397662556435, -0.19134171618254486, 0.4619397662556434, 0.7325378163287418
@@ -341,7 +326,7 @@ mod tests {
         let pitch2 = std::f64::consts::PI / 4.0;
         let yaw2 = 3.0 * std::f64::consts::PI / 4.0;
         let quat2 = Quaternion::from_euler_angles(roll2, pitch2, yaw2);
-        assert!(approx_eq!(Quaternion, quat2, expected_quat2));
+        assert_approx_eq!(Quaternion, quat2, expected_quat2);
     }
 
     #[test]
@@ -353,9 +338,9 @@ mod tests {
         let roll = euler_angles[0];
         let pitch = euler_angles[1];
         let yaw = euler_angles[2];
-        assert!(approx_eq!(f64, pitch, std::f64::consts::PI / 2.0));
-        assert!(approx_eq!(f64, yaw, std::f64::consts::PI));
-        assert!(approx_eq!(f64, roll, std::f64::consts::PI / 4.0));
+        assert_approx_eq!(f64, pitch, std::f64::consts::PI / 2.0);
+        assert_approx_eq!(f64, yaw, std::f64::consts::PI);
+        assert_approx_eq!(f64, roll, std::f64::consts::PI / 4.0);
 
         let quat2 = Quaternion::new(
             0.4619397662556435, -0.19134171618254486, 0.4619397662556434, 0.7325378163287418
@@ -364,8 +349,8 @@ mod tests {
         let roll2 = euler_angles2[0];
         let pitch2 = euler_angles2[1];
         let yaw2 = euler_angles2[2];
-        assert!(approx_eq!(f64, pitch2, std::f64::consts::PI / 4.0));
-        assert!(approx_eq!(f64, yaw2, 3.0 * std::f64::consts::PI / 4.0));
-        assert!(approx_eq!(f64, roll2, std::f64::consts::PI / 4.0));
+        assert_approx_eq!(f64, pitch2, std::f64::consts::PI / 4.0);
+        assert_approx_eq!(f64, yaw2, 3.0 * std::f64::consts::PI / 4.0);
+        assert_approx_eq!(f64, roll2, std::f64::consts::PI / 4.0);
     }
 }

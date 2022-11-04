@@ -6,11 +6,17 @@ use crate::spatialmath::{quaternion::Quaternion, vector3::Vector3};
 /// The FFI interface for Quaternion functions and initialization. All functions are
 /// meant to be called externally from other languages
 
+/// Allocates the quaternion to the heap with a stable memory address and
+/// returns the raw pointer (for use by the FFI interface)
+fn to_raw_pointer(quat: &Quaternion) -> *mut Quaternion {
+    Box::into_raw(Box::new(*quat))
+}
+
 /// Initialize a quaternion from raw components and retrieve the C pointer
 /// to its address 
 #[no_mangle]
 pub extern "C" fn new_quaternion(real: f64, i: f64, j: f64, k: f64) -> *mut Quaternion {
-    Quaternion::new(real, i, j, k).to_raw_pointer()
+    to_raw_pointer(&Quaternion::new(real, i, j, k))
 }
 
 /// Initialize a quaternion from a real part and a C pointer to a Vector3
@@ -21,7 +27,7 @@ pub unsafe extern "C" fn new_quaternion_from_vector(
 ) -> *mut Quaternion {
     null_pointer_check!(imag_ptr);
     let imag = *imag_ptr;
-    Quaternion::new_from_vector(real, imag).to_raw_pointer()
+    to_raw_pointer(&Quaternion::new_from_vector(real, imag))
 }
 
 /// Free memory at the address of the quaternion pointer. Outer processes
@@ -81,6 +87,20 @@ pub unsafe extern "C" fn quaternion_set_k(quat_ptr: *mut Quaternion, k: f64) {
     quat.k = k;
 }
 
+/// Set all of the components of an existing quaternion stored at the address
+/// of a pointer
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_set_components(
+    quat_ptr: *mut Quaternion, real: f64, i: f64, j: f64, k: f64
+) {
+    null_pointer_check!(quat_ptr);
+    let quat = &mut*quat_ptr;
+    quat.real = real;
+    quat.i = i;
+    quat.j = j;
+    quat.k = k;
+}
+
 /// Set the imaginary components of an existing quaternion stored at
 /// the address of a pointer (quat_ptr) from the components of a 3-vector
 /// (stored at vec_ptr). The convention is x -> i, y -> j, z -> k
@@ -110,7 +130,7 @@ pub unsafe extern "C" fn quaternion_get_imaginary_vector(quat_ptr: *const Quater
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw: f64) -> *mut Quaternion {
     let quat = Quaternion::from_euler_angles(roll, pitch, yaw);
-    quat.to_raw_pointer()
+    to_raw_pointer(&quat)
 }
 
 /// Converts a quaternion into euler angles. The euler angles are 

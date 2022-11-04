@@ -103,7 +103,7 @@ impl PartialEq for Vector3 {
 #[cfg(test)]
 mod tests {
     use crate::spatialmath::vector3::Vector3;
-    use float_cmp::approx_eq;
+    use float_cmp::assert_approx_eq;
 
     #[test]
     fn new_initializes_vector_successfully() {
@@ -139,7 +139,7 @@ mod tests {
             (1.0_f64 / 3.0_f64).sqrt() * -1.0, 
             (1.0_f64 / 3.0_f64).sqrt());
         vector.normalize();
-        assert!(approx_eq!(Vector3, expected_vector, vector));
+        assert_approx_eq!(Vector3, expected_vector, vector);
     }
 
     #[test]
@@ -153,7 +153,7 @@ mod tests {
             (1.0_f64 / 3.0_f64).sqrt() * -1.0, 
             (1.0_f64 / 3.0_f64).sqrt());
         let result_vector = vector.get_normalized();
-        assert!(approx_eq!(Vector3, expected_vector, result_vector));
+        assert_approx_eq!(Vector3, expected_vector, result_vector);
         assert!(!vector.is_normalized());
         assert!(result_vector.is_normalized())
     }
@@ -202,7 +202,7 @@ mod tests {
         let v2 = Vector3::new(2.0, 4.0, 6.0);
         let zero_v = Vector3::new(0.0,0.0,0.0);
         let v1xv2 = v1.cross(&v2);
-        assert!(approx_eq!(Vector3, zero_v, v1xv2));
+        assert_approx_eq!(Vector3, zero_v, v1xv2);
     }
 
     #[test]
@@ -211,6 +211,6 @@ mod tests {
         let v2 = Vector3::new(3.0, 4.0, 5.0);
         let expected_vector = Vector3::new(-2.0, 4.0, -2.0);
         let v1xv2 = v1.cross(&v2);
-        assert!(approx_eq!(Vector3, expected_vector, v1xv2));
+        assert_approx_eq!(Vector3, expected_vector, v1xv2);
     }
 }
