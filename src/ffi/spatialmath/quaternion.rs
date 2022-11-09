@@ -4,7 +4,10 @@ use libc::c_double;
 use crate::spatialmath::{quaternion::Quaternion, vector3::Vector3};
 
 /// The FFI interface for Quaternion functions and initialization. All public 
-/// functions are meant to be called externally from other languages
+/// functions are meant to be called externally from other languages. Quaternions
+/// use the Real-I-J-K standard, so quaternions in other standards should be
+/// converted in the native language before being used to initialize quaternions
+/// from this library
 
 /// Allocates a copy of the quaternion to the heap with a stable memory address and
 /// returns the raw pointer (for use by the FFI interface)
@@ -182,7 +185,7 @@ pub unsafe extern "C" fn quaternion_get_imaginary_vector(quat_ptr: *const Quater
 /// 
 /// # Safety
 /// 
-/// When finished with the underlying quaternion initialized by this function
+/// When finished with the underlying quaternion passed to this function
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function
 #[no_mangle]
@@ -235,7 +238,100 @@ pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion) -> *const c_double {
     null_pointer_check!(quat_ptr);
-    let quat = *quat_ptr;
-    let euler_angles = quat.to_euler_angles();
+    let euler_angles = (*quat_ptr).to_euler_angles();
     Box::into_raw(Box::new(euler_angles)) as *const _
+}
+
+/// Scales an existing quaternion stored at the address of 
+/// a pointer (quat_ptr) by a factor (float)
+/// 
+/// # Safety
+/// 
+/// When finished with the underlying quaternion passed to this function
+/// the caller must remember to free the quaternion memory using the 
+/// free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn scale_quaternion(quat_ptr: *mut Quaternion, factor: f64) {
+    null_pointer_check!(quat_ptr);
+    (*quat_ptr).scale(factor);
+}
+
+/// Initializes a copy of the quaternion stored at the address of a pointer (quat_ptr)
+/// scaled by a factor (float) and returns a pointer to the memory of the result
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory of 
+/// *both* the input and output quaternions when finished with them 
+/// using the free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_get_scaled(quat_ptr: *const Quaternion, factor: f64) -> *mut Quaternion {
+    null_pointer_check!(quat_ptr);
+    to_raw_pointer(&(*quat_ptr).get_scaled(factor))
+}
+
+/// Initializes a quaternion that is the conjugate of one stored 
+/// at the address of a pointer (quat_ptr)and returns a pointer 
+/// to the memory of the result
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory of 
+/// *both* the input and output quaternions when finished with them 
+/// using the free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_get_conjugate(quat_ptr: *const Quaternion) -> *mut Quaternion {
+    null_pointer_check!(quat_ptr);
+    to_raw_pointer(&(*quat_ptr).conjugate())
+}
+
+/// Adds two quaternions and returns a pointer to the 
+/// memory of the result
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory of *both* the input and
+/// output quaternions when finished with them using the free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_add(
+    quat_ptr_1: *const Quaternion,
+    quat_ptr_2: *const Quaternion,
+) -> *mut Quaternion {
+    null_pointer_check!(quat_ptr_1);
+    null_pointer_check!(quat_ptr_2);
+    to_raw_pointer(&((*quat_ptr_1) + (*quat_ptr_2)))
+}
+
+/// Subtracts two quaternions and returns a pointer to the 
+/// memory of the result
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory of *both* the input and
+/// output quaternions when finished with them using the free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_subtract(
+    quat_ptr_1: *const Quaternion,
+    quat_ptr_2: *const Quaternion,
+) -> *mut Quaternion {
+    null_pointer_check!(quat_ptr_1);
+    null_pointer_check!(quat_ptr_2);
+    to_raw_pointer(&((*quat_ptr_1) - (*quat_ptr_2)))
+}
+
+/// Computes the Hamiltonian product of two quaternions and 
+/// returns a pointer to the memory of the result
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory of *both* the input and
+/// output quaternions when finished with them using the free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_hamiltonian_product(
+    quat_ptr_1: *const Quaternion,
+    quat_ptr_2: *const Quaternion,
+) -> *mut Quaternion {
+    null_pointer_check!(quat_ptr_1);
+    null_pointer_check!(quat_ptr_2);
+    to_raw_pointer(&((*quat_ptr_1) * (*quat_ptr_2)))
 }
