@@ -19,7 +19,7 @@ impl Quaternion {
     /// Initializes a quaternion from a real component and an
     /// imaginary 3-vector
     pub fn new_from_vector(real: f64, imag: Vector3) -> Self {
-        Self{real: real, i: imag.x, j: imag.y, k: imag.z}
+        Self{real, i: imag.x, j: imag.y, k: imag.z}
     }
 
     /// Initializes a Quaternion from its raw components
@@ -27,9 +27,9 @@ impl Quaternion {
         Self{real, i, j, k}
     }
 
-    /// Converts from euler angles to a quaternion. The euler angles are expected to
-    /// be represented according to the Tait-Bryan formalism and applied in the Z-Y'-X"
-    /// order (where Z -> yaw, Y -> pitch, X -> roll)
+    /// Converts from euler angles (in radians) to a quaternion. The euler angles 
+    /// are expected to be represented according to the Tait-Bryan formalism 
+    /// and applied in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll).
     pub fn from_euler_angles(roll: f64, pitch: f64, yaw: f64) -> Self {
         let roll_cos = (roll * 0.5).cos();
         let roll_sin = (roll * 0.5).sin();
@@ -48,7 +48,7 @@ impl Quaternion {
         Quaternion::new(real, i, j, k)
     }
 
-    /// Converts a quaternion into euler angles. The euler angles are 
+    /// Converts a quaternion into euler angles (in radians). The euler angles are 
     /// represented according to the Tait-Bryan formalism and applied 
     /// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll). 
     /// The return value is a list of [roll, pitch, yaw]
@@ -76,7 +76,7 @@ impl Quaternion {
             let roll_cos_pitch_cos = 1.0 - 2.0 * ((quat.i * quat.i) + (quat.j * quat.j));
             roll = roll_sin_pitch_cos.atan2(roll_cos_pitch_cos);
         }
-        
+
         [roll, pitch, yaw]
     }
 
@@ -111,21 +111,20 @@ impl Quaternion {
     }
 
     /// Returns a normalized copy of the quaternion
-    pub fn get_normalized(&self) -> Self {
-        let mut copy_quat = self.clone();
-        copy_quat.normalize();
-        copy_quat
+    pub fn get_normalized(mut self) -> Self {
+        self.normalize();
+        return self
     }
 
     pub fn scale(&mut self, factor: f64) {
-        self.real = self.real * factor;
-        self.i = self.i * factor;
-        self.j = self.j * factor;
-        self.k = self.k * factor;
+        self.real *= factor;
+        self.i *= factor;
+        self.j *= factor;
+        self.k *= factor;
     }
 
     pub fn get_scaled(&self, factor: f64) -> Self {
-        let mut copy_quat = self.clone();
+        let mut copy_quat = *self;
         copy_quat.scale(factor);
         copy_quat
     }
@@ -246,6 +245,26 @@ mod tests {
     }
 
     #[test]
+    fn get_normalized_returns_a_normalized_copy() {
+        let quat = Quaternion::new(
+            0.0,
+            (1.0_f64 / 3.0_f64).sqrt() * 0.5, 
+            (1.0_f64 / 3.0_f64).sqrt() * -0.5, 
+            (1.0_f64 / 3.0_f64).sqrt() * 0.5
+        );
+        let expected_quat = Quaternion::new(
+            0.0,
+            (1.0_f64 / 3.0_f64).sqrt(), 
+            (1.0_f64 / 3.0_f64).sqrt() * -1.0, 
+            (1.0_f64 / 3.0_f64).sqrt()
+        );
+        let unchanged_quat = quat;
+        let normalized_quat = quat.get_normalized();
+        assert_approx_eq!(Quaternion, normalized_quat, expected_quat);
+        assert_approx_eq!(Quaternion, quat, unchanged_quat);
+    }
+
+    #[test]
     fn is_normalized_is_correct() {
         let not_normalized = Quaternion::new(
             0.3,
@@ -294,7 +313,7 @@ mod tests {
     #[test]
     fn get_scaled_returns_scaled_quaternion() {
         let quat = Quaternion::new(0.1, 0.2, 0.3, 0.4);
-        let quat_orig = quat.clone();
+        let quat_orig = quat;
         let scaled_quat = quat.get_scaled(2.0);
         let expected_quat = Quaternion::new(0.2, 0.4, 0.6, 0.8);
         assert_eq!(quat, quat_orig);

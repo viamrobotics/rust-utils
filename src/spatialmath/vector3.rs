@@ -18,7 +18,7 @@ impl Vector3 {
     }
 
     pub fn get_normalized(&self) -> Self {
-        let mut copy_vec = self.clone();
+        let mut copy_vec = *self;
         copy_vec.normalize();
         copy_vec
     }
@@ -57,7 +57,7 @@ impl Vector3 {
     }
 
     pub fn get_scaled(&self, factor: f64) -> Self {
-        let mut copy_vec = self.clone();
+        let mut copy_vec = *self;
         copy_vec.scale(factor);
         copy_vec
     }
