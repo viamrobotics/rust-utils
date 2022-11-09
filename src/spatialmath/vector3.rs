@@ -27,9 +27,9 @@ impl Vector3 {
         if !self.is_normalized() {
             let norm = self.norm2().sqrt();
             if !approx_eq!(f64, norm, 0.0) {
-                self.x = self.x / norm;
-                self.y = self.y / norm;
-                self.z = self.z / norm;
+                self.x /= norm;
+                self.y /= norm;
+                self.z /= norm;
             }
         }
     }
@@ -51,9 +51,9 @@ impl Vector3 {
     }
 
     pub fn scale(&mut self, factor: f64) {
-        self.x = self.x * factor;
-        self.y = self.y * factor;
-        self.z = self.z * factor;
+        self.x *= factor;
+        self.y *= factor;
+        self.z *= factor;
     }
 
     pub fn get_scaled(&self, factor: f64) -> Self {
@@ -64,8 +64,8 @@ impl Vector3 {
 
     /// Allocates the vector to the heap with a stable memory address and
     /// returns the raw pointer (for use by the FFI interface)
-    pub(crate) fn to_raw_pointer(&self) -> *mut Self {
-        Box::into_raw(Box::new(*self))
+    pub(crate) fn to_raw_pointer(self) -> *mut Self {
+        Box::into_raw(Box::new(self))
     }
 
 }

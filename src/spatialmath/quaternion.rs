@@ -113,7 +113,7 @@ impl Quaternion {
     /// Returns a normalized copy of the quaternion
     pub fn get_normalized(mut self) -> Self {
         self.normalize();
-        return self
+        self
     }
 
     pub fn scale(&mut self, factor: f64) {
