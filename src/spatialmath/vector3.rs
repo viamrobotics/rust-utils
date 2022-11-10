@@ -18,7 +18,7 @@ impl Vector3 {
     }
 
     pub fn get_normalized(&self) -> Self {
-        let mut copy_vec = self.clone();
+        let mut copy_vec = *self;
         copy_vec.normalize();
         copy_vec
     }
@@ -27,9 +27,9 @@ impl Vector3 {
         if !self.is_normalized() {
             let norm = self.norm2().sqrt();
             if !approx_eq!(f64, norm, 0.0) {
-                self.x = self.x / norm;
-                self.y = self.y / norm;
-                self.z = self.z / norm;
+                self.x /= norm;
+                self.y /= norm;
+                self.z /= norm;
             }
         }
     }
@@ -51,21 +51,21 @@ impl Vector3 {
     }
 
     pub fn scale(&mut self, factor: f64) {
-        self.x = self.x * factor;
-        self.y = self.y * factor;
-        self.z = self.z * factor;
+        self.x *= factor;
+        self.y *= factor;
+        self.z *= factor;
     }
 
     pub fn get_scaled(&self, factor: f64) -> Self {
-        let mut copy_vec = self.clone();
+        let mut copy_vec = *self;
         copy_vec.scale(factor);
         copy_vec
     }
 
     /// Allocates the vector to the heap with a stable memory address and
     /// returns the raw pointer (for use by the FFI interface)
-    pub(crate) fn to_raw_pointer(&self) -> *mut Self {
-        Box::into_raw(Box::new(*self))
+    pub(crate) fn to_raw_pointer(self) -> *mut Self {
+        Box::into_raw(Box::new(self))
     }
 
 }
@@ -103,7 +103,7 @@ impl PartialEq for Vector3 {
 #[cfg(test)]
 mod tests {
     use crate::spatialmath::vector3::Vector3;
-    use float_cmp::approx_eq;
+    use float_cmp::assert_approx_eq;
 
     #[test]
     fn new_initializes_vector_successfully() {
@@ -111,7 +111,6 @@ mod tests {
         assert_eq!(vector.x, 1.0);
         assert_eq!(vector.y, 1.0);
         assert_eq!(vector.z, 1.0);
-        assert!(!vector.is_normalized())
     }
 
     #[test]
@@ -140,7 +139,7 @@ mod tests {
             (1.0_f64 / 3.0_f64).sqrt() * -1.0, 
             (1.0_f64 / 3.0_f64).sqrt());
         vector.normalize();
-        assert!(approx_eq!(Vector3, expected_vector, vector));
+        assert_approx_eq!(Vector3, expected_vector, vector);
     }
 
     #[test]
@@ -154,7 +153,7 @@ mod tests {
             (1.0_f64 / 3.0_f64).sqrt() * -1.0, 
             (1.0_f64 / 3.0_f64).sqrt());
         let result_vector = vector.get_normalized();
-        assert!(approx_eq!(Vector3, expected_vector, result_vector));
+        assert_approx_eq!(Vector3, expected_vector, result_vector);
         assert!(!vector.is_normalized());
         assert!(result_vector.is_normalized())
     }
@@ -203,7 +202,7 @@ mod tests {
         let v2 = Vector3::new(2.0, 4.0, 6.0);
         let zero_v = Vector3::new(0.0,0.0,0.0);
         let v1xv2 = v1.cross(&v2);
-        assert!(approx_eq!(Vector3, zero_v, v1xv2));
+        assert_approx_eq!(Vector3, zero_v, v1xv2);
     }
 
     #[test]
@@ -212,6 +211,6 @@ mod tests {
         let v2 = Vector3::new(3.0, 4.0, 5.0);
         let expected_vector = Vector3::new(-2.0, 4.0, -2.0);
         let v1xv2 = v1.cross(&v2);
-        assert!(approx_eq!(Vector3, expected_vector, v1xv2));
+        assert_approx_eq!(Vector3, expected_vector, v1xv2);
     }
 }
