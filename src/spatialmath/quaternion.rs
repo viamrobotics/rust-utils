@@ -51,7 +51,8 @@ impl Quaternion {
     /// Converts a quaternion into euler angles (in radians). The euler angles are 
     /// represented according to the Tait-Bryan formalism and applied 
     /// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll). 
-    /// The return value is a list of [roll, pitch, yaw]
+    /// The return value is a list of [roll, pitch, yaw] and all returned angles
+    /// are in the domain of -π/2 to π/2
     pub fn to_euler_angles(&self) -> [f64;3] {
         // get a normalized version of the quaternion
         let quat = self.get_normalized();

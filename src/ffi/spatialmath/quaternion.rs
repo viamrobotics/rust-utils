@@ -57,6 +57,19 @@ pub unsafe extern "C" fn free_quaternion_memory(ptr: *mut Quaternion) {
     let _ = Box::from_raw(ptr);
 }
 
+/// Free memory at the address of the euler angles pointer. Outer processes
+/// that work with euler angles returned by this interface MUST remember 
+/// to call this function when finished with the list of doubles
+/// 
+/// # Safety
+#[no_mangle]
+pub unsafe extern "C" fn free_euler_angles_memory(ptr: *mut c_double) {
+    if ptr.is_null() {
+        return;
+    }
+    let _ = Box::from_raw(ptr);
+}
+
 /// Get the components of a quaternion as a list of C doubles, the order of the
 /// components will be (real, i, j, k).
 /// 
@@ -234,12 +247,13 @@ pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw
 /// 
 /// When finished with the underlying quaternion passed to this function
 /// the caller must remember to free the quaternion memory using the 
-/// free_quaternion_memory FFI function
+/// free_quaternion_memory FFI function and the euler angles memory using
+/// the free_euler_angles memory function
 #[no_mangle]
-pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion) -> *const c_double {
+pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion) -> *mut c_double {
     null_pointer_check!(quat_ptr);
     let euler_angles = (*quat_ptr).to_euler_angles();
-    Box::into_raw(Box::new(euler_angles)) as *const _
+    Box::into_raw(Box::new(euler_angles)) as *mut _
 }
 
 /// Scales an existing quaternion stored at the address of 
