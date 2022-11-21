@@ -49,8 +49,7 @@ impl WebRTCBaseChannel {
                         pc.get_stats_id()
                     );
                 })
-            }))
-            .await;
+            }));
 
         let channel = Arc::new(Self {
             peer_connection,
@@ -70,8 +69,7 @@ impl WebRTCBaseChannel {
                     log::error!("error closing channel: {e}")
                 }
             })
-        }))
-        .await;
+        }));
 
         channel
     }

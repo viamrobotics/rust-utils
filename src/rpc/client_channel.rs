@@ -75,22 +75,20 @@ impl WebRTCClientChannel {
         let ret_channel = channel.clone();
         let channel = Arc::downgrade(&channel);
 
-        data_channel
-            .on_message(Box::new(move |msg: DataChannelMessage| {
-                let channel = channel.clone();
-                Box::pin(async move {
-                    let channel = match channel.upgrade() {
-                        Some(channel) => channel,
-                        None => {
-                            return;
-                        }
-                    };
-                    if let Err(e) = channel.on_channel_message(msg).await {
-                        log::error!("error deserializing message: {e}");
+        data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
+            let channel = channel.clone();
+            Box::pin(async move {
+                let channel = match channel.upgrade() {
+                    Some(channel) => channel,
+                    None => {
+                        return;
                     }
-                })
-            }))
-            .await;
+                };
+                if let Err(e) = channel.on_channel_message(msg).await {
+                    log::error!("error deserializing message: {e}");
+                }
+            })
+        }));
         log::debug!("Client channel created");
         ret_channel
     }
