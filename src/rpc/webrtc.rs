@@ -213,19 +213,17 @@ pub(crate) async fn new_peer_connection_for_client(
         ..Default::default()
     };
 
-    peer_connection
-        .on_peer_connection_state_change(Box::new(move |connection: RTCPeerConnectionState| {
+    peer_connection.on_peer_connection_state_change(Box::new(
+        move |connection: RTCPeerConnectionState| {
             log::info!("peer connection state change: {connection}");
             Box::pin(async move {})
-        }))
-        .await;
+        },
+    ));
 
-    peer_connection
-        .on_signaling_state_change(Box::new(move |ssc: RTCSignalingState| {
-            log::info!("new signaling state: {ssc}");
-            Box::pin(async move {})
-        }))
-        .await;
+    peer_connection.on_signaling_state_change(Box::new(move |ssc: RTCSignalingState| {
+        log::info!("new signaling state: {ssc}");
+        Box::pin(async move {})
+    }));
 
     let data_channel = peer_connection
         .create_data_channel("data", Some(data_channel_init))
@@ -237,39 +235,37 @@ pub(crate) async fn new_peer_connection_for_client(
     let nc = negotiation_channel.clone();
     let pc = Arc::downgrade(&peer_connection);
 
-    negotiation_channel
-        .on_message(Box::new(move |msg: DataChannelMessage| {
-            let wpc = pc.clone();
-            let nc = nc.clone();
-            Box::pin(async move {
-                let pc = match wpc.upgrade() {
-                    Some(pc) => pc,
-                    None => return,
-                };
-                let sdp_vec = msg.data.to_vec();
-                let maybe_err = async move {
-                    let sdp = serde_json::from_slice::<RTCSessionDescription>(&sdp_vec)
-                        .map_err(create_invalid_sdp_err)?;
-                    pc.set_remote_description(sdp).await?;
-                    let answer = pc.create_answer(None).await?;
-                    pc.set_local_description(answer).await?;
-                    let local_description = pc
-                        .local_description()
-                        .await
-                        .ok_or("No local description set");
-                    let desc =
-                        serde_json::to_vec(&local_description).map_err(create_invalid_sdp_err)?;
-                    let desc = Bytes::copy_from_slice(&desc);
-                    nc.send(&desc).await
-                }
-                .await;
+    negotiation_channel.on_message(Box::new(move |msg: DataChannelMessage| {
+        let wpc = pc.clone();
+        let nc = nc.clone();
+        Box::pin(async move {
+            let pc = match wpc.upgrade() {
+                Some(pc) => pc,
+                None => return,
+            };
+            let sdp_vec = msg.data.to_vec();
+            let maybe_err = async move {
+                let sdp = serde_json::from_slice::<RTCSessionDescription>(&sdp_vec)
+                    .map_err(create_invalid_sdp_err)?;
+                pc.set_remote_description(sdp).await?;
+                let answer = pc.create_answer(None).await?;
+                pc.set_local_description(answer).await?;
+                let local_description = pc
+                    .local_description()
+                    .await
+                    .ok_or("No local description set");
+                let desc =
+                    serde_json::to_vec(&local_description).map_err(create_invalid_sdp_err)?;
+                let desc = Bytes::copy_from_slice(&desc);
+                nc.send(&desc).await
+            }
+            .await;
 
-                if let Err(e) = maybe_err {
-                    log::error!("Error processing sdp in negotiation channel: {e}");
-                }
-            })
-        }))
-        .await;
+            if let Err(e) = maybe_err {
+                log::error!("Error processing sdp in negotiation channel: {e}");
+            }
+        })
+    }));
 
     if disable_trickle_ice {
         let offer = peer_connection.create_offer(None).await?;
