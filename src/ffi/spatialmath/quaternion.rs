@@ -303,7 +303,8 @@ pub unsafe extern "C" fn quaternion_from_axis_angle_vector(
 
 /// Converts a quaternion into an R4 axis angle. The return value is a pointer
 /// to a list of [x, y, x, theta], where (x,y,z) are the axis vector components
-/// and theta is the rotation about the axis in radians
+/// and theta is the rotation about the axis in radians. A zero quaternion returns
+/// a zero axis angle
 /// 
 /// # Safety
 /// 
@@ -324,7 +325,7 @@ pub unsafe extern "C" fn quatenion_to_axis_angle(
             return Box::into_raw(Box::new(axis_angle)) as *mut _
         },
         None => {
-            return Box::into_raw(Box::new([0.0, 0.0, 0.0, angle])) as *mut _
+            return Box::into_raw(Box::new([0.0, 0.0, 0.0, 0.0])) as *mut _
         },
     }
 }
