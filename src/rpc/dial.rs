@@ -494,12 +494,10 @@ async fn maybe_connect_via_webrtc(
     let uuid_for_ice_gathering_thread = uuid_lock.clone();
     let is_open = Arc::new(AtomicBool::new(false));
     let is_open_read = is_open.clone();
-    data_channel
-        .on_open(Box::new(move || {
-            is_open.store(true, Ordering::Release);
-            Box::pin(async move {})
-        }))
-        .await;
+    data_channel.on_open(Box::new(move || {
+        is_open.store(true, Ordering::Release);
+        Box::pin(async move {})
+    }));
 
     let exchange_done = Arc::new(AtomicBool::new(false));
     let remote_description_set = Arc::new(AtomicBool::new(false));
@@ -514,8 +512,8 @@ async fn maybe_connect_via_webrtc(
 
         let exchange_done = exchange_done.clone();
         let remote_description_set = remote_description_set.clone();
-        peer_connection
-            .on_ice_candidate(Box::new(move |ice_candidate: Option<RTCIceCandidate>| {
+        peer_connection.on_ice_candidate(Box::new(
+            move |ice_candidate: Option<RTCIceCandidate>| {
                 let remote_description_set = remote_description_set.clone();
                 if exchange_done.load(Ordering::Acquire) {
                     return Box::pin(async move {});
@@ -569,8 +567,8 @@ async fn maybe_connect_via_webrtc(
                         }
                     }
                 })
-            }))
-            .await;
+            },
+        ));
 
         peer_connection.set_local_description(offer).await?;
     }
@@ -739,7 +737,7 @@ async fn maybe_connect_via_webrtc(
 }
 
 async fn ice_candidate_to_proto(ice_candidate: RTCIceCandidate) -> Result<IceCandidate> {
-    let ice_candidate = ice_candidate.to_json().await?;
+    let ice_candidate = ice_candidate.to_json()?;
     Ok(IceCandidate {
         candidate: ice_candidate.candidate,
         sdp_mid: ice_candidate.sdp_mid,
