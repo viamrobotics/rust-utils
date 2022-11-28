@@ -2,7 +2,6 @@ use ffi_helpers::null_pointer_check;
 use libc::c_double;
 use nalgebra::{Quaternion, Vector3, UnitQuaternion, Normed, UnitVector3};
 
-use crate::spatialmath::utils::to_euler_angles;
 use crate::ffi::spatialmath::vector3::to_raw_pointer as vec_to_raw_pointer;
 
 /// The FFI interface wrapper around the nalgebra crate for Quaternion functions 
@@ -54,19 +53,6 @@ pub unsafe extern "C" fn new_quaternion_from_vector(
 /// # Safety
 #[no_mangle]
 pub unsafe extern "C" fn free_quaternion_memory(ptr: *mut Quaternion<f64>) {
-    if ptr.is_null() {
-        return;
-    }
-    let _ = Box::from_raw(ptr);
-}
-
-/// Free memory at the address of the euler angles pointer. Outer processes
-/// that work with euler angles returned by this interface MUST remember 
-/// to call this function when finished with the list of doubles
-/// 
-/// # Safety
-#[no_mangle]
-pub unsafe extern "C" fn free_array_memory(ptr: *mut c_double) {
     if ptr.is_null() {
         return;
     }
@@ -222,7 +208,7 @@ pub unsafe extern "C" fn normalize_quaternion(quat_ptr: *mut Quaternion<f64>) {
 /// The caller must remember to free the quaternion memory of 
 /// *both* the input and output quaternions when finished with them 
 /// using the free_quaternion_memory FFI function
-// #[no_mangle]
+#[no_mangle]
 pub unsafe extern "C" fn quaternion_get_normalized(quat_ptr: *const Quaternion<f64>) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr);
     to_raw_pointer(&(*quat_ptr).normalize())
@@ -242,25 +228,6 @@ pub unsafe extern "C" fn quaternion_from_euler_angles(roll: f64, pitch: f64, yaw
     let unit_quat = UnitQuaternion::from_euler_angles(roll, pitch, yaw);
     let quat = unit_quat.quaternion();
     to_raw_pointer(&quat)
-}
-
-/// Converts a quaternion into euler angles (in radians). The euler angles are 
-/// represented according to the Tait-Bryan formalism and applied 
-/// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll). 
-/// The return value is a pointer to a list of [roll, pitch, yaw]
-/// as C doubles
-/// 
-/// # Safety
-/// 
-/// When finished with the underlying quaternion passed to this function
-/// the caller must remember to free the quaternion memory using the 
-/// free_quaternion_memory FFI function and the euler angles memory using
-/// the free_array_memory function
-#[no_mangle]
-pub unsafe extern "C" fn quaternion_to_euler_angles(quat_ptr: *const Quaternion<f64>) -> *mut c_double {
-    null_pointer_check!(quat_ptr);
-    let euler_angles = to_euler_angles(*quat_ptr);
-    Box::into_raw(Box::new(euler_angles)) as *mut _
 }
 
 /// Converts from an axis angle given by a vector's x, y, z components
@@ -301,35 +268,6 @@ pub unsafe extern "C" fn quaternion_from_axis_angle_vector(
     to_raw_pointer(unit_quat.quaternion())
 }
 
-/// Converts a quaternion into an R4 axis angle. The return value is a pointer
-/// to a list of [x, y, x, theta], where (x,y,z) are the axis vector components
-/// and theta is the rotation about the axis in radians. A zero quaternion returns
-/// a zero axis angle
-/// 
-/// # Safety
-/// 
-/// When finished with the underlying quaternion passed to this function
-/// the caller must remember to free the quaternion memory using the 
-/// free_quaternion_memory FFI function and the axis angle memory using
-/// the free_array_memory function
-#[no_mangle]
-pub unsafe extern "C" fn quatenion_to_axis_angle(
-    quat: *const Quaternion<f64>
-) -> *mut c_double {
-    let unit_quat = UnitQuaternion::from_quaternion(*quat);
-    let axis_opt = unit_quat.axis();
-    let angle = unit_quat.angle();
-    match axis_opt {
-        Some(value) => {
-            let axis_angle: [f64; 4] = [value[0], value[1], value[2], angle];
-            return Box::into_raw(Box::new(axis_angle)) as *mut _
-        },
-        None => {
-            return Box::into_raw(Box::new([0.0, 0.0, 0.0, 0.0])) as *mut _
-        },
-    }
-}
-
 /// Scales an existing quaternion stored at the address of 
 /// a pointer (quat_ptr) by a factor (float)
 /// 
@@ -352,7 +290,7 @@ pub unsafe extern "C" fn scale_quaternion(quat_ptr: *mut Quaternion<f64>, factor
 /// The caller must remember to free the quaternion memory of 
 /// *both* the input and output quaternions when finished with them 
 /// using the free_quaternion_memory FFI function
-// #[no_mangle]
+#[no_mangle]
 pub unsafe extern "C" fn quaternion_get_scaled(quat_ptr: *const Quaternion<f64>, factor: f64) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr);
     let mut copy_quat = *quat_ptr;
