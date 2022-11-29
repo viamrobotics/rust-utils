@@ -9,11 +9,12 @@ fn to_raw_pointer(aa: &AxisAngle) -> *mut AxisAngle {
     Box::into_raw(Box::new(*aa))
 }
 
-/// Free memory at the address of the axis angle pointer. Outer processes
-/// that work with axis angles via the FFI interface MUST remember 
-/// to call this function when finished with an axis angle instance
+/// Free memory at the address of the axis angle pointer.
 /// 
 /// # Safety
+/// 
+/// Outer processes that work with axis angles via the FFI interface MUST remember 
+/// to call this function when finished with an axis angle instance
 #[no_mangle]
 pub unsafe extern "C" fn free_axis_angles_memory(ptr: *mut AxisAngle) {
     if ptr.is_null() {
@@ -56,12 +57,9 @@ pub unsafe extern "C" fn axis_angle_from_quaternion(
     let angle = unit_quat.angle();
     let axis_angle = match axis_opt {
         Some(value) => {
-            // let axis_angle: [f64; 4] = [value[0], value[1], value[2], angle];
-            // return Box::into_raw(Box::new(axis_angle)) as *mut _
             AxisAngle::new(value[0], value[1], value[2], angle)
         },
         None => {
-            // return Box::into_raw(Box::new([0.0, 0.0, 0.0, 0.0])) as *mut _
             AxisAngle::new(0.0, 0.0, 0.0, 0.0)
         },
     };

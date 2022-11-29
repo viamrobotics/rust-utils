@@ -13,6 +13,9 @@ impl EulerAngles {
         EulerAngles { roll, pitch, yaw }
     }
 
+    /// Converts a quaternion into euler angles (in radians). The euler angles are 
+    /// represented according to the Tait-Bryan formalism and applied 
+    /// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll).
     pub fn from_quaternion(quat: &Quaternion<f64>) -> Self {
         // get a normalized version of the quaternion
         let norm_quat = quat.normalize();

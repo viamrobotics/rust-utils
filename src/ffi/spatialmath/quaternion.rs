@@ -46,11 +46,12 @@ pub unsafe extern "C" fn new_quaternion_from_vector(
     to_raw_pointer(&Quaternion::new(real, (*imag_ptr).x, (*imag_ptr).y, (*imag_ptr).z))
 }
 
-/// Free memory at the address of the quaternion pointer. Outer processes
-/// that work with Quaternions via the FFI interface MUST remember 
-/// to call this function when finished with a quaternion
+/// Free memory at the address of the quaternion pointer. 
 /// 
 /// # Safety
+/// 
+/// Outer processes that work with Quaternions via the FFI interface MUST remember 
+/// to call this function when finished with a quaternion
 #[no_mangle]
 pub unsafe extern "C" fn free_quaternion_memory(ptr: *mut Quaternion<f64>) {
     if ptr.is_null() {

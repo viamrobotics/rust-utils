@@ -28,10 +28,11 @@ pub extern "C" fn new_vector3(x: f64, y: f64, z: f64) -> *mut Vector3<f64> {
     to_raw_pointer(new_vec)
 }
 
-/// Free memory at the address of the vector pointer. Outer processes
-/// that work with Vectors via the FFI interface MUST remember 
-/// to call this function when finished with a vector
+/// Free memory at the address of the vector pointer. 
+/// 
 /// # Safety
+/// Outer processes that work with Vectors via the FFI interface MUST remember 
+/// to call this function when finished with a vector
 #[no_mangle]
 pub unsafe extern "C" fn free_vector_memory(ptr: *mut Vector3<f64>) {
     if ptr.is_null() {

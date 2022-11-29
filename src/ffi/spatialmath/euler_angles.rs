@@ -9,11 +9,12 @@ fn to_raw_pointer(ea: &EulerAngles) -> *mut EulerAngles {
     Box::into_raw(Box::new(*ea))
 }
 
-/// Free memory at the address of the euler angles pointer. Outer processes
-/// that work with EulerAngles via the FFI interface MUST remember 
-/// to call this function when finished with a euler angles instance
+/// Free memory at the address of the euler angles pointer. 
 /// 
 /// # Safety
+/// 
+/// Outer processes that work with EulerAngles via the FFI interface MUST remember 
+/// to call this function when finished with a euler angles instance
 #[no_mangle]
 pub unsafe extern "C" fn free_euler_angles_memory(ptr: *mut EulerAngles) {
     if ptr.is_null() {
