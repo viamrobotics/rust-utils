@@ -57,13 +57,18 @@ pub enum ViamChannel {
     WebRTC(Arc<WebRTCClientChannel>),
 }
 
-pub trait CredentialsExt {
-    fn new(r#type: String, payload: String) -> Self;
+#[derive(Debug)]
+pub struct RPCCredentials {
+    entity: Option<String>,
+    credentials: Credentials,
 }
 
-impl CredentialsExt for Credentials {
-    fn new(r#type: SecretType, payload: String) -> Credentials {
-        Credentials { r#type, payload }
+impl RPCCredentials {
+    pub fn new(entity: Option<String>, r#type: SecretType, payload: String) -> Self {
+        Self {
+            credentials: Credentials { r#type, payload },
+            entity,
+        }
     }
 }
 
@@ -146,7 +151,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
 /// Options for modifying the connection parameters
 #[derive(Debug)]
 pub struct DialOptions {
-    credentials: Option<Credentials>,
+    credentials: Option<RPCCredentials>,
     webrtc_options: Option<Options>,
     uri: Option<Parts>,
     allow_downgrade: bool,
@@ -227,7 +232,7 @@ impl DialBuilder<WantsCredentials> {
         }
     }
     /// Sets credentials to use when connecting
-    pub fn with_credentials(self, creds: Credentials) -> DialBuilder<WithCredentials> {
+    pub fn with_credentials(self, creds: RPCCredentials) -> DialBuilder<WithCredentials> {
         DialBuilder {
             state: WithCredentials(()),
             config: DialOptions {
@@ -326,7 +331,11 @@ impl DialBuilder<WithoutCredentials> {
     }
 }
 
-async fn get_auth_token(channel: &mut Channel, creds: Credentials, entity: &str) -> Result<String> {
+async fn get_auth_token(
+    channel: &mut Channel,
+    creds: Credentials,
+    entity: String,
+) -> Result<String> {
     let mut auth_service = AuthServiceClient::new(channel);
     let req = AuthenticateRequest {
         entity: entity.to_string(),
@@ -352,7 +361,7 @@ impl DialBuilder<WithCredentials> {
 
         let uri = Uri::from_parts(uri_parts)?;
         let uri2 = uri.clone();
-        let domain = uri2.authority().to_owned().unwrap().as_str();
+        let domain = uri2.authority().to_owned().unwrap().to_string();
 
         let uri = infer_remote_uri_from_authority(uri);
 
@@ -376,8 +385,17 @@ impl DialBuilder<WithCredentials> {
 
         let token = get_auth_token(
             &mut real_channel.clone(),
-            self.config.credentials.unwrap(),
-            domain,
+            self.config
+                .credentials
+                .as_ref()
+                .unwrap()
+                .credentials
+                .clone(),
+            self.config
+                .credentials
+                .unwrap()
+                .entity
+                .unwrap_or_else(|| domain.clone()),
         )
         .await?;
 
@@ -385,7 +403,7 @@ impl DialBuilder<WithCredentials> {
             .layer(AddAuthorizationLayer::bearer(&token))
             .layer(SetRequestHeaderLayer::overriding(
                 HeaderName::from_static("rpc-host"),
-                HeaderValue::from_str(domain)?,
+                HeaderValue::from_str(domain.as_str())?,
             ))
             .service(real_channel.clone());
 
