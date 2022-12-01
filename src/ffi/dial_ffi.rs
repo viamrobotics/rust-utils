@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 use tracing::Level;
 
 use crate::rpc::dial::{
-    CredentialsExt, DialBuilder, DialOptions, ViamChannel, WithCredentials, WithoutCredentials,
+    DialBuilder, DialOptions, RPCCredentials, ViamChannel, WithCredentials, WithoutCredentials,
 };
 use libc::c_char;
 
@@ -92,7 +92,11 @@ fn dial_with_cred(
     allow_insec: bool,
     disable_webrtc: bool,
 ) -> Result<DialBuilder<WithCredentials>> {
-    let creds = CredentialsExt::new(String::from("robot-location-secret"), String::from(payload));
+    let creds = RPCCredentials::new(
+        None,
+        String::from("robot-location-secret"),
+        String::from(payload),
+    );
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
     let c = if disable_webrtc {
         c.disable_webrtc()
