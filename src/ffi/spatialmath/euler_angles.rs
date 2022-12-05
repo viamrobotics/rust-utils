@@ -38,16 +38,14 @@ pub extern "C" fn new_euler_angles(roll: f64, pitch: f64, yaw: f64) -> *mut Eule
 
 /// Converts a quaternion into euler angles (in radians). The euler angles are 
 /// represented according to the Tait-Bryan formalism and applied 
-/// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll). 
-/// The return value is a pointer to a list of [roll, pitch, yaw]
-/// as C doubles
+/// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll).
 /// 
 /// # Safety
 /// 
 /// When finished with the underlying quaternion passed to this function
 /// the caller must remember to free the quaternion memory using the 
 /// free_quaternion_memory FFI function and the euler angles memory using
-/// the free_array_memory function
+/// the free_euler_angles_memory function
 #[no_mangle]
 pub unsafe extern "C" fn euler_angles_from_quaternion(quat_ptr: *const Quaternion<f64>) -> *mut EulerAngles {
     null_pointer_check!(quat_ptr);
