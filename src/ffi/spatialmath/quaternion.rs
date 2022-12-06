@@ -2,7 +2,7 @@ use ffi_helpers::null_pointer_check;
 use libc::c_double;
 use nalgebra::{Quaternion, Vector3, UnitQuaternion, Normed, UnitVector3, Rotation3};
 
-use crate::{ffi::spatialmath::vector3::to_raw_pointer as vec_to_raw_pointer, spatialmath::utils::OrientationVector};
+use crate::{ffi::spatialmath::vector3::to_raw_pointer as vec_to_raw_pointer, spatialmath::utils::{OrientationVector, rotate_vector_by_quaternion}};
 
 /// The FFI interface wrapper around the nalgebra crate for Quaternion functions 
 /// and initialization. All public functions are meant to be called externally 
@@ -213,6 +213,23 @@ pub unsafe extern "C" fn normalize_quaternion(quat_ptr: *mut Quaternion<f64>) {
 pub unsafe extern "C" fn quaternion_get_normalized(quat_ptr: *const Quaternion<f64>) -> *mut Quaternion<f64> {
     null_pointer_check!(quat_ptr);
     to_raw_pointer(&(*quat_ptr).normalize())
+}
+
+/// Returns the result of rotating a vector by a quaternion
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory and
+/// the memory of both vectors when finished with them using the
+/// free_quaternion_memory and free_vector_memory FFI functions
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_rotate_vector(
+    quat_ptr: *const Quaternion<f64>, vec_ptr: *const Vector3<f64>
+) -> *mut Vector3<f64> {
+    null_pointer_check!(quat_ptr);
+    null_pointer_check!(vec_ptr);
+    let rotated = rotate_vector_by_quaternion(&*quat_ptr, &*vec_ptr);
+    vec_to_raw_pointer(rotated)
 }
 
 /// Converts from euler angles (in radians) to a quaternion. The euler angles are expected to
