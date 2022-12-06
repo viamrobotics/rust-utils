@@ -49,6 +49,6 @@ pub extern "C" fn new_euler_angles(roll: f64, pitch: f64, yaw: f64) -> *mut Eule
 #[no_mangle]
 pub unsafe extern "C" fn euler_angles_from_quaternion(quat_ptr: *const Quaternion<f64>) -> *mut EulerAngles {
     null_pointer_check!(quat_ptr);
-    let euler_angles = EulerAngles::from_quaternion(&*quat_ptr);
+    let euler_angles: EulerAngles = (*quat_ptr).into();
     to_raw_pointer(&euler_angles)
 }

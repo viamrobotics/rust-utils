@@ -1,5 +1,5 @@
 use ffi_helpers::null_pointer_check;
-use nalgebra::{Quaternion, UnitQuaternion};
+use nalgebra::{Quaternion};
 
 use crate::spatialmath::utils::AxisAngle;
 
@@ -52,16 +52,6 @@ pub unsafe extern "C" fn axis_angle_from_quaternion(
     quat: *const Quaternion<f64>
 ) -> *mut AxisAngle {
     null_pointer_check!(quat);
-    let unit_quat = UnitQuaternion::from_quaternion(*quat);
-    let axis_opt = unit_quat.axis();
-    let angle = unit_quat.angle();
-    let axis_angle = match axis_opt {
-        Some(value) => {
-            AxisAngle::new(value[0], value[1], value[2], angle)
-        },
-        None => {
-            AxisAngle::new(0.0, 0.0, 0.0, 0.0)
-        },
-    };
+    let axis_angle = (*quat).into();
     to_raw_pointer(&axis_angle)
 }

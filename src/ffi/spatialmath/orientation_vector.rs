@@ -65,6 +65,6 @@ pub unsafe extern "C" fn orientation_vector_from_quaternion(
     quat_ptr: *const Quaternion<f64>
 ) -> *mut OrientationVector {
     null_pointer_check!(quat_ptr);
-    let o_vec = OrientationVector::from_quaternion(&*quat_ptr);
+    let o_vec: OrientationVector = (*quat_ptr).into();
     to_raw_pointer(&o_vec)
 }
