@@ -8,7 +8,7 @@ use crate::spatialmath::utils::OrientationVector;
 /// theta (in radians). However, unlike an axis-angle, an orientation vector alters 
 /// the axes of the given frame of reference by rotating the z-axis to the 
 /// vector axis provided. The new x-axis is the vector that is both orthogonal to 
-/// the vector axis provided anc co-planar with both the old
+/// the vector axis provided and co-planar with both the old
 /// z-axis and the vector axis (this leaves two choices for the y-axis, 
 /// but the canonical "right-hand rule" is used to select one consistently). Then, 
 /// a clockwise-rotation of theta is applied about the new-z axis

@@ -3,6 +3,11 @@ use nalgebra::{Quaternion};
 
 use crate::spatialmath::utils::AxisAngle;
 
+/// The FFI interface for initializing axis angles. These are
+/// R4 axis angles (meaning they are represented by the x, y, z
+/// components of an axis and an additional rotational parameter
+/// theta about that axis).
+
 /// Allocates a copy of the axis angle to the heap with a stable memory address and
 /// returns the raw pointer (for use by the FFI interface)
 fn to_raw_pointer(aa: &AxisAngle) -> *mut AxisAngle {
@@ -39,7 +44,8 @@ pub extern "C" fn new_axis_angle(x: f64, y: f64, z: f64, theta: f64) -> *mut Axi
 /// Converts a quaternion into an R4 axis angle. The return value is a pointer
 /// to a list of [x, y, x, theta], where (x,y,z) are the axis vector components
 /// and theta is the rotation about the axis in radians. A zero quaternion returns
-/// a zero axis angle
+/// a zero axis angle. In the event of an error from the nalgebra crate, a zero
+/// axis angle is also returned.
 /// 
 /// # Safety
 /// 
@@ -52,6 +58,9 @@ pub unsafe extern "C" fn axis_angle_from_quaternion(
     quat: *const Quaternion<f64>
 ) -> *mut AxisAngle {
     null_pointer_check!(quat);
-    let axis_angle = (*quat).into();
+    let axis_angle = match (*quat).try_into() {
+        Ok(aa) => aa,
+        Err(_err) => AxisAngle::new(0.0, 0.0, 0.0, 0.0)
+    };
     to_raw_pointer(&axis_angle)
 }

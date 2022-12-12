@@ -91,61 +91,21 @@ impl AxisAngle {
     }
 }
 
-impl From<Quaternion<f64>> for AxisAngle {
-    fn from(quat: Quaternion<f64>) -> Self {
+impl TryFrom<Quaternion<f64>> for AxisAngle {
+    type Error = ();
+
+    fn try_from(quat: Quaternion<f64>) -> Result<Self, Self::Error> {
         let unit_quat = UnitQuaternion::from_quaternion(quat);
         let axis_opt = unit_quat.axis();
         let angle = unit_quat.angle();
         match axis_opt {
             Some(value) => {
-                AxisAngle::new(value[0], value[1], value[2], angle)
+                Ok(Self::new(value[0], value[1], value[2], angle))
             },
             None => {
-                AxisAngle::new(0.0, 0.0, 0.0, 0.0)
+                Err(())
             },
         }
-    }
-}
-
-fn orientation_vector_theta_from_rotated_axes(
-    new_x: Quaternion<f64>, new_z: Quaternion<f64>
-) -> f64 {
-    if 1.0 - new_z.k.abs() > ANGLE_ACCEPTANCE {
-        let new_z_imag = new_z.imag();
-        let new_x_imag = new_x.imag();
-        let z_imag_axis = Vector3::z_axis();
-
-        let normal_1 = new_z_imag.cross(&new_x_imag);
-        let normal_2 = new_z_imag.cross(&z_imag_axis);
-        let cos_theta_cand = normal_1.dot(&normal_2) / (normal_1.norm() * normal_2.norm());
-        let cos_theta = match cos_theta_cand {
-            val if val < -1.0 => -1.0,
-            val if val > 1.0 => 1.0,
-            _ => cos_theta_cand
-        };
-
-        return match cos_theta.acos() {
-            val if val > ANGLE_ACCEPTANCE => {
-                let new_z_imag_unit = UnitVector3::new_normalize(new_z_imag);
-                let rot_quat_unit = UnitQuaternion::from_axis_angle(&new_z_imag_unit, -1.0 * val);
-                let rot_quat = rot_quat_unit.quaternion();
-                let z_axis_quat = Quaternion::new(0.0, 0.0, 0.0, 1.0);
-                let test_z = (rot_quat * z_axis_quat) * rot_quat.conjugate();
-                let test_z_imag = test_z.imag();
-
-                let normal_3 = new_z_imag.cross(&test_z_imag);
-                let cos_test = normal_1.dot(&normal_3) / (normal_3.norm() * normal_1.norm());
-                match cos_test {
-                    val2 if (1.0 - val2) < (ANGLE_ACCEPTANCE * ANGLE_ACCEPTANCE) => -1.0 * val,
-                    _ => val
-                }
-            },
-            _ => 0.0
-        };
-    }
-    match new_z.k {
-        val if val < 0.0 => -1.0 * new_x.j.atan2(new_x.i),
-        _ => -1.0 * new_x.j.atan2(new_x.i * -1.0)
     }
 }
 
@@ -212,7 +172,46 @@ impl From<Quaternion<f64>> for OrientationVector {
         let new_z = (quat * z_quat) * conj;
 
         let o_vector = UnitVector3::new_normalize(new_z.imag());
-        let theta = orientation_vector_theta_from_rotated_axes(new_x, new_z);
+        // let theta = orientation_vector_theta_from_rotated_axes(new_x, new_z);
+        let theta = match 1.0 - new_z.k.abs() > ANGLE_ACCEPTANCE {
+            true => {
+                let new_z_imag = new_z.imag();
+                let new_x_imag = new_x.imag();
+                let z_imag_axis = Vector3::z_axis();
+
+                let normal_1 = new_z_imag.cross(&new_x_imag);
+                let normal_2 = new_z_imag.cross(&z_imag_axis);
+                let cos_theta_cand = normal_1.dot(&normal_2) / (normal_1.norm() * normal_2.norm());
+                let cos_theta = match cos_theta_cand {
+                    val if val < -1.0 => -1.0,
+                    val if val > 1.0 => 1.0,
+                    _ => cos_theta_cand
+                };
+
+                match cos_theta.acos() {
+                    val if val > ANGLE_ACCEPTANCE => {
+                        let new_z_imag_unit = UnitVector3::new_normalize(new_z_imag);
+                        let rot_quat_unit = UnitQuaternion::from_axis_angle(&new_z_imag_unit, -1.0 * val);
+                        let rot_quat = rot_quat_unit.quaternion();
+                        let z_axis_quat = Quaternion::new(0.0, 0.0, 0.0, 1.0);
+                        let test_z = (rot_quat * z_axis_quat) * rot_quat.conjugate();
+                        let test_z_imag = test_z.imag();
+
+                        let normal_3 = new_z_imag.cross(&test_z_imag);
+                        let cos_test = normal_1.dot(&normal_3) / (normal_3.norm() * normal_1.norm());
+                        match cos_test {
+                            val2 if (1.0 - val2) < (ANGLE_ACCEPTANCE * ANGLE_ACCEPTANCE) => -1.0 * val,
+                            _ => val
+                        }
+                    },
+                    _ => 0.0
+                }
+            },
+            _ => match new_z.k {
+                val if val < 0.0 => -1.0 * new_x.j.atan2(new_x.i),
+                _ => -1.0 * new_x.j.atan2(new_x.i * -1.0)
+            }
+        };
         Self { o_vector, theta }
     }
 }

@@ -3,6 +3,13 @@ use nalgebra::Quaternion;
 
 use crate::spatialmath::utils::EulerAngles;
 
+/// The FFI interface for initializing euler angles. Our euler angles
+/// follow the Tait-Bryan formalism and are applied in the Z-Y'-X" order 
+/// (where Z -> yaw, Y -> pitch, X -> roll).
+/// 
+/// It is highly recommended not to attempt any mathematics with the euler
+/// angles directly and to convert to quaternions via the FFI interface instead
+
 /// Allocates a copy of the euler angles to the heap with a stable memory address and
 /// returns the raw pointer (for use by the FFI interface)
 fn to_raw_pointer(ea: &EulerAngles) -> *mut EulerAngles {
