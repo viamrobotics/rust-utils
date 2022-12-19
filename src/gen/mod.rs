@@ -11,6 +11,11 @@ pub mod proto {
                     include!("proto.rpc.examples.echo.v1.rs");
                 }
             }
+            pub mod echoresource {
+                pub mod v1 {
+                    include!("proto.rpc.examples.echoresource.v1.rs");
+                }
+            }
         }
         pub mod v1 {
             include!("proto.rpc.v1.rs");
