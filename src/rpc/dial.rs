@@ -129,8 +129,16 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         }
                     };
 
+                    // TODO(RSDK-654) if and when we need to provide better support for
+                    // bidi streaming, we'll need to find a better solution than this for
+                    // handling empty messages
                     let mut body = hyper::body::to_bytes(body).await.unwrap().to_vec();
                     if body.is_empty() {
+                        // the body is empty if we make a call that returns an error on the RDK
+                        // side. Python's grpc library expects to see messages with, at a minimum,
+                        // a grpc header, so returning an empty body leads to error. In such a
+                        // case, we instead return a body that just consists of empty header bytes
+                        // to indicate an empty message.
                         body = vec![0, 0, 0, 0, 0];
                     }
 
