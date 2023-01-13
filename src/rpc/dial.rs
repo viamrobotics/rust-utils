@@ -129,6 +129,11 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         }
                     };
 
+                    let mut body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+                    if body.is_empty() {
+                        body = vec![0, 0, 0, 0, 0];
+                    }
+
                     let response = http::response::Response::builder()
                         // standardized gRPC headers.
                         .header("content-type", "application/grpc")
@@ -138,7 +143,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         .header(TRAILER, "Grpc-Status-Details-Bin")
                         .header("grpc-status", &status_code.to_string())
                         .version(Version::HTTP_2)
-                        .body(body)
+                        .body(Body::from(body))
                         .unwrap();
                     Ok(response)
                 };
