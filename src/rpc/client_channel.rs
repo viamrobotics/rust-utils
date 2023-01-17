@@ -11,7 +11,7 @@ use std::{
     fmt::Debug,
     sync::{
         atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
-        Arc,
+        Arc, RwLock,
     },
 };
 use webrtc::{
@@ -28,6 +28,8 @@ pub struct WebRTCClientChannel {
     stream_id_counter: AtomicU64,
     pub(crate) streams: CHashMap<u64, WebRTCClientStream>,
     pub(crate) receiver_bodies: CHashMap<u64, hyper::Body>,
+    // String type rather than error type because anyhow::Error does not derive clone
+    pub(crate) error: RwLock<Option<String>>,
 }
 
 impl Debug for WebRTCClientChannel {
@@ -64,7 +66,9 @@ impl WebRTCClientChannel {
         data_channel: Arc<RTCDataChannel>,
     ) -> Arc<Self> {
         let base_channel = WebRTCBaseChannel::new(peer_connection, data_channel.clone()).await;
+        let error = RwLock::new(None);
         let channel = Self {
+            error,
             base_channel,
             streams: CHashMap::new(),
             stream_id_counter: AtomicU64::new(0),
@@ -84,8 +88,14 @@ impl WebRTCClientChannel {
                         return;
                     }
                 };
-                if let Err(e) = channel.on_channel_message(msg).await {
-                    log::error!("error deserializing message: {e}");
+                let maybe_err = channel.on_channel_message(msg).await;
+                let mut err = channel.error.write().unwrap();
+                match maybe_err {
+                    Err(e) => {
+                        log::error!("error deserializing message: {e}");
+                        *err = Some(e.to_string());
+                    }
+                    Ok(()) => *err = None,
                 }
             })
         }));
@@ -119,7 +129,6 @@ impl WebRTCClientChannel {
 
     async fn on_channel_message(&self, msg: DataChannelMessage) -> Result<()> {
         let response = Response::decode(&*msg.data.to_vec())?;
-        let should_drop_stream = matches!(response.r#type, Some(RespType::Trailers(_)));
         let (active_stream, stream_id) = match response.stream.as_ref() {
             None => {
                 log::error!(
@@ -141,17 +150,17 @@ impl WebRTCClientChannel {
             }
         };
 
-        match active_stream {
-            Ok(mut active_stream) => active_stream.on_response(response).await?,
-            Err(e) => {
-                log::error!("Error acquiring active stream: {e}");
-                return Ok(());
-            }
+        let should_drop_stream = matches!(response.r#type, Some(RespType::Trailers(_)));
+
+        let maybe_err = match active_stream {
+            Ok(mut active_stream) => active_stream.on_response(response).await,
+            Err(e) => Err(anyhow::anyhow!("Error acquiring active stream: {e}")),
         };
+
         if should_drop_stream {
             self.streams.remove(&stream_id);
         }
-        Ok(())
+        maybe_err
     }
 
     pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
