@@ -140,8 +140,9 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         // case, we instead return a body that just consists of empty header bytes
                         // to indicate an empty message.
                         body = vec![0, 0, 0, 0, 0];
+                        status_code = STATUS_CODE_UNKNOWN;
                     }
-
+                    let grpc_message = channel.error.read().unwrap().clone();
                     let response = http::response::Response::builder()
                         // standardized gRPC headers.
                         .header("content-type", "application/grpc")
@@ -150,9 +151,13 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         .header(TRAILER, "Grpc-Message")
                         .header(TRAILER, "Grpc-Status-Details-Bin")
                         .header("grpc-status", &status_code.to_string())
-                        .version(Version::HTTP_2)
-                        .body(Body::from(body))
-                        .unwrap();
+                        .version(Version::HTTP_2);
+
+                    let response = match grpc_message {
+                        None => response,
+                        Some(message) => response.header("grpc-message", message),
+                    };
+                    let response = response.body(Body::from(body)).unwrap();
                     Ok(response)
                 };
                 Box::pin(fut)
