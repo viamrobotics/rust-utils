@@ -27,6 +27,8 @@ use ::webrtc::ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateIni
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use anyhow::{Context, Result};
 use core::fmt;
+use futures_util::{pin_mut, stream::StreamExt};
+use mdns::Response;
 use std::{
     collections::HashMap,
     sync::{
@@ -34,6 +36,7 @@ use std::{
         Arc, RwLock,
     },
     task::{Context as TaskContext, Poll},
+    time::Duration,
 };
 use tonic::body::BoxBody;
 use tonic::codegen::{http, BoxFuture};
@@ -46,6 +49,7 @@ use tower_http::set_header::{SetRequestHeader, SetRequestHeaderLayer};
 // gRPC status codes
 const STATUS_CODE_OK: i32 = 0;
 const STATUS_CODE_UNKNOWN: i32 = 2;
+const SERVICE_NAME: &'static str = "_rpc._tcp.local";
 
 type SecretType = String;
 
@@ -365,41 +369,181 @@ async fn get_auth_token(
 }
 
 impl DialBuilder<WithCredentials> {
-    /// attempts to establish a connection with credentials to the DialBuilder's given uri
-    pub async fn connect(self) -> Result<AddAuthorization<ViamChannel>> {
+    fn duplicate_uri(&self) -> Option<Parts> {
+        match &self.config.uri {
+            None => None,
+            Some(parts) => {
+                let uri = Uri::builder()
+                    .authority(parts.authority.clone()?)
+                    .path_and_query(parts.path_and_query.clone()?)
+                    .scheme(parts.scheme.clone()?);
+                Some(uri.build().ok()?.into_parts())
+            }
+        }
+    }
+    async fn get_mdns_uri(&self) -> Option<Parts> {
+        // CR erodkin: we need to have some way for people to bypass this via config
+        println!("connect mdns");
+        let mut mdns_uri = match self.duplicate_uri() {
+            None => return None,
+            Some(uri) => uri,
+        };
+
+        let candidate = mdns_uri.authority.clone();
+        let candidate = match candidate {
+            Some(c) => c.to_string(),
+            None => return None,
+        };
+
+        let candidates = vec![candidate.replace(".", "-"), candidate.to_string()];
+
+        let stream = match mdns::discover::all(SERVICE_NAME, Duration::from_secs(1)) {
+            Ok(s) => s,
+            Err(e) => {
+                log::debug!("Unable to connect to stream: {e}");
+                return None;
+            }
+        }
+        .listen();
+        pin_mut!(stream);
+        let mut resp: Option<Response> = None;
+        // CR erodkin: this could just run forever, we need a timeout mechanism. also delete
+        // println
+        println!("connect mdns2");
+        while let Some(Ok(response)) = stream.next().await {
+            if let Some(hostname) = response.hostname() {
+                for c in &candidates {
+                    if hostname.contains(c) {
+                        resp = Some(response);
+                        break;
+                    }
+                }
+            }
+            if resp.is_some() {
+                break;
+            }
+        }
+
+        let mut has_grpc = false;
+        let mut has_webrtc = false;
+
+        let resp = match resp {
+            Some(r) => r,
+            None => return None,
+        };
+
+        for field in resp.txt_records() {
+            has_grpc = has_grpc || field.contains("grpc");
+            has_webrtc = has_webrtc || field.contains("webrtc");
+        }
+
+        let ip_addr = match resp.ip_addr() {
+            Some(std::net::IpAddr::V4(ip_v4)) => Some(ip_v4),
+            Some(std::net::IpAddr::V6(_)) | None => None,
+        };
+
+        if !(has_grpc || has_webrtc) || ip_addr.is_none() {
+            log::debug!("Unable to connect via mDNS");
+            return None;
+        }
+
+        // CR erodkin: what is best thing to do with local_addr? looks like Go only takes the first
+        // part of the octet but that seems bizarre to me.
+        //let mut local_addr = ip_addr.unwrap().octets()[0].to_string();
+        let mut local_addr = ip_addr.unwrap().to_string();
+        local_addr.push(':');
+        local_addr.push_str(&resp.port().unwrap().to_string());
+        println!("Found address via mDNS: {local_addr}");
+        log::debug!("Found address via mDNS: {local_addr}");
+
+        let auth = local_addr.parse::<Authority>().ok()?;
+        mdns_uri.authority = Some(auth);
+
+        //println!("connecting with mdns!!6");
+        let new_uri_parts = uri_parts_with_defaults(&local_addr);
+        //let new_uri = uri_parts_with_defaults(&local_addr);
+        let new_uri = Uri::from_parts(new_uri_parts).ok()?;
+        //builder.path_and_query()
+        println!("{resp:?}");
+        println!("{new_uri:?}");
+
+        Some(mdns_uri)
+    }
+
+    async fn connect_inner(
+        self,
+        mdns_uri: Option<Parts>,
+        mut original_uri_parts: Parts,
+    ) -> Result<AddAuthorization<ViamChannel>> {
+        let is_insecure = self.config.insecure;
+        let allow_downgrade = self.config.allow_downgrade;
+
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
             Some(options) => options.disable_webrtc,
             None => false,
         };
-        let mut uri_parts = self.config.uri.unwrap();
-        if self.config.insecure {
-            uri_parts.scheme = Some(Scheme::HTTP);
+
+        if is_insecure {
+            original_uri_parts.scheme = Some(Scheme::HTTP);
         }
 
-        let uri = Uri::from_parts(uri_parts)?;
-        let uri2 = uri.clone();
-        let domain = uri2.authority().to_owned().unwrap().to_string();
+        let original_uri = Uri::from_parts(original_uri_parts)?;
+        let original_uri_ = original_uri.clone();
 
-        let uri = infer_remote_uri_from_authority(uri);
+        // CR erodkin: should this domain be different in the mdns case?
+        let domain = original_uri_.authority().clone().unwrap().to_string();
 
-        let real_channel = match Channel::builder(uri.clone())
-            .connect()
-            .await
-            .with_context(|| format!("Connecting to {:?}", uri.clone()))
-        {
-            Ok(c) => c,
-            Err(e) => {
-                if self.config.allow_downgrade {
-                    let mut uri_parts = uri.clone().into_parts();
-                    uri_parts.scheme = Some(Scheme::HTTP);
-                    let uri = Uri::from_parts(uri_parts)?;
-                    Channel::builder(uri.clone()).connect().await?
-                } else {
-                    return Err(anyhow::anyhow!(e));
-                }
+        let mut uris = match mdns_uri {
+            Some(mut mdns_uri) => {
+                mdns_uri.scheme = Some(Scheme::HTTP);
+                vec![Uri::from_parts(mdns_uri)?]
             }
+            None => vec![],
         };
+        uris.push(original_uri);
+
+        // CR erodkin: this is allowing Uri to be defined by the mdns case. Make sure that's right.
+        let mut uri_for_webrtc: Option<Uri> = None;
+
+        // A little hacky, but we don't want to return an error if we still have uris to try, but
+        // we _do_ want to return an error if we've exhausted all our uris. So we need to keep
+        // track of how many attempts we allow.
+        let mut num_tries_remaining = uris.len();
+
+        let mut real_channel: Option<Channel> = None;
+        for uri in uris {
+            num_tries_remaining -= 1;
+            let uri = infer_remote_uri_from_authority(uri);
+            uri_for_webrtc = Some(uri.clone());
+
+            let chan = match Channel::builder(uri.clone())
+                .connect()
+                .await
+                .with_context(|| format!("Connecting to {:?}", uri.clone()))
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    if allow_downgrade {
+                        let mut uri_parts = uri.clone().into_parts();
+                        uri_parts.scheme = Some(Scheme::HTTP);
+                        let uri = Uri::from_parts(uri_parts)?;
+                        Channel::builder(uri.clone()).connect().await?
+                    } else {
+                        if num_tries_remaining == 0 {
+                            return Err(anyhow::anyhow!(e));
+                        }
+                        continue;
+                    }
+                }
+            };
+
+            real_channel = Some(chan);
+            break;
+        }
+        println!("Gottin real channel");
+
+        let real_channel = real_channel.unwrap();
 
         let token = get_auth_token(
             &mut real_channel.clone(),
@@ -428,7 +572,10 @@ impl DialBuilder<WithCredentials> {
         let channel = if disable_webrtc {
             ViamChannel::Direct(real_channel.clone())
         } else {
-            match maybe_connect_via_webrtc(uri.clone(), channel.clone(), webrtc_options).await {
+            // CR erodkin: which uri? mdns uri too?
+            match maybe_connect_via_webrtc(uri_for_webrtc.unwrap(), channel.clone(), webrtc_options)
+                .await
+            {
                 Ok(webrtc_channel) => ViamChannel::WebRTC(webrtc_channel),
                 Err(e) => {
                     log::error!(
@@ -442,6 +589,20 @@ impl DialBuilder<WithCredentials> {
         Ok(ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
             .service(channel))
+    }
+
+    /// attempts to establish a connection with credentials to the DialBuilder's given uri
+    pub async fn connect(self) -> Result<AddAuthorization<ViamChannel>> {
+        let original_uri = match self.duplicate_uri() {
+            Some(uri) => uri,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Attempting to connect but there was no uri"
+                ))
+            }
+        };
+        let mdns_uri = self.get_mdns_uri().await;
+        return self.connect_inner(mdns_uri, original_uri).await;
     }
 }
 

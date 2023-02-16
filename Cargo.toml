@@ -29,6 +29,7 @@ hyper = { version = "0.14.20", features = ["full"]  }
 interceptor = "0.8.0"
 libc = {version = "0.2"}
 log = "0.4.17"
+mdns = "3.0.0"
 nalgebra = "0.31.4"
 prost = "0.10"
 prost-types = "0.10"
