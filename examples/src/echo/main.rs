@@ -13,16 +13,18 @@ async fn main() -> Result<()> {
     let creds = dial::RPCCredentials::new(
         None,
         "robot-location-secret".to_string(),
-        "ytexnwei4fu1xv9csoqxfv4ckl3htsb49mzzey5t15xo9swy".to_string(),
+        "<your robot credentials here>".to_string(),
     );
 
     println!("Starting main!!2");
     let c = dial::DialOptions::builder()
-        .uri("webrtc-test-main.jkek76kqnh.viam.cloud")
+        .uri("<your robot uri here>")
         .with_credentials(creds)
         .allow_downgrade()
         .connect()
         .await?;
+
+    println!("Starting main!!2a");
 
     let mut service = EchoServiceClient::new(c);
     let echo_request = EchoRequest {

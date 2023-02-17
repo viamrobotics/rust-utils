@@ -100,7 +100,9 @@ impl Options {
         // TODO(RSDK-235): remove hard coding of signaling server
         // address and prefer SRV lookup instead
         let path = uri.to_string();
-        if path.contains(".viam.cloud") {
+        // CR erodkin: this is obviously wrong but let's see if we want to infer here?
+        if path.contains(".viam.cloud") || path.contains("-viam-cloud") {
+            println!("PATH PATH {path}");
             Some(("app.viam.com:443".to_string(), true))
         } else if path.contains(".robot.viaminternal") {
             Some(("app.viaminternal:8089".to_string(), false))

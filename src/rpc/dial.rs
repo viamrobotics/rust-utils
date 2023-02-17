@@ -360,11 +360,15 @@ async fn get_auth_token(
 ) -> Result<String> {
     let mut auth_service = AuthServiceClient::new(channel);
     let req = AuthenticateRequest {
-        entity: entity.to_string(),
+        entity,
         credentials: Some(creds),
     };
 
+    // CR erodkin: delete all println stuff
+    println!("get auth token! {req:?}");
+
     let rsp = auth_service.authenticate(req).await?;
+    println!("Got response");
     Ok(rsp.into_inner().access_token)
 }
 
@@ -396,6 +400,7 @@ impl DialBuilder<WithCredentials> {
         };
 
         let candidates = vec![candidate.replace(".", "-"), candidate.to_string()];
+        println!("{candidates:?}");
 
         let stream = match mdns::discover::all(SERVICE_NAME, Duration::from_secs(1)) {
             Ok(s) => s,
@@ -411,9 +416,17 @@ impl DialBuilder<WithCredentials> {
         // println
         println!("connect mdns2");
         while let Some(Ok(response)) = stream.next().await {
+            //if response.ip_addr().is_some()
+            //&& response.ip_addr().unwrap().to_string() == "10.1.12.11"
+            //{
+            //println!("FOUND SOMETHING {response:?}");
+            //}
             if let Some(hostname) = response.hostname() {
                 for c in &candidates {
+                    //local_addr = "10.1.12.11:36103".to_string();
                     if hostname.contains(c) {
+                        println!("{response:?}");
+                        println!("{:?}:{:?}", response.ip_addr(), response.port());
                         resp = Some(response);
                         break;
                     }
@@ -423,6 +436,7 @@ impl DialBuilder<WithCredentials> {
                 break;
             }
         }
+        println!("connect mdns3");
 
         let mut has_grpc = false;
         let mut has_webrtc = false;
@@ -453,11 +467,17 @@ impl DialBuilder<WithCredentials> {
         let mut local_addr = ip_addr.unwrap().to_string();
         local_addr.push(':');
         local_addr.push_str(&resp.port().unwrap().to_string());
+        //local_addr = "10.1.12.11:36103".to_string();
         println!("Found address via mDNS: {local_addr}");
         log::debug!("Found address via mDNS: {local_addr}");
 
         let auth = local_addr.parse::<Authority>().ok()?;
+        // CR erodkin: why do we have both mdns_uri and new_uri here? fix this
         mdns_uri.authority = Some(auth);
+        // CR erodkin: delete
+        //mdns_uri.path_and_query = None;
+        //mdns_uri.scheme = None;
+        println!("mdns uri now {mdns_uri:?}");
 
         //println!("connecting with mdns!!6");
         let new_uri_parts = uri_parts_with_defaults(&local_addr);
@@ -491,17 +511,21 @@ impl DialBuilder<WithCredentials> {
         let original_uri = Uri::from_parts(original_uri_parts)?;
         let original_uri_ = original_uri.clone();
 
-        // CR erodkin: should this domain be different in the mdns case?
+        // CR erodkin: should this domain be different in the mdns case? address second
         let domain = original_uri_.authority().clone().unwrap().to_string();
 
+        // CR erodkin: delete, but this is useful for testing what the normal, non-mdns behavior is
+        //let mut uris = vec![];
+
         let mut uris = match mdns_uri {
-            Some(mut mdns_uri) => {
-                mdns_uri.scheme = Some(Scheme::HTTP);
+            // CR erodkin: set scheme?
+            Some(mdns_uri) => {
+                //mdns_uri.scheme = Some(Scheme::HTTP);
                 vec![Uri::from_parts(mdns_uri)?]
             }
             None => vec![],
         };
-        uris.push(original_uri);
+        uris.push(original_uri.clone());
 
         // CR erodkin: this is allowing Uri to be defined by the mdns case. Make sure that's right.
         let mut uri_for_webrtc: Option<Uri> = None;
@@ -513,8 +537,10 @@ impl DialBuilder<WithCredentials> {
 
         let mut real_channel: Option<Channel> = None;
         for uri in uris {
+            println!("In the loop. uri: {uri:?}");
             num_tries_remaining -= 1;
             let uri = infer_remote_uri_from_authority(uri);
+            println!("new uri? {uri:?}");
             uri_for_webrtc = Some(uri.clone());
 
             let chan = match Channel::builder(uri.clone())
@@ -524,6 +550,7 @@ impl DialBuilder<WithCredentials> {
             {
                 Ok(c) => c,
                 Err(e) => {
+                    println!("got a nerror here");
                     if allow_downgrade {
                         let mut uri_parts = uri.clone().into_parts();
                         uri_parts.scheme = Some(Scheme::HTTP);
@@ -561,6 +588,8 @@ impl DialBuilder<WithCredentials> {
         )
         .await?;
 
+        println!("got token");
+
         let channel = ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
             .layer(SetRequestHeaderLayer::overriding(
@@ -569,13 +598,13 @@ impl DialBuilder<WithCredentials> {
             ))
             .service(real_channel.clone());
 
+        println!("created channel");
+
         let channel = if disable_webrtc {
             ViamChannel::Direct(real_channel.clone())
         } else {
             // CR erodkin: which uri? mdns uri too?
-            match maybe_connect_via_webrtc(uri_for_webrtc.unwrap(), channel.clone(), webrtc_options)
-                .await
-            {
+            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
                 Ok(webrtc_channel) => ViamChannel::WebRTC(webrtc_channel),
                 Err(e) => {
                     log::error!(
@@ -602,6 +631,7 @@ impl DialBuilder<WithCredentials> {
             }
         };
         let mdns_uri = self.get_mdns_uri().await;
+        println!("got mdns uri! {mdns_uri:?}");
         return self.connect_inner(mdns_uri, original_uri).await;
     }
 }
@@ -975,8 +1005,9 @@ fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
         .authority()
         .map(Authority::as_str)
         .unwrap_or_default()
-        .contains(".local");
+        .contains(".local.cloud");
 
+    println!("INFER REMOTE URI! {is_local_connection}");
     if !is_local_connection {
         if let Some((new_uri, _)) = Options::infer_signaling_server_address(&uri) {
             return Uri::from_parts(uri_parts_with_defaults(&new_uri)).unwrap_or(uri);
