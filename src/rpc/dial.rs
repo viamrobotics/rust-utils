@@ -509,10 +509,13 @@ impl DialBuilder<WithCredentials> {
         }
 
         let original_uri = Uri::from_parts(original_uri_parts)?;
-        let original_uri_ = original_uri.clone();
+        //let original_uri = original_uri.clone();
 
         // CR erodkin: should this domain be different in the mdns case? address second
-        let domain = original_uri_.authority().clone().unwrap().to_string();
+        let domain = original_uri.authority().clone().unwrap().to_string();
+        let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
+        // CR erodkin: probably want to catch error and allow for downgrade case here?
+        let mut channel_for_auth = Channel::builder(uri_for_auth.clone()).connect().await?;
 
         // CR erodkin: delete, but this is useful for testing what the normal, non-mdns behavior is
         //let mut uris = vec![];
@@ -525,7 +528,7 @@ impl DialBuilder<WithCredentials> {
             }
             None => vec![],
         };
-        uris.push(original_uri.clone());
+        uris.push(uri_for_auth);
 
         // CR erodkin: this is allowing Uri to be defined by the mdns case. Make sure that's right.
         let mut uri_for_webrtc: Option<Uri> = None;
@@ -539,9 +542,9 @@ impl DialBuilder<WithCredentials> {
         for uri in uris {
             println!("In the loop. uri: {uri:?}");
             num_tries_remaining -= 1;
-            let uri = infer_remote_uri_from_authority(uri);
+            // CR erodkin: don't think we need this
+            //let uri = infer_remote_uri_from_authority(uri);
             println!("new uri? {uri:?}");
-            uri_for_webrtc = Some(uri.clone());
 
             let chan = match Channel::builder(uri.clone())
                 .connect()
@@ -573,7 +576,7 @@ impl DialBuilder<WithCredentials> {
         let real_channel = real_channel.unwrap();
 
         let token = get_auth_token(
-            &mut real_channel.clone(),
+            &mut channel_for_auth,
             self.config
                 .credentials
                 .as_ref()
