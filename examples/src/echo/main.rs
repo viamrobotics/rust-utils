@@ -9,39 +9,25 @@ use viam::rpc::dial;
 /// Tests unary, server, and bidi streaming with simple echo requests. To run, simply
 /// update the credentials and uri as necessary.
 async fn main() -> Result<()> {
-    println!("Starting main!!");
     let creds = dial::RPCCredentials::new(
         None,
         "robot-location-secret".to_string(),
-        "<your location secret>".to_string(),
+        "<your robot payload>".to_string(),
     );
 
-    println!("Starting main!!2");
     let c = dial::DialOptions::builder()
-        .uri("<your robot uri>")
+        .uri("<your robot address>")
         .with_credentials(creds)
         .allow_downgrade()
         .connect()
         .await?;
 
-    println!("Starting main!!2a");
-
     let mut service = EchoServiceClient::new(c);
     let echo_request = EchoRequest {
         message: "hi".to_string(),
     };
-    println!("Starting main!!3");
-    match service.echo(echo_request).await {
-        Err(e) => println!("Error in test: {e}"),
-        Ok(req) => {
-            let resp = req.into_inner();
-            println!("resp: {resp:?}");
-            println!("Starting main!!4");
-        }
-    }
-    //let resp = service.echo(echo_request).await?.into_inner();
-    //println!("resp: {resp:?}");
-    //println!("Starting main!!4");
+    let resp = service.echo(echo_request).await?.into_inner();
+    println!("resp: {resp:?}");
 
     let multi_echo_request = EchoMultipleRequest {
         message: "hello?".to_string(),
