@@ -398,12 +398,7 @@ impl DialBuilder<WithCredentials> {
         }
 
         let mut uri = self.duplicate_uri()?;
-        let candidate = uri.authority.clone();
-        let candidate = match candidate {
-            Some(c) => c.to_string(),
-            None => return None,
-        };
-
+        let candidate = uri.authority.clone()?.to_string();
         let candidates = vec![candidate.replace(".", "-"), candidate.to_string()];
 
         let stream = match mdns::discover::all(SERVICE_NAME, Duration::from_secs(1)) {
@@ -467,7 +462,6 @@ impl DialBuilder<WithCredentials> {
         mut original_uri_parts: Parts,
     ) -> Result<AddAuthorization<ViamChannel>> {
         let is_insecure = self.config.insecure;
-        let allow_downgrade = self.config.allow_downgrade;
 
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
@@ -484,51 +478,22 @@ impl DialBuilder<WithCredentials> {
         let domain = original_uri.authority().clone().unwrap().to_string();
         let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
 
-        let mut uris = match mdns_uri {
-            Some(mdns_uri) => {
-                vec![Uri::from_parts(mdns_uri)?]
-            }
-            None => vec![],
+        let mdns_uri = match mdns_uri {
+            Some(parts) => Uri::from_parts(parts).ok(),
+            None => None,
         };
-        uris.push(uri_for_auth);
 
-        // A little hacky, but we don't want to return an error if we still have uris to try, but
-        // we _do_ want to return an error if we've exhausted all our uris. So we need to keep
-        // track of how many attempts we allow.
-        let mut num_tries_remaining = uris.len();
-
-        let mut real_channel: Option<Channel> = None;
-        for uri in uris {
-            num_tries_remaining -= 1;
-
-            let tls_config = ClientTlsConfig::new().domain_name(domain.clone());
-            let chan = match Channel::builder(uri.clone())
-                .tls_config(tls_config)?
-                .connect()
+        let allow_downgrade = self.config.allow_downgrade;
+        let channel = match mdns_uri {
+            Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true)
                 .await
-                .with_context(|| format!("Connecting to {:?}", uri.clone()))
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    if allow_downgrade {
-                        let mut uri_parts = uri.clone().into_parts();
-                        uri_parts.scheme = Some(Scheme::HTTP);
-                        let uri = Uri::from_parts(uri_parts)?;
-                        Channel::builder(uri.clone()).connect().await?
-                    } else {
-                        if num_tries_remaining == 0 {
-                            return Err(anyhow::anyhow!(e));
-                        }
-                        continue;
-                    }
-                }
-            };
-            real_channel = Some(chan);
-            break;
-        }
-
-        let real_channel =
-            real_channel.ok_or(anyhow::anyhow!("Error connecting to {original_uri:?}"))?;
+                .ok(),
+            None => None,
+        };
+        let real_channel = match channel {
+            Some(c) => c,
+            None => Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?,
+        };
 
         let token = get_auth_token(
             &mut real_channel.clone(),
@@ -571,6 +536,37 @@ impl DialBuilder<WithCredentials> {
         Ok(ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
             .service(channel))
+    }
+
+    async fn create_channel(
+        allow_downgrade: bool,
+        domain: &str,
+        uri: Uri,
+        for_mdns: bool,
+    ) -> Result<Channel> {
+        let mut chan = Channel::builder(uri.clone());
+        if for_mdns {
+            let tls_config = ClientTlsConfig::new().domain_name(domain);
+            chan = chan.tls_config(tls_config)?;
+        }
+        let chan = match chan
+            .connect()
+            .await
+            .with_context(|| format!("Connecting to {:?}", uri.clone()))
+        {
+            Ok(c) => c,
+            Err(e) => {
+                if allow_downgrade {
+                    let mut uri_parts = uri.clone().into_parts();
+                    uri_parts.scheme = Some(Scheme::HTTP);
+                    let uri = Uri::from_parts(uri_parts)?;
+                    Channel::builder(uri.clone()).connect().await?
+                } else {
+                    return Err(anyhow::anyhow!(e));
+                }
+            }
+        };
+        Ok(chan)
     }
 
     /// attempts to establish a connection with credentials to the DialBuilder's given uri
