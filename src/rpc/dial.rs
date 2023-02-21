@@ -176,6 +176,7 @@ pub struct DialOptions {
     credentials: Option<RPCCredentials>,
     webrtc_options: Option<Options>,
     uri: Option<Parts>,
+    disable_mdns: bool,
     allow_downgrade: bool,
     insecure: bool,
 }
@@ -216,6 +217,7 @@ impl DialOptions {
                 credentials: None,
                 uri: None,
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -233,6 +235,7 @@ impl DialBuilder<WantsUri> {
                 credentials: None,
                 uri: Some(uri_parts),
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -248,6 +251,7 @@ impl DialBuilder<WantsCredentials> {
                 credentials: None,
                 uri: self.config.uri,
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -261,6 +265,7 @@ impl DialBuilder<WantsCredentials> {
                 credentials: Some(creds),
                 uri: self.config.uri,
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -277,6 +282,11 @@ impl<T: AuthMethod> DialBuilder<T> {
     /// Allows for downgrading and attempting to connect via HTTP if HTTPS fails
     pub fn allow_downgrade(mut self) -> Self {
         self.config.allow_downgrade = true;
+        self
+    }
+    /// Disables connection via mDNS
+    pub fn disable_mdns(mut self) -> Self {
+        self.config.disable_mdns = true;
         self
     }
 
@@ -381,14 +391,14 @@ impl DialBuilder<WithCredentials> {
             }
         }
     }
-    async fn get_mdns_uri(&self) -> Option<Parts> {
-        // CR erodkin: we need to have some way for people to bypass this via config
-        let mut mdns_uri = match self.duplicate_uri() {
-            None => return None,
-            Some(uri) => uri,
-        };
 
-        let candidate = mdns_uri.authority.clone();
+    async fn get_mdns_uri(&self) -> Option<Parts> {
+        if self.config.disable_mdns {
+            return None;
+        }
+
+        let mut uri = self.duplicate_uri()?;
+        let candidate = uri.authority.clone();
         let candidate = match candidate {
             Some(c) => c.to_string(),
             None => return None,
@@ -406,7 +416,6 @@ impl DialBuilder<WithCredentials> {
         .listen();
         pin_mut!(stream);
         let mut resp: Option<Response> = None;
-        // CR erodkin: this could just run forever, we need a timeout mechanism.
         while let Some(Ok(response)) = stream.next().await {
             if let Some(hostname) = response.hostname() {
                 for c in &candidates {
@@ -424,11 +433,7 @@ impl DialBuilder<WithCredentials> {
         let mut has_grpc = false;
         let mut has_webrtc = false;
 
-        let resp = match resp {
-            Some(r) => r,
-            None => return None,
-        };
-
+        let resp = resp?;
         for field in resp.txt_records() {
             has_grpc = has_grpc || field.contains("grpc");
             has_webrtc = has_webrtc || field.contains("webrtc");
@@ -450,9 +455,10 @@ impl DialBuilder<WithCredentials> {
         log::debug!("Found address via mDNS: {local_addr}");
 
         let auth = local_addr.parse::<Authority>().ok()?;
-        mdns_uri.authority = Some(auth);
+        uri.authority = Some(auth);
+        uri.scheme = Some(Scheme::HTTP);
 
-        Some(mdns_uri)
+        Some(uri)
     }
 
     async fn connect_inner(
@@ -479,9 +485,7 @@ impl DialBuilder<WithCredentials> {
         let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
 
         let mut uris = match mdns_uri {
-            // CR erodkin: set scheme? probably could be done in a better place
-            Some(mut mdns_uri) => {
-                mdns_uri.scheme = Some(Scheme::HTTP);
+            Some(mdns_uri) => {
                 vec![Uri::from_parts(mdns_uri)?]
             }
             None => vec![],
@@ -493,8 +497,6 @@ impl DialBuilder<WithCredentials> {
         // track of how many attempts we allow.
         let mut num_tries_remaining = uris.len();
 
-        // CR erodkin: this is really awkward that we're setting this as a None, then a Some, then
-        // immediately unwrapping it. surely there's a better way.
         let mut real_channel: Option<Channel> = None;
         for uri in uris {
             num_tries_remaining -= 1;
@@ -525,7 +527,8 @@ impl DialBuilder<WithCredentials> {
             break;
         }
 
-        let real_channel = real_channel.unwrap();
+        let real_channel =
+            real_channel.ok_or(anyhow::anyhow!("Error connecting to {original_uri:?}"))?;
 
         let token = get_auth_token(
             &mut real_channel.clone(),
@@ -580,7 +583,10 @@ impl DialBuilder<WithCredentials> {
                 ))
             }
         };
-        let mdns_uri = self.get_mdns_uri().await;
+        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
+            .await
+            .ok()
+            .flatten();
         return self.connect_inner(mdns_uri, original_uri).await;
     }
 }
@@ -908,9 +914,6 @@ async fn maybe_connect_via_webrtc(
     exchange_done.store(true, Ordering::Release);
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
-
-    println!("Connected via webrtc!!");
-
     Ok(client_channel)
 }
 
