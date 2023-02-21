@@ -13,12 +13,12 @@ async fn main() -> Result<()> {
     let creds = dial::RPCCredentials::new(
         None,
         "robot-location-secret".to_string(),
-        "<your robot credentials here>".to_string(),
+        "<your location secret>".to_string(),
     );
 
     println!("Starting main!!2");
     let c = dial::DialOptions::builder()
-        .uri("<your robot uri here>")
+        .uri("<your robot uri>")
         .with_credentials(creds)
         .allow_downgrade()
         .connect()
@@ -31,9 +31,17 @@ async fn main() -> Result<()> {
         message: "hi".to_string(),
     };
     println!("Starting main!!3");
-    let resp = service.echo(echo_request).await?.into_inner();
-    println!("resp: {resp:?}");
-    println!("Starting main!!4");
+    match service.echo(echo_request).await {
+        Err(e) => println!("Error in test: {e}"),
+        Ok(req) => {
+            let resp = req.into_inner();
+            println!("resp: {resp:?}");
+            println!("Starting main!!4");
+        }
+    }
+    //let resp = service.echo(echo_request).await?.into_inner();
+    //println!("resp: {resp:?}");
+    //println!("Starting main!!4");
 
     let multi_echo_request = EchoMultipleRequest {
         message: "hello?".to_string(),

@@ -342,7 +342,9 @@ impl DialBuilder<WithoutCredentials> {
         if disable_webrtc {
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
-            match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
+            match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), None, webrtc_options)
+                .await
+            {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
@@ -423,7 +425,6 @@ impl DialBuilder<WithCredentials> {
             //}
             if let Some(hostname) = response.hostname() {
                 for c in &candidates {
-                    //local_addr = "10.1.12.11:36103".to_string();
                     if hostname.contains(c) {
                         println!("{response:?}");
                         println!("{:?}:{:?}", response.ip_addr(), response.port());
@@ -467,7 +468,7 @@ impl DialBuilder<WithCredentials> {
         let mut local_addr = ip_addr.unwrap().to_string();
         local_addr.push(':');
         local_addr.push_str(&resp.port().unwrap().to_string());
-        //local_addr = "10.1.12.11:36103".to_string();
+        //let local_addr = "10.1.12.11:36103".to_string();
         println!("Found address via mDNS: {local_addr}");
         log::debug!("Found address via mDNS: {local_addr}");
 
@@ -514,6 +515,7 @@ impl DialBuilder<WithCredentials> {
         // CR erodkin: should this domain be different in the mdns case? address second
         let domain = original_uri.authority().clone().unwrap().to_string();
         let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
+        println!("uri for auth: {uri_for_auth:?}");
         // CR erodkin: probably want to catch error and allow for downgrade case here?
         let mut channel_for_auth = Channel::builder(uri_for_auth.clone()).connect().await?;
 
@@ -521,29 +523,27 @@ impl DialBuilder<WithCredentials> {
         //let mut uris = vec![];
 
         let mut uris = match mdns_uri {
-            // CR erodkin: set scheme?
-            Some(mdns_uri) => {
-                //mdns_uri.scheme = Some(Scheme::HTTP);
+            // CR erodkin: set scheme? probably could be done in a better place
+            Some(mut mdns_uri) => {
+                mdns_uri.scheme = Some(Scheme::HTTP);
                 vec![Uri::from_parts(mdns_uri)?]
             }
             None => vec![],
         };
         uris.push(uri_for_auth);
 
-        // CR erodkin: this is allowing Uri to be defined by the mdns case. Make sure that's right.
-        let mut uri_for_webrtc: Option<Uri> = None;
-
         // A little hacky, but we don't want to return an error if we still have uris to try, but
         // we _do_ want to return an error if we've exhausted all our uris. So we need to keep
         // track of how many attempts we allow.
         let mut num_tries_remaining = uris.len();
 
+        // CR erodkin: this is really awkward that we're setting this as a None, then a Some, then
+        // immediately unwrapping it. surely there's a better way.
+        let mut uri_for_webrtc: Option<Uri> = None;
         let mut real_channel: Option<Channel> = None;
         for uri in uris {
             println!("In the loop. uri: {uri:?}");
             num_tries_remaining -= 1;
-            // CR erodkin: don't think we need this
-            //let uri = infer_remote_uri_from_authority(uri);
             println!("new uri? {uri:?}");
 
             let chan = match Channel::builder(uri.clone())
@@ -558,7 +558,10 @@ impl DialBuilder<WithCredentials> {
                         let mut uri_parts = uri.clone().into_parts();
                         uri_parts.scheme = Some(Scheme::HTTP);
                         let uri = Uri::from_parts(uri_parts)?;
-                        Channel::builder(uri.clone()).connect().await?
+                        println!("{uri:?}");
+                        let ret = Channel::builder(uri.clone()).connect().await?;
+                        println!("We got ret it is okay!");
+                        ret
                     } else {
                         if num_tries_remaining == 0 {
                             return Err(anyhow::anyhow!(e));
@@ -567,8 +570,9 @@ impl DialBuilder<WithCredentials> {
                     }
                 }
             };
-
+            println!("real channel uri {uri:?}");
             real_channel = Some(chan);
+            uri_for_webrtc = Some(uri.clone());
             break;
         }
         println!("Gottin real channel");
@@ -576,7 +580,8 @@ impl DialBuilder<WithCredentials> {
         let real_channel = real_channel.unwrap();
 
         let token = get_auth_token(
-            &mut channel_for_auth,
+            //&mut real_channel.clone(),
+            &mut channel_for_auth.clone(),
             self.config
                 .credentials
                 .as_ref()
@@ -593,6 +598,16 @@ impl DialBuilder<WithCredentials> {
 
         println!("got token");
 
+        println!("{domain}");
+
+        let test_channel = ServiceBuilder::new()
+            .layer(AddAuthorizationLayer::bearer(&token))
+            .layer(SetRequestHeaderLayer::overriding(
+                HeaderName::from_static("rpc-host"),
+                HeaderValue::from_str(domain.as_str())?,
+            ))
+            .service(channel_for_auth);
+
         let channel = ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
             .layer(SetRequestHeaderLayer::overriding(
@@ -601,13 +616,21 @@ impl DialBuilder<WithCredentials> {
             ))
             .service(real_channel.clone());
 
-        println!("created channel");
+        println!("created channel. should we disable webrtc? {disable_webrtc}");
 
         let channel = if disable_webrtc {
             ViamChannel::Direct(real_channel.clone())
         } else {
             // CR erodkin: which uri? mdns uri too?
-            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
+            match maybe_connect_via_webrtc(
+                //uri_for_webrtc.unwrap(),
+                original_uri,
+                channel.clone(),
+                Some(test_channel),
+                webrtc_options,
+            )
+            .await
+            {
                 Ok(webrtc_channel) => ViamChannel::WebRTC(webrtc_channel),
                 Err(e) => {
                     log::error!(
@@ -616,6 +639,11 @@ impl DialBuilder<WithCredentials> {
                     ViamChannel::Direct(real_channel.clone())
                 }
             }
+        };
+
+        match channel {
+            ViamChannel::Direct(_) => println!("It's direct!!"),
+            ViamChannel::WebRTC(_) => println!("It's webrtc!!"),
         };
 
         Ok(ServiceBuilder::new()
@@ -696,22 +724,50 @@ async fn send_done_once(
     send_done_or_error_update(update_request, channel).await
 }
 
+// CR erodkin: rename/remove test channel as appropriate
 async fn maybe_connect_via_webrtc(
     uri: Uri,
     channel: AddAuthorization<SetRequestHeader<Channel, HeaderValue>>,
+    test_channel: Option<AddAuthorization<SetRequestHeader<Channel, HeaderValue>>>,
     webrtc_options: Option<Options>,
 ) -> Result<Arc<WebRTCClientChannel>> {
+    println!("Attempting to connect via webrtc");
+    println!("{uri:?}");
+    //let uri = "10.1.12.11:36103".parse::<Uri>().unwrap();
+    println!("webrtc options: {webrtc_options:?}");
     let webrtc_options = webrtc_options.unwrap_or_else(|| Options::infer_from_uri(uri.clone()));
-    let mut signaling_client = SignalingServiceClient::new(channel.clone());
-    let response = match signaling_client
+    let uri_for_signaling_server = webrtc_options
+        .signaling_server_address
+        .parse::<Uri>()
+        .unwrap();
+
+    //let channel_for_signaling_service =
+    //Channel::builder(uri_for_signaling_server).connect().await?;
+
+    //let channel_for_signaling_service = webrtc_options.signaling_server_address;
+    let channel_for_signaling_service = match test_channel {
+        Some(c) => c.clone(),
+        None => channel.clone(),
+    };
+
+    //let channel_for_signaling_service = channel.clone();
+    let mut signaling_client = SignalingServiceClient::new(channel_for_signaling_service.clone());
+    let signaling_response = signaling_client
         .optional_web_rtc_config(OptionalWebRtcConfigRequest::default())
-        .await
-    {
+        .await;
+    //let mut signaling_client = SignalingServiceClient::new(channel.clone());
+    //let response = match signaling_client
+    //.optional_web_rtc_config(OptionalWebRtcConfigRequest::default())
+    //.await
+    //{
+    let response = match signaling_response {
         Ok(resp) => resp,
         Err(e) => {
+            println!("Couldn't get response! {e}");
             return Err(anyhow::anyhow!(e));
         }
     };
+    println!("Attempting to connect via webrtc2");
 
     let optional_config = response.into_inner().config;
     let config = webrtc::extend_webrtc_config(webrtc_options.config, optional_config);
@@ -721,6 +777,7 @@ async fn maybe_connect_via_webrtc(
 
     let sent_done_or_error = Arc::new(AtomicBool::new(false));
     let uuid_lock = Arc::new(RwLock::new("".to_string()));
+    println!("Attempting to connect via webrtc3");
     let uuid_for_ice_gathering_thread = uuid_lock.clone();
     let is_open = Arc::new(AtomicBool::new(false));
     let is_open_read = is_open.clone();
@@ -733,10 +790,11 @@ async fn maybe_connect_via_webrtc(
     let remote_description_set = Arc::new(AtomicBool::new(false));
     let ice_done = Arc::new(AtomicBool::new(false));
     let ice_done2 = ice_done.clone();
+    println!("Attempting to connect via webrtc4");
 
     if !webrtc_options.disable_trickle_ice {
         let offer = peer_connection.create_offer(None).await?;
-        let channel2 = channel.clone();
+        let channel2 = channel_for_signaling_service.clone();
         let uuid_lock2 = uuid_lock.clone();
         let sent_done_or_error2 = sent_done_or_error.clone();
 
@@ -800,6 +858,7 @@ async fn maybe_connect_via_webrtc(
             },
         ));
 
+        println!("Attempting to connect via webrtc5");
         peer_connection.set_local_description(offer).await?;
     }
 
@@ -812,8 +871,9 @@ async fn maybe_connect_via_webrtc(
 
     let client_channel = WebRTCClientChannel::new(peer_connection, data_channel).await;
     let client_channel_for_ice_gathering_thread = Arc::downgrade(&client_channel);
-    let mut signaling_client = SignalingServiceClient::new(channel.clone());
+    let mut signaling_client = SignalingServiceClient::new(channel_for_signaling_service.clone());
     let mut call_client = signaling_client.call(call_request).await?.into_inner();
+    println!("Attempting to connect via webrtc6");
 
     let channel2 = channel.clone();
     let sent_done_or_error2 = sent_done_or_error.clone();
@@ -949,6 +1009,7 @@ async fn maybe_connect_via_webrtc(
         }
     });
 
+    println!("Attempting to connect via webrtc7");
     let is_open_read = is_open_read.clone();
     let is_open = PollableAtomicBool::new(is_open_read);
 
@@ -960,8 +1021,11 @@ async fn maybe_connect_via_webrtc(
     }
 
     exchange_done.store(true, Ordering::Release);
+    println!("Attempting to connect via webrtc8");
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
+
+    println!("We connected via webrtc");
 
     Ok(client_channel)
 }
