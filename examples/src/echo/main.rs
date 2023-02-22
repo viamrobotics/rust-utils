@@ -12,11 +12,11 @@ async fn main() -> Result<()> {
     let creds = dial::RPCCredentials::new(
         None,
         "robot-location-secret".to_string(),
-        "nic7jy2ejp5psdfgu2t93egzkxxbqx0pmf5osh3vlaz1h286".to_string(),
+        "<your location secret here>".to_string(),
     );
 
     let c = dial::DialOptions::builder()
-        .uri("kj-main.e8haqq87ki.viam.cloud")
+        .uri("<your robot uri here>")
         .with_credentials(creds)
         .allow_downgrade()
         .connect()
