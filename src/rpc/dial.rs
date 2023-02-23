@@ -446,7 +446,7 @@ impl DialBuilder<WithCredentials> {
 
         let mut local_addr = ip_addr.unwrap().to_string();
         local_addr.push(':');
-        local_addr.push_str(&resp.port().unwrap().to_string());
+        local_addr.push_str(&resp.port()?.to_string());
         log::debug!("Found address via mDNS: {local_addr}");
 
         let auth = local_addr.parse::<Authority>().ok()?;
