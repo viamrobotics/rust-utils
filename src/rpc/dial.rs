@@ -397,6 +397,8 @@ impl DialBuilder<WithCredentials> {
             return None;
         }
 
+        log::debug!("Attempting to find address via mDNS");
+
         let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
         let candidates = vec![candidate.replace(".", "-"), candidate.to_string()];
@@ -478,12 +480,13 @@ impl DialBuilder<WithCredentials> {
         let domain = original_uri.authority().clone().unwrap().to_string();
         let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
 
-        let mdns_uri = match mdns_uri {
-            Some(parts) => Uri::from_parts(parts).ok(),
-            None => None,
-        };
+        let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
+        let attempting_mdns = mdns_uri.is_some();
 
         let allow_downgrade = self.config.allow_downgrade;
+        if attempting_mdns {
+            log::debug!("Attempting to connect via mDNS");
+        }
         let channel = match mdns_uri {
             Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true)
                 .await
@@ -491,8 +494,16 @@ impl DialBuilder<WithCredentials> {
             None => None,
         };
         let real_channel = match channel {
-            Some(c) => c,
-            None => Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?,
+            Some(c) => {
+                log::debug!("Connected via mDNS");
+                c
+            }
+            None => {
+                if attempting_mdns {
+                    log::debug!("Unable to connect via mDNS; falling back to robot URI");
+                }
+                Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
+            }
         };
 
         let token = get_auth_token(
