@@ -486,6 +486,8 @@ impl DialBuilder<WithCredentials> {
         let allow_downgrade = self.config.allow_downgrade;
         if attempting_mdns {
             log::debug!("Attempting to connect via mDNS");
+        } else {
+            log::debug!("Attempting to connect");
         }
         let channel = match mdns_uri {
             Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true)
