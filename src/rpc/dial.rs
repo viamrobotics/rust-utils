@@ -490,19 +490,21 @@ impl DialBuilder<WithCredentials> {
             log::debug!("Attempting to connect");
         }
         let channel = match mdns_uri {
-            Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true)
-                .await
-                .ok(),
-            None => None,
+            Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true).await,
+            // not actually an error necessarily, but we want to ensure that a channel is still
+            // created with the default uri
+            None => Err(anyhow::anyhow!("")),
         };
         let real_channel = match channel {
-            Some(c) => {
+            Ok(c) => {
                 log::debug!("Connected via mDNS");
                 c
             }
-            None => {
+            Err(e) => {
                 if attempting_mdns {
-                    log::debug!("Unable to connect via mDNS; falling back to robot URI");
+                    log::debug!(
+                        "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
+                    );
                 }
                 Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
             }
