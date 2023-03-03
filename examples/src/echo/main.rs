@@ -9,6 +9,7 @@ use viam::rpc::dial;
 /// Tests unary, server, and bidi streaming with simple echo requests. To run, simply
 /// update the credentials and uri as necessary.
 async fn main() -> Result<()> {
+    env_logger::init();
     let creds = dial::RPCCredentials::new(
         None,
         "robot-location-secret".to_string(),
