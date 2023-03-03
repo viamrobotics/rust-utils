@@ -129,9 +129,6 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         }
                     };
 
-                    // TODO(RSDK-654) if and when we need to provide better support for
-                    // bidi streaming, we'll need to find a better solution than this for
-                    // handling empty messages
                     let response = http::response::Response::builder()
                         // standardized gRPC headers.
                         .header("content-type", "application/grpc")
