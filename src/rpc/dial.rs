@@ -433,7 +433,7 @@ impl DialBuilder<WithCredentials> {
             "0.0.0.0:5353".parse().unwrap(),
             Config {
                 query_interval: Duration::from_secs(1),
-                local_names: vec![local_name],
+                local_names: vec![local_name.clone()],
             },
         ) {
             Ok(s) => s,
