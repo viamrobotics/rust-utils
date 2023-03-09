@@ -4,7 +4,7 @@ use crate::gen::proto::rpc::webrtc::v1::{
     RequestMessage, Response, Stream,
 };
 use anyhow::Result;
-use chashmap::CHashMap;
+use dashmap::DashMap;
 use hyper::Body;
 use prost::Message;
 use std::{
@@ -26,8 +26,8 @@ const MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE: usize = 16373;
 pub struct WebRTCClientChannel {
     pub(crate) base_channel: Arc<WebRTCBaseChannel>,
     stream_id_counter: AtomicU64,
-    pub(crate) streams: CHashMap<u64, WebRTCClientStream>,
-    pub(crate) receiver_bodies: CHashMap<u64, hyper::Body>,
+    pub(crate) streams: DashMap<u64, WebRTCClientStream>,
+    pub(crate) receiver_bodies: DashMap<u64, hyper::Body>,
     // String type rather than error type because anyhow::Error does not derive clone
     pub(crate) error: RwLock<Option<String>>,
 }
@@ -70,9 +70,9 @@ impl WebRTCClientChannel {
         let channel = Self {
             error,
             base_channel,
-            streams: CHashMap::new(),
+            streams: DashMap::new(),
             stream_id_counter: AtomicU64::new(0),
-            receiver_bodies: CHashMap::new(),
+            receiver_bodies: DashMap::new(),
         };
 
         let channel = Arc::new(channel);
@@ -164,11 +164,10 @@ impl WebRTCClientChannel {
     }
 
     pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
-        self.receiver_bodies
-            .remove(&stream_id)
-            .ok_or(anyhow::anyhow!(
-                "Tried to receive stream {stream_id} but it didn't exist!"
-            ))
+        match self.receiver_bodies.remove(&stream_id) {
+            Some(entry) => Ok(entry.1),
+            None => Err(anyhow::anyhow!("Tried to receive stream {stream_id} but it didn't exist!")),
+        }
     }
 
     pub(crate) async fn write_headers(
@@ -287,7 +286,7 @@ impl WebRTCClientChannel {
 
     pub(crate) fn close_stream_with_recv_error(&self, stream_id: u64, error: anyhow::Error) {
         match self.streams.remove(&stream_id) {
-            Some(stream) => stream.base_stream.close_with_recv_error(&mut Some(&error)),
+            Some(entry) => entry.1.base_stream.close_with_recv_error(&mut Some(&error)),
             None => {
                 log::error!("attempted to close stream with id {stream_id}, but it wasn't found!")
             }
