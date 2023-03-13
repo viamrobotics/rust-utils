@@ -45,13 +45,9 @@ impl Drop for WebRTCClientChannel {
     fn drop(&mut self) {
         let bc = self.base_channel.clone();
         if !bc.is_closed() {
-            bc.should_close.store(true, Ordering::Release);
-            // CR erodkin: clean up!
-            //let _ = tokio::spawn(async move {
-            //if let Err(e) = bc.close().await {
-            //log::error!("Error closing base channel: {e}");
-            //}
-            //});
+            if let Err(e) = bc.close_sync() {
+                log::error!("Error closing base channel: {e}")
+            }
         };
         log::debug!("Dropping client channel {:?}", &self);
     }
@@ -296,8 +292,6 @@ impl WebRTCClientChannel {
             .map(|_: usize| ())
     }
 
-    // CR erodkin: if we can easily, we should make sure we're also removing the body when we
-    // close the stream
     pub(crate) fn close_stream_with_recv_error(&self, stream_id: u64, error: anyhow::Error) {
         match self.streams.remove(&stream_id) {
             Some(entry) => entry.1.base_stream.close_with_recv_error(&mut Some(&error)),

@@ -163,51 +163,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         }
                         Ok(stream) => {
                             Ok(Self::create_resp(&mut channel, stream, request, response).await)
-                        } // CR erodkin: clean up!
-                          //let stream_id = stream.id;
-                          //let metadata = Some(metadata_from_parts(&parts));
-                          //let headers = RequestHeaders {
-                          //method: parts
-                          //.uri
-                          //.path_and_query()
-                          //.map(PathAndQuery::to_string)
-                          //.unwrap_or_default(),
-                          //metadata,
-                          //timeout: None,
-                          //};
-
-                          //if let Err(e) = channel.write_headers(&stream, headers).await {
-                          //log::error!("error writing headers: {e}");
-                          //channel.close_stream_with_recv_error(stream_id, e);
-                          //status_code = STATUS_CODE_UNKNOWN;
-                          //}
-
-                          //let data = hyper::body::to_bytes(body).await.unwrap().to_vec();
-                          //if let Err(e) = channel.write_message(false, Some(stream), data).await {
-                          //log::error!("error sending message: {e}");
-                          //channel.close_stream_with_recv_error(stream_id, e);
-                          //status_code = STATUS_CODE_UNKNOWN;
-                          //};
-
-                          //let body = match channel.resp_body_from_stream(stream_id) {
-                          //Ok(body) => body,
-                          //Err(e) => {
-                          //log::error!("error receiving response from stream: {e}");
-                          //channel.close_stream_with_recv_error(stream_id, e);
-                          //status_code = STATUS_CODE_UNKNOWN;
-                          //Body::empty()
-                          //}
-                          //};
-
-                          //let response = if status_code != STATUS_CODE_OK {
-                          //response.header("grpc-status", &status_code.to_string())
-                          //} else {
-                          //response
-                          //};
-
-                          //let response = response.body(Body::from(body)).unwrap();
-                          //Ok(response)
-                          //}
+                        }
                     }
                 };
                 Box::pin(fut)
