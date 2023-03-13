@@ -5,6 +5,8 @@ use std::{
         atomic::{AtomicBool, AtomicPtr, Ordering},
         Arc,
     },
+    thread::sleep,
+    time::Duration,
 };
 use webrtc::{data_channel::RTCDataChannel, peer_connection::RTCPeerConnection};
 
@@ -15,6 +17,7 @@ pub struct WebRTCBaseChannel {
     pub(crate) data_channel: Arc<RTCDataChannel>,
     closed_reason: AtomicPtr<Option<anyhow::Error>>,
     closed: AtomicBool,
+    pub(crate) should_close: AtomicBool,
 }
 
 impl Debug for WebRTCBaseChannel {
@@ -27,7 +30,30 @@ impl Debug for WebRTCBaseChannel {
 }
 
 impl WebRTCBaseChannel {
-    pub(crate) async fn new(
+    async fn close_loop(c: std::sync::Weak<Self>) {
+        let c = match c.upgrade() {
+            Some(c) => c,
+            None => return (),
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            loop {
+                sleep(Duration::from_millis(100));
+                if !c.should_close.load(Ordering::Acquire) {
+                    continue;
+                }
+                if let Err(e) = c.close_with_reason().await {
+                    log::error!("error closing channel: {e}")
+                }
+                break;
+            }
+        })
+    }
+
+    async fn new_(
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
     ) -> Arc<Self> {
@@ -56,6 +82,7 @@ impl WebRTCBaseChannel {
             data_channel,
             closed_reason: AtomicPtr::new(&mut None),
             closed: AtomicBool::new(false),
+            should_close: AtomicBool::new(false),
         });
 
         let c = Arc::downgrade(&channel);
@@ -65,22 +92,35 @@ impl WebRTCBaseChannel {
                 None => return Box::pin(async {}),
             };
             Box::pin(async move {
-                if let Err(e) = c.close_with_reason(Some(anyhow::Error::from(err))).await {
-                    log::error!("error closing channel: {e}")
-                }
+                let mut err = Some(anyhow::Error::from(err));
+                c.closed_reason.store(&mut err, Ordering::Release);
+                c.should_close.store(true, Ordering::Release);
+                // CR erodkin: clean up!
+                //Box::pin(async move {
+                //if let Err(e) = c.close_with_reason(Some(anyhow::Error::from(err))).await {
+                //log::error!("error closing channel: {e}")
+                //}
             })
         }));
 
         channel
     }
 
-    async fn close_with_reason(&self, err: Option<anyhow::Error>) -> Result<()> {
-        let mut err = err;
+    pub(crate) async fn new(
+        peer_connection: Arc<RTCPeerConnection>,
+        data_channel: Arc<RTCDataChannel>,
+    ) -> Arc<Self> {
+        let chan = Self::new_(peer_connection, data_channel).await;
+        let c = Arc::downgrade(&chan);
+        tokio::task::spawn(async move { Self::close_loop(c) });
+        chan
+    }
+
+    async fn close_with_reason(&self) -> Result<()> {
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
         self.closed.store(true, Ordering::Release);
-        self.closed_reason.store(&mut err, Ordering::Release);
 
         self.peer_connection
             .close()
@@ -91,7 +131,7 @@ impl WebRTCBaseChannel {
     /// Closes the channel
     #[allow(dead_code)]
     pub async fn close(&self) -> Result<()> {
-        self.close_with_reason(None).await
+        self.close_with_reason().await
     }
     /// Returns whether or not the channel is closed
     #[allow(dead_code)]

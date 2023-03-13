@@ -45,11 +45,13 @@ impl Drop for WebRTCClientChannel {
     fn drop(&mut self) {
         let bc = self.base_channel.clone();
         if !bc.is_closed() {
-            let _ = tokio::spawn(async move {
-                if let Err(e) = bc.close().await {
-                    log::error!("Error closing base channel: {e}");
-                }
-            });
+            bc.should_close.store(true, Ordering::Release);
+            // CR erodkin: clean up!
+            //let _ = tokio::spawn(async move {
+            //if let Err(e) = bc.close().await {
+            //log::error!("Error closing base channel: {e}");
+            //}
+            //});
         };
         log::debug!("Dropping client channel {:?}", &self);
     }
@@ -61,6 +63,7 @@ impl WebRTCClientChannel {
         self.base_channel.data_channel.close().await.unwrap();
         self.base_channel.peer_connection.close().await.unwrap();
     }
+
     pub(crate) async fn new(
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
@@ -103,7 +106,14 @@ impl WebRTCClientChannel {
         ret_channel
     }
 
-    pub(crate) fn new_stream(&self) -> Stream {
+    pub(crate) fn new_stream(&self) -> Result<Stream> {
+        // 256 is an arbitrarily high number for maximum concurrent streams, determined based on
+        // analogous value in goutils
+        if self.streams.len() >= 256 {
+            return Err(anyhow::anyhow!(
+                "Reached max concurrent stream cap of 256; unable to add new stream."
+            ));
+        }
         let id = self.stream_id_counter.fetch_add(1, Ordering::AcqRel);
         let stream = Stream { id };
         let (message_sender, receiver_body) = hyper::Body::channel();
@@ -124,7 +134,7 @@ impl WebRTCClientChannel {
 
         let _ = self.streams.insert(id, client_stream);
         let _ = self.receiver_bodies.insert(id, receiver_body);
-        stream
+        Ok(stream)
     }
 
     async fn on_channel_message(&self, msg: DataChannelMessage) -> Result<()> {
@@ -166,7 +176,9 @@ impl WebRTCClientChannel {
     pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
         match self.receiver_bodies.remove(&stream_id) {
             Some(entry) => Ok(entry.1),
-            None => Err(anyhow::anyhow!("Tried to receive stream {stream_id} but it didn't exist!")),
+            None => Err(anyhow::anyhow!(
+                "Tried to receive stream {stream_id} but it didn't exist!"
+            )),
         }
     }
 
@@ -284,6 +296,8 @@ impl WebRTCClientChannel {
             .map(|_: usize| ())
     }
 
+    // CR erodkin: if we can easily, we should make sure we're also removing the body when we
+    // close the stream
     pub(crate) fn close_stream_with_recv_error(&self, stream_id: u64, error: anyhow::Error) {
         match self.streams.remove(&stream_id) {
             Some(entry) => entry.1.base_stream.close_with_recv_error(&mut Some(&error)),
