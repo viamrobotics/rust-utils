@@ -142,10 +142,8 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
         match self {
             Self::Direct(channel) => Box::pin(channel.call(request)),
             Self::WebRTC(channel) => {
-                //let mut status_code = STATUS_CODE_OK;
                 let mut channel = channel.clone();
                 let fut = async move {
-                    //let (parts, body) = request.into_parts();
                     let response = http::response::Response::builder()
                         // standardized gRPC headers.
                         .header("content-type", "application/grpc")
