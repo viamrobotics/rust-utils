@@ -122,7 +122,7 @@ impl ViamChannel {
             response
         };
 
-        response.body(Body::from(body)).unwrap()
+        response.body(body).unwrap()
     }
 }
 
