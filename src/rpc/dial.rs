@@ -46,6 +46,7 @@ use tower_http::set_header::{SetRequestHeader, SetRequestHeaderLayer};
 // gRPC status codes
 const STATUS_CODE_OK: i32 = 0;
 const STATUS_CODE_UNKNOWN: i32 = 2;
+const STATUS_CODE_RESOURCE_EXHAUSTED: i32 = 8;
 
 type SecretType = String;
 
@@ -153,7 +154,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
                         Err(e) => {
                             log::error!("{e}");
                             let response = response
-                                .header("grpc-status", &STATUS_CODE_UNKNOWN.to_string())
+                                .header("grpc-status", &STATUS_CODE_RESOURCE_EXHAUSTED.to_string())
                                 .body(Body::default())
                                 .unwrap();
 

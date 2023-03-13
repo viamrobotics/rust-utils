@@ -21,6 +21,9 @@ use webrtc::{
 
 // see golang/client_stream.go
 const MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE: usize = 16373;
+// 256 is an arbitrarily high number for maximum concurrent streams, determined based on
+// analogous value in goutils
+const MAX_CONCURRENT_STREAM_COUNT: usize = 256;
 
 /// The client-side implementation of a webRTC connection channel.
 pub struct WebRTCClientChannel {
@@ -103,11 +106,9 @@ impl WebRTCClientChannel {
     }
 
     pub(crate) fn new_stream(&self) -> Result<Stream> {
-        // 256 is an arbitrarily high number for maximum concurrent streams, determined based on
-        // analogous value in goutils
-        if self.streams.len() >= 256 {
+        if self.streams.len() >= MAX_CONCURRENT_STREAM_COUNT {
             return Err(anyhow::anyhow!(
-                "Reached max concurrent stream cap of 256; unable to add new stream."
+                "Reached max concurrent stream cap of {MAX_CONCURRENT_STREAM_COUNT}; unable to add new stream."
             ));
         }
         let id = self.stream_id_counter.fetch_add(1, Ordering::AcqRel);
