@@ -33,23 +33,24 @@ impl WebRTCBaseChannel {
     ) -> Arc<Self> {
         let dc = data_channel.clone();
         let pc = Arc::downgrade(&peer_connection);
-        peer_connection
-            .on_ice_connection_state_change(Box::new(move |conn_state| {
-                let pc = match pc.upgrade(){
-                    Some(pc) => pc,
-                    None => return Box::pin(async  {}),
-                };
-                Box::pin(async move {
-                    let sctp = pc.sctp();
-                    let transport = sctp.transport();
-                    let transport = transport.ice_transport();
-                    let candidate_pair = transport.get_selected_candidate_pair().await;
-                    log::info!(
-                        "Selected candidate pair. Pair: {candidate_pair:?}. ID: {}. Current connection state: {conn_state}",
-                        pc.get_stats_id()
-                    );
-                })
-            }));
+        peer_connection.on_ice_connection_state_change(Box::new(move |conn_state| {
+            let pc = match pc.upgrade() {
+                Some(pc) => pc,
+                None => return Box::pin(async {}),
+            };
+            Box::pin(async move {
+                let sctp = pc.sctp();
+                let transport = sctp.transport();
+                let transport = transport.ice_transport();
+                let candidate_pair = transport.get_selected_candidate_pair().await;
+                log::info!(
+                    "Selected candidate pair. Pair: {:?}. ID: {}. Current connection state: {}",
+                    candidate_pair,
+                    conn_state,
+                    pc.get_stats_id()
+                );
+            })
+        }));
 
         let channel = Arc::new(Self {
             peer_connection,
@@ -65,7 +66,9 @@ impl WebRTCBaseChannel {
                 None => return Box::pin(async {}),
             };
             Box::pin(async move {
-                if let Err(e) = c.close_with_reason(Some(anyhow::Error::from(err))).await {
+                let mut err = Some(anyhow::Error::from(err));
+                c.closed_reason.store(&mut err, Ordering::Release);
+                if let Err(e) = c.close_sync() {
                     log::error!("error closing channel: {e}")
                 }
             })
@@ -74,13 +77,13 @@ impl WebRTCBaseChannel {
         channel
     }
 
-    async fn close_with_reason(&self, err: Option<anyhow::Error>) -> Result<()> {
-        let mut err = err;
+    /// Closes the channel
+    #[allow(dead_code)]
+    pub async fn close(&self) -> Result<()> {
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
         self.closed.store(true, Ordering::Release);
-        self.closed_reason.store(&mut err, Ordering::Release);
 
         self.peer_connection
             .close()
@@ -88,11 +91,15 @@ impl WebRTCBaseChannel {
             .map_err(anyhow::Error::from)
     }
 
-    /// Closes the channel
-    #[allow(dead_code)]
-    pub async fn close(&self) -> Result<()> {
-        self.close_with_reason(None).await
+    // `close` with blocking. Should only be used in contexts where an async close is disallowed
+    pub(crate) fn close_sync(&self) -> Result<()> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move { self.close().await })
     }
+
     /// Returns whether or not the channel is closed
     #[allow(dead_code)]
     pub fn is_closed(&self) -> bool {
