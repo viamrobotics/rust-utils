@@ -81,6 +81,7 @@ impl WebRTCBaseChannel {
     /// Closes the channel
     #[allow(dead_code)]
     pub async fn close(&self) -> Result<()> {
+        log::debug!("Closing base channel");
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
