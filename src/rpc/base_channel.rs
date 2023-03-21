@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::{
     fmt::Debug,
+    panic::{catch_unwind, set_hook, AssertUnwindSafe},
     sync::{
         atomic::{AtomicBool, AtomicPtr, Ordering},
         Arc,
@@ -93,11 +94,23 @@ impl WebRTCBaseChannel {
 
     // `close` with blocking. Should only be used in contexts where an async close is disallowed
     pub(crate) fn close_sync(&self) -> Result<()> {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async move { self.close().await })
+        set_hook(Box::new(|info| {
+            log::error!(
+        "Unable to close base_channel gracefully. This may be because of an attempt to connect to a robot that isn't online. Error message: {}",
+        info.to_string()
+        )
+        }));
+        let safe_self = AssertUnwindSafe(self);
+        match catch_unwind(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async move { safe_self.close().await })
+        }) {
+            Ok(res) => res,
+            Err(_) => Err(anyhow::anyhow!("Unable to close base channel gracefully")),
+        }
     }
 
     /// Returns whether or not the channel is closed
