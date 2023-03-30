@@ -46,6 +46,8 @@ tracing-subscriber = {version = "0.3.11", features = ["env-filter"]}
 webpki-roots = "0.21.1"
 webrtc = "0.7.1"
 
+[dev-dependencies]
+async-stream = "0.3.3"
 
 [build-dependencies]
 tonic-build = {version = "0.7.2",features = ["prost", "compression"]}
