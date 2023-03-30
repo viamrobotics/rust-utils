@@ -6,3 +6,6 @@ target/
 
 # make tools bin
 bin/
+
+# goutils
+tests/goutils/

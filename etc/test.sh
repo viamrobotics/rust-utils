@@ -7,8 +7,7 @@ if lsof -i ":$SERVER_PORT" | grep -q LISTEN; then
     exit 1
 fi
 
-pushd tests/server && ./entrypoint.sh "$SERVER_PORT" &
-popd
+./etc/run_echo_server.sh "$SERVER_PORT" &
 
 while ! lsof -i ":$SERVER_PORT" | grep -q LISTEN; do
   sleep 0.1

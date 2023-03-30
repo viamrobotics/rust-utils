@@ -13,5 +13,7 @@ buf-install:
 buf:	buf-install buf-clean
 	PATH=${PATH_WITH_TOOLS} buf generate buf.build/viamrobotics/goutils --template buf.gen.yaml
 	PATH=${PATH_WITH_TOOLS} buf generate buf.build/googleapis/googleapis --template buf.gen.yaml --path google/rpc --path google/api
-test: buf build
+tests/goutils:
+	git clone --depth=1 git@github.com:maximpertsov/goutils.git tests/goutils
+test: buf tests/goutils build
 	./etc/test.sh
