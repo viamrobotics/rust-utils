@@ -72,7 +72,7 @@ async fn test_webrtc_bidi() -> Result<()> {
         }
     };
 
-    let mut expected = vec!["0", "1", "2"];
+    let mut expected = vec!["0", "1", "?"];
     expected.reverse();
 
     let mut service = EchoServiceClient::new(c);
