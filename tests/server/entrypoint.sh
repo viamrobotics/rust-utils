@@ -1,3 +1,3 @@
 #!/bin/bash
 
-go run main.go -instance-name=localhost:8080
+go run main.go -instance-name="localhost:$1"

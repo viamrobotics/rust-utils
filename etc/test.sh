@@ -1,20 +1,22 @@
 #!/bin/bash
 
-if lsof -i :8080 | grep -q LISTEN; then
-    echo "port :8080 is in use"
+SERVER_PORT=8080
+
+if lsof -i ":$SERVER_PORT" | grep -q LISTEN; then
+    echo "port :$SERVER_PORT is in use"
     exit 1
 fi
 
-pushd tests/server && ./entrypoint.sh &
+pushd tests/server && ./entrypoint.sh "$SERVER_PORT" &
 popd
 
-while ! lsof -i :8080 | grep -q LISTEN; do
+while ! lsof -i ":$SERVER_PORT" | grep -q LISTEN; do
   sleep 0.1
 done
 
-cargo test --test "*"
+SERVER_PORT=$SERVER_PORT cargo test --test "*"
 result=$?
 
-kill "$(lsof -t -i:8080)"
+kill "$(lsof -t -i:$SERVER_PORT)"
 
 exit $result

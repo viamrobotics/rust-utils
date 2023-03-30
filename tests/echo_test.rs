@@ -1,6 +1,7 @@
 /// Tests unary, server, and bidi streaming with simple echo requests. To run, simply
 /// update the credentials and uri as necessary.
 use anyhow::Result;
+use std::env;
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::echo_service_client::EchoServiceClient;
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
     EchoBiDiRequest, EchoMultipleRequest, EchoRequest,
@@ -8,8 +9,11 @@ use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
 use viam_rust_utils::rpc::dial;
 
 async fn dial() -> Result<dial::ViamChannel, anyhow::Error> {
+    let port = env::var("SERVER_PORT").unwrap().to_owned();
+    let uri = ["localhost:".to_string(), port].join("");
+
     dial::DialOptions::builder()
-        .uri("localhost:8080")
+        .uri(&uri)
         .without_credentials()
         .insecure()
         .connect()
