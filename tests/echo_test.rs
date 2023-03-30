@@ -8,7 +8,7 @@ use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
 };
 use viam_rust_utils::rpc::dial;
 
-async fn dial() -> Result<dial::ViamChannel, anyhow::Error> {
+async fn dial() -> Result<dial::ViamChannel> {
     let port = env::var("SERVER_PORT").unwrap().to_owned();
     let uri = ["localhost:".to_string(), port].join("");
 
