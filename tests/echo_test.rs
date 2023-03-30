@@ -1,3 +1,5 @@
+/// Tests unary, server, and bidi streaming with simple echo requests. To run, simply
+/// update the credentials and uri as necessary.
 use anyhow::Result;
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::echo_service_client::EchoServiceClient;
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
@@ -5,19 +7,18 @@ use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
 };
 use viam_rust_utils::rpc::dial;
 
-#[tokio::test]
-/// Tests unary, server, and bidi streaming with simple echo requests. To run, simply
-/// update the credentials and uri as necessary.
-async fn test_echo() -> Result<()> {
-    let c = dial::DialOptions::builder()
+async fn dial() -> Result<dial::ViamChannel, anyhow::Error> {
+    dial::DialOptions::builder()
         .uri("localhost:8080")
         .without_credentials()
         .insecure()
-        .allow_downgrade()
         .connect()
-        .await?;
+        .await
+}
 
-    // Unary case
+#[tokio::test]
+async fn test_webrtc_unary() -> Result<()> {
+    let c = dial().await?;
 
     let mut service = EchoServiceClient::new(c);
     let echo_request = EchoRequest {
@@ -26,11 +27,17 @@ async fn test_echo() -> Result<()> {
     let resp = service.echo(echo_request).await?.into_inner();
     assert_eq!(resp.message, "hi".to_string());
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_webrtc_server_stream() -> Result<()> {
+    let c = dial().await?;
+
+    let mut service = EchoServiceClient::new(c);
     let multi_echo_request = EchoMultipleRequest {
         message: "hello?".to_string(),
     };
-
-    // Server-stream case
 
     let mut expected = vec!["h", "e", "l", "l", "o", "?"];
     expected.reverse();
@@ -42,6 +49,14 @@ async fn test_echo() -> Result<()> {
         assert_eq!(resp.message, expected.pop().unwrap().to_string())
     }
     assert!(expected.is_empty());
+
+    Ok(())
+}
+
+#[ignore]
+#[tokio::test]
+async fn test_webrtc_bidi() -> Result<()> {
+    let _c = dial().await?;
 
     // // Bi-directional case
     //
