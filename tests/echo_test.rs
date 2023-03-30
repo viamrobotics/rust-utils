@@ -41,6 +41,7 @@ async fn test_webrtc_server_stream() -> Result<()> {
 
     let mut expected = vec!["h", "e", "l", "l", "o", "?"];
     expected.reverse();
+
     let mut resp = service
         .echo_multiple(multi_echo_request)
         .await?
@@ -53,7 +54,6 @@ async fn test_webrtc_server_stream() -> Result<()> {
     Ok(())
 }
 
-#[ignore]
 #[tokio::test]
 async fn test_webrtc_bidi() -> Result<()> {
     let c = dial().await?;
@@ -68,11 +68,15 @@ async fn test_webrtc_bidi() -> Result<()> {
         }
     };
 
+    let mut expected = vec!["0", "1", "2"];
+    expected.reverse();
+
     let mut service = EchoServiceClient::new(c);
     let mut bidi_resp = service.echo_bi_di(bidi_stream).await?.into_inner();
     while let Some(resp) = bidi_resp.message().await? {
-        println!("Bidi response: {resp:?}");
+        assert_eq!(resp.message, expected.pop().unwrap().to_string())
     }
+    assert!(expected.is_empty());
 
     Ok(())
 }
