@@ -6,8 +6,6 @@ build:
 	cargo build
 build-example:
 	cd examples/ && cargo build
-run-example:
-	cd examples/ && RUST_LOG=debug cargo run --bin test-echo
 buf-clean:
 	find src/gen -type f \( -iname "*.rs" ! -iname "mod.rs" \) -delete
 buf-install:
