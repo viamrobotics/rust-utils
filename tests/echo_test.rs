@@ -56,24 +56,23 @@ async fn test_webrtc_server_stream() -> Result<()> {
 #[ignore]
 #[tokio::test]
 async fn test_webrtc_bidi() -> Result<()> {
-    let _c = dial().await?;
+    let c = dial().await?;
 
-    // // Bi-directional case
-    //
-    // let bidi_stream = async_stream::stream! {
-    //     for i in 0..3 {
-    //         let request =
-    //         EchoBiDiRequest {
-    //             message: i.to_string()
-    //         };
-    //         yield request;
-    //     }
-    // };
-    //
-    // let mut bidi_resp = service.echo_bi_di(bidi_stream).await?.into_inner();
-    // while let Some(resp) = bidi_resp.message().await? {
-    //     println!("Bidi response: {resp:?}");
-    // }
+    let bidi_stream = async_stream::stream! {
+        for i in 0..3 {
+            let request =
+            EchoBiDiRequest {
+                message: i.to_string()
+            };
+            yield request;
+        }
+    };
+
+    let mut service = EchoServiceClient::new(c);
+    let mut bidi_resp = service.echo_bi_di(bidi_stream).await?.into_inner();
+    while let Some(resp) = bidi_resp.message().await? {
+        println!("Bidi response: {resp:?}");
+    }
 
     Ok(())
 }
