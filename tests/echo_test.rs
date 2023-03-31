@@ -64,59 +64,44 @@ async fn test_webrtc_bidi() -> Result<()> {
     env_logger::init();
     let c = dial().await?;
 
-    // This variable gates when we send the last request.
     let received = Arc::new(RwLock::new(0));
     let received_async = Arc::clone(&received);
 
     let bidi_stream = async_stream::stream! {
-        for i in 0..2 {
+        for i in 0..3 {
+            loop {
+                // We need to wait a small amount of time between each request/response count
+                // check, otherwise we lock up the main thread.
+                let sleep_time = std::time::Duration::from_millis(10);
+                tokio::time::sleep(sleep_time).await;
+
+                // Wait until we have received one response for each request before sending the
+                // next request. This allows requests/response to be interleaved.
+                let value = received_async.read().unwrap();
+                if *value == i {
+                    break;
+                }
+            }
+
             let request =
             EchoBiDiRequest {
                 message: i.to_string()
             };
             yield request;
         }
-
-        log::info!("waiting...");
-        loop {
-            let sleep_time = std::time::Duration::from_millis(100);
-            tokio::time::sleep(sleep_time).await;
-
-            let value = received_async.read().unwrap();
-            if *value == 2 {
-                break;
-            }
-            log::info!("still waiting...");
-        }
-        // let sleep_time = std::time::Duration::from_millis(1000);
-        // tokio::time::sleep(sleep_time).await;
-        log::info!("finished waiting!");
-
-        yield EchoBiDiRequest { message: 2.to_string() };
     };
 
     let mut service = EchoServiceClient::new(c);
-    log::info!("making the call...");
     let mut bidi_resp = service.echo_bi_di(bidi_stream).await?.into_inner();
-    log::info!("made the call!");
 
-    let resp = bidi_resp.message().await?.unwrap();
-    assert_eq!(resp.message, "0");
+    for i in 0..3 {
+        let resp = bidi_resp.message().await?.unwrap();
+        assert_eq!(resp.message, i.to_string());
 
-    let mut count = received.write().unwrap();
-    *count += 1;
-    drop(count);
-
-    let resp = bidi_resp.message().await?.unwrap();
-    assert_eq!(resp.message, "1");
-
-    let mut count = received.write().unwrap();
-    *count += 1;
-    drop(count);
-
-    let resp = bidi_resp.message().await?.unwrap();
-    assert_eq!(resp.message, "2");
-    log::info!("got 2!");
+        let mut count = received.write().unwrap();
+        *count += 1;
+        drop(count);
+    }
 
     Ok(())
 }
