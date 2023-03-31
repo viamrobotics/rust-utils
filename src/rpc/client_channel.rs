@@ -46,12 +46,6 @@ impl Debug for WebRTCClientChannel {
 
 impl Drop for WebRTCClientChannel {
     fn drop(&mut self) {
-        let bc = self.base_channel.clone();
-        if !bc.is_closed() {
-            if let Err(e) = bc.close_sync() {
-                log::error!("Error closing base channel: {e}")
-            }
-        };
         log::debug!("Dropping client channel {:?}", &self);
     }
 }

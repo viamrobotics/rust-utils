@@ -1,7 +1,6 @@
 use anyhow::Result;
 use std::{
     fmt::Debug,
-    panic::{catch_unwind, set_hook, AssertUnwindSafe},
     sync::{
         atomic::{AtomicBool, AtomicPtr, Ordering},
         Arc,
@@ -24,6 +23,12 @@ impl Debug for WebRTCBaseChannel {
             .field("Peer connection id", &self.peer_connection.get_stats_id())
             .field("Data channel id", &self.data_channel.id())
             .finish()
+    }
+}
+
+impl Drop for WebRTCBaseChannel {
+    fn drop(&mut self) {
+        log::debug!("Dropping base channel {self:?}");
     }
 }
 
@@ -62,6 +67,7 @@ impl WebRTCBaseChannel {
 
         let c = Arc::downgrade(&channel);
         dc.on_error(Box::new(move |err: webrtc::Error| {
+            log::error!("Data channel error: {err}");
             let c = match c.upgrade() {
                 Some(c) => c,
                 None => return Box::pin(async {}),
@@ -69,9 +75,6 @@ impl WebRTCBaseChannel {
             Box::pin(async move {
                 let mut err = Some(anyhow::Error::from(err));
                 c.closed_reason.store(&mut err, Ordering::Release);
-                if let Err(e) = c.close_sync() {
-                    log::error!("error closing channel: {e}")
-                }
             })
         }));
 
@@ -91,27 +94,6 @@ impl WebRTCBaseChannel {
             .close()
             .await
             .map_err(anyhow::Error::from)
-    }
-
-    // `close` with blocking. Should only be used in contexts where an async close is disallowed
-    pub(crate) fn close_sync(&self) -> Result<()> {
-        set_hook(Box::new(|info| {
-            log::error!(
-        "Unable to close base_channel gracefully. This may be because of an attempt to connect to a robot that isn't online. Error message: {}",
-        info.to_string()
-        )
-        }));
-        let safe_self = AssertUnwindSafe(self);
-        match catch_unwind(|| {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            rt.block_on(async move { safe_self.close().await })
-        }) {
-            Ok(res) => res,
-            Err(_) => Err(anyhow::anyhow!("Unable to close base channel gracefully")),
-        }
     }
 
     /// Returns whether or not the channel is closed
