@@ -2,6 +2,7 @@
 /// update the credentials and uri as necessary.
 use anyhow::Result;
 use std::env;
+use std::sync::{Arc, Mutex};
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::echo_service_client::EchoServiceClient;
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
     EchoBiDiRequest, EchoMultipleRequest, EchoRequest,
@@ -63,6 +64,10 @@ async fn test_webrtc_bidi() -> Result<()> {
     env_logger::init();
     let c = dial().await?;
 
+    // This variable gates when we send the last request.
+    let send_last = Arc::new(Mutex::new(false));
+    let send_last_async = Arc::clone(&send_last);
+
     let bidi_stream = async_stream::stream! {
         for i in 0..2 {
             let request =
@@ -73,8 +78,20 @@ async fn test_webrtc_bidi() -> Result<()> {
         }
 
         log::info!("waiting...");
-        let sleep_time = std::time::Duration::from_millis(1000);
-        tokio::time::sleep(sleep_time).await;
+        loop {
+            let sleep_time = std::time::Duration::from_millis(1000);
+            tokio::time::sleep(sleep_time).await;
+
+            let lock = send_last_async.lock().unwrap();
+            if *lock {
+                drop(lock);
+                break;
+            }
+            drop(lock);
+            log::info!("still waiting...");
+        }
+        // let sleep_time = std::time::Duration::from_millis(1000);
+        // tokio::time::sleep(sleep_time).await;
         log::info!("finished waiting!");
 
         yield EchoBiDiRequest { message: 2.to_string() };
@@ -87,12 +104,19 @@ async fn test_webrtc_bidi() -> Result<()> {
 
     let resp = bidi_resp.message().await?.unwrap();
     assert_eq!(resp.message, "0");
+    log::info!("got 0!");
+
+    let mut lock = send_last.lock().unwrap();
+    *lock = true;
+    drop(lock);
 
     let resp = bidi_resp.message().await?.unwrap();
     assert_eq!(resp.message, "1");
+    log::info!("got 1!");
 
     let resp = bidi_resp.message().await?.unwrap();
     assert_eq!(resp.message, "2");
+    log::info!("got 2!");
 
     Ok(())
 }
