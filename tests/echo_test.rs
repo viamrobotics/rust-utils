@@ -9,7 +9,7 @@ use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
 };
 use viam_rust_utils::rpc::dial;
 
-async fn dial() -> Result<dial::ViamChannel> {
+async fn dial_direct() -> Result<dial::ViamChannel> {
     let port = env::var("SERVER_PORT").unwrap().to_owned();
     let uri = ["localhost:".to_string(), port].join("");
 
@@ -17,13 +17,14 @@ async fn dial() -> Result<dial::ViamChannel> {
         .uri(&uri)
         .without_credentials()
         .insecure()
+        .disable_webrtc()
         .connect()
         .await
 }
 
 #[tokio::test]
-async fn test_webrtc_unary() -> Result<()> {
-    let c = dial().await?;
+async fn test_dial_direct_unary() -> Result<()> {
+    let c = dial_direct().await?;
 
     let mut service = EchoServiceClient::new(c);
     let echo_request = EchoRequest {
@@ -36,8 +37,8 @@ async fn test_webrtc_unary() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_webrtc_server_stream() -> Result<()> {
-    let c = dial().await?;
+async fn test_dial_direct_server_stream() -> Result<()> {
+    let c = dial_direct().await?;
 
     let mut service = EchoServiceClient::new(c);
     let multi_echo_request = EchoMultipleRequest {
@@ -60,9 +61,8 @@ async fn test_webrtc_server_stream() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_webrtc_bidi() -> Result<()> {
-    env_logger::init();
-    let c = dial().await?;
+async fn test_dial_direct_bidi() -> Result<()> {
+    let c = dial_direct().await?;
 
     let received = Arc::new(RwLock::new(0));
     let received_async = Arc::clone(&received);
