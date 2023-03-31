@@ -48,6 +48,7 @@ webrtc = "0.7.1"
 
 [dev-dependencies]
 async-stream = "0.3.3"
+env_logger = "0.9.0"
 
 [build-dependencies]
 tonic-build = {version = "0.7.2",features = ["prost", "compression"]}

@@ -60,27 +60,42 @@ async fn test_webrtc_server_stream() -> Result<()> {
 
 #[tokio::test]
 async fn test_webrtc_bidi() -> Result<()> {
+    env_logger::init();
     let c = dial().await?;
 
+    let mut send_last = false;
+
     let bidi_stream = async_stream::stream! {
-        for i in 0..3 {
+        for i in 0..2 {
             let request =
             EchoBiDiRequest {
                 message: i.to_string()
             };
             yield request;
         }
+
+        log::error!("gonna wait...");
+        while !send_last {}
+        log::error!("i've waited long enough!");
+
+        yield EchoBiDiRequest { message: 2.to_string() };
     };
 
-    let mut expected = vec!["0", "1", "2"];
-    expected.reverse();
-
     let mut service = EchoServiceClient::new(c);
+    log::error!("gonna make a call");
     let mut bidi_resp = service.echo_bi_di(bidi_stream).await?.into_inner();
-    while let Some(resp) = bidi_resp.message().await? {
-        assert_eq!(resp.message, expected.pop().unwrap().to_string())
-    }
-    assert!(expected.is_empty());
+    log::error!("i made the call! i'm so talented.");
+
+    let resp = bidi_resp.message().await?.unwrap();
+    assert_eq!(resp.message, "0");
+
+    send_last = true;
+
+    let resp = bidi_resp.message().await?.unwrap();
+    assert_eq!(resp.message, "1");
+
+    let resp = bidi_resp.message().await?.unwrap();
+    assert_eq!(resp.message, "2");
 
     Ok(())
 }
