@@ -65,8 +65,8 @@ async fn test_webrtc_bidi() -> Result<()> {
     let c = dial().await?;
 
     // This variable gates when we send the last request.
-    let send_last = Arc::new(RwLock::new(false));
-    let send_last_async = Arc::clone(&send_last);
+    let received = Arc::new(RwLock::new(0));
+    let received_async = Arc::clone(&received);
 
     let bidi_stream = async_stream::stream! {
         for i in 0..2 {
@@ -79,11 +79,11 @@ async fn test_webrtc_bidi() -> Result<()> {
 
         log::info!("waiting...");
         loop {
-            let sleep_time = std::time::Duration::from_millis(1000);
+            let sleep_time = std::time::Duration::from_millis(100);
             tokio::time::sleep(sleep_time).await;
 
-            let value = send_last_async.read().unwrap();
-            if *value {
+            let value = received_async.read().unwrap();
+            if *value == 2 {
                 break;
             }
             log::info!("still waiting...");
@@ -102,15 +102,17 @@ async fn test_webrtc_bidi() -> Result<()> {
 
     let resp = bidi_resp.message().await?.unwrap();
     assert_eq!(resp.message, "0");
-    log::info!("got 0!");
 
-    let mut lock = send_last.write().unwrap();
-    *lock = true;
-    drop(lock);
+    let mut count = received.write().unwrap();
+    *count += 1;
+    drop(count);
 
     let resp = bidi_resp.message().await?.unwrap();
     assert_eq!(resp.message, "1");
-    log::info!("got 1!");
+
+    let mut count = received.write().unwrap();
+    *count += 1;
+    drop(count);
 
     let resp = bidi_resp.message().await?.unwrap();
     assert_eq!(resp.message, "2");
