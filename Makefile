@@ -16,6 +16,6 @@ buf:	buf-install buf-clean
 tests/goutils:
 	git clone --depth=1 https://github.com/viamrobotics/goutils.git tests/goutils
 test: buf tests/goutils build
-	./etc/test.sh
+	timeout 1m ./etc/test.sh
 test-server: tests/goutils
 	./etc/run_echo_server.sh 8080
