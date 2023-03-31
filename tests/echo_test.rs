@@ -2,7 +2,7 @@
 /// update the credentials and uri as necessary.
 use anyhow::Result;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::echo_service_client::EchoServiceClient;
 use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
     EchoBiDiRequest, EchoMultipleRequest, EchoRequest,
@@ -65,7 +65,7 @@ async fn test_webrtc_bidi() -> Result<()> {
     let c = dial().await?;
 
     // This variable gates when we send the last request.
-    let send_last = Arc::new(Mutex::new(false));
+    let send_last = Arc::new(RwLock::new(false));
     let send_last_async = Arc::clone(&send_last);
 
     let bidi_stream = async_stream::stream! {
@@ -82,12 +82,10 @@ async fn test_webrtc_bidi() -> Result<()> {
             let sleep_time = std::time::Duration::from_millis(1000);
             tokio::time::sleep(sleep_time).await;
 
-            let lock = send_last_async.lock().unwrap();
-            if *lock {
-                drop(lock);
+            let value = send_last_async.read().unwrap();
+            if *value {
                 break;
             }
-            drop(lock);
             log::info!("still waiting...");
         }
         // let sleep_time = std::time::Duration::from_millis(1000);
@@ -106,7 +104,7 @@ async fn test_webrtc_bidi() -> Result<()> {
     assert_eq!(resp.message, "0");
     log::info!("got 0!");
 
-    let mut lock = send_last.lock().unwrap();
+    let mut lock = send_last.write().unwrap();
     *lock = true;
     drop(lock);
 
