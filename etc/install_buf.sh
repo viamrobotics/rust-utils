@@ -9,7 +9,7 @@ if [[ -z "$1" ]]; then
 fi
 
 BIN="$1"
-VERSION="1.9.0"
+VERSION="1.16.0"
 
 mkdir -p "$BIN"
 curl -sSL \
