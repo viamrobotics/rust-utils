@@ -160,8 +160,8 @@ async fn test_dial_webrtc_server_stream() -> Result<()> {
 async fn test_dial_webrtc_bidi() -> Result<()> {
     let c = dial_webrtc().await?;
 
-    // TODO(RSDK-2414): ideally we should mix the timing of our requests and responses truly ensure that we
-    // support bi-directionality.
+    // TODO(RSDK-2414): ideally we should mix the timing of our requests and responses to ensure
+    // that we truly support bi-directionality.
     let bidi_stream = async_stream::stream! {
         for i in 0..3 {
             let request =
