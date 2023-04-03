@@ -156,30 +156,14 @@ async fn test_dial_webrtc_server_stream() -> Result<()> {
     Ok(())
 }
 
-#[ignore]
 #[tokio::test]
 async fn test_dial_webrtc_bidi() -> Result<()> {
     let c = dial_webrtc().await?;
 
-    let received = Arc::new(RwLock::new(0));
-    let received_async = Arc::clone(&received);
-
+    // TODO(RSDK-2414): ideally we should mix the timing of our requests and responses truly ensure that we
+    // support bi-directionality.
     let bidi_stream = async_stream::stream! {
         for i in 0..3 {
-            loop {
-                // We need to wait a small amount of time between each request/response count
-                // check, otherwise we lock up the main thread.
-                let sleep_time = std::time::Duration::from_millis(10);
-                tokio::time::sleep(sleep_time).await;
-
-                // Wait until we have received one response for each request before sending the
-                // next request. This allows requests/response to be interleaved.
-                let value = received_async.read().unwrap();
-                if *value == i {
-                    break;
-                }
-            }
-
             let request =
             EchoBiDiRequest {
                 message: i.to_string()
@@ -194,10 +178,6 @@ async fn test_dial_webrtc_bidi() -> Result<()> {
     for i in 0..3 {
         let resp = bidi_resp.message().await?.unwrap();
         assert_eq!(resp.message, i.to_string());
-
-        let mut count = received.write().unwrap();
-        *count += 1;
-        drop(count);
     }
 
     Ok(())
