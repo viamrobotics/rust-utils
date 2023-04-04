@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SERVER_PORT=8080
+SERVER_PORT=8081
 
 if lsof -i ":$SERVER_PORT" | grep -q LISTEN; then
     echo "port :$SERVER_PORT is in use"

@@ -18,4 +18,4 @@ tests/goutils:
 test: buf tests/goutils build
 	./etc/test.sh
 test-server: tests/goutils
-	./etc/run_echo_server.sh 8080
+	./etc/run_echo_server.sh 8081
