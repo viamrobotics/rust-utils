@@ -70,7 +70,7 @@ impl WebRTCClientStream {
         };
 
         if let Some(e) = &err {
-            log::error!("received gRPC error: {e}");
+            log::debug!("received gRPC error: {e}");
         }
 
         self.base_stream.close_with_recv_error(&mut err.as_ref())
