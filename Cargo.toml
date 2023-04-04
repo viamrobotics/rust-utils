@@ -44,7 +44,10 @@ tower-http = { version = "0.3.3", features = ["add-extension","auth","propagate-
 tracing = {version = "0.1.34"}
 tracing-subscriber = {version = "0.3.11", features = ["env-filter"]}
 webpki-roots = "0.21.1"
-webrtc = "0.7.1"
+# TODO: We are using a commit hash to include a bug fix that has not yet been
+# released in a crate. Once the new crate is released, please use that instead
+# of the git revision below. As of this comment the latest version is `0.7.1`.
+webrtc = { git = "https://github.com/webrtc-rs/webrtc.git", rev = "5aa49c03a183a610b44fe01e9531508e4fddecb1" }
 
 [dev-dependencies]
 async-stream = "0.3.3"
