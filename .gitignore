@@ -3,3 +3,9 @@ target/
 **/*.rs.bk
 
 *.DS_Store
+
+# make tools bin
+bin/
+
+# goutils
+tests/goutils/
