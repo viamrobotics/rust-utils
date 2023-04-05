@@ -44,7 +44,7 @@ impl WebRTCClientStream {
         Ok(())
     }
 
-    async fn process_trailers(&mut self, trailers: ResponseTrailers) -> Result<()> {
+    async fn process_trailers(&mut self, trailers: ResponseTrailers) {
         let trailers_to_send = trailers_from_proto(trailers.clone());
         if let Err(e) = self
             .base_stream
@@ -69,14 +69,11 @@ impl WebRTCClientStream {
             }
         };
 
-        self.base_stream.close_with_recv_error(&mut err.as_ref());
-        match err {
-            None => Ok(()),
-            Some(err) => {
-                log::error!("Error processing trailers: {err}");
-                Err(err)
-            }
+        if let Some(e) = &err {
+            log::debug!("received gRPC error: {e}");
         }
+
+        self.base_stream.close_with_recv_error(&mut err.as_ref())
     }
 
     // processes response.
@@ -114,7 +111,7 @@ impl WebRTCClientStream {
                 self.process_message(message.to_owned()).await
             }
 
-            Some(Type::Trailers(trailers)) => self.process_trailers(trailers.to_owned()).await,
+            Some(Type::Trailers(trailers)) => Ok(self.process_trailers(trailers.to_owned()).await),
             None => Ok(()),
         }
     }
