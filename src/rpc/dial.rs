@@ -58,6 +58,8 @@ use tower_http::set_header::{SetRequestHeader, SetRequestHeaderLayer};
 // gRPC status codes
 const STATUS_CODE_OK: i32 = 0;
 const STATUS_CODE_UNKNOWN: i32 = 2;
+const STATUS_CODE_RESOURCE_EXHAUSTED: i32 = 8;
+
 const SERVICE_NAME: &'static str = "_rpc._tcp.local";
 
 type SecretType = String;
@@ -85,6 +87,60 @@ impl RPCCredentials {
     }
 }
 
+impl ViamChannel {
+    async fn create_resp(
+        channel: &mut Arc<WebRTCClientChannel>,
+        stream: crate::gen::proto::rpc::webrtc::v1::Stream,
+        request: http::Request<BoxBody>,
+        response: http::response::Builder,
+    ) -> http::Response<Body> {
+        let (parts, body) = request.into_parts();
+        let mut status_code = STATUS_CODE_OK;
+        let stream_id = stream.id;
+        let metadata = Some(metadata_from_parts(&parts));
+        let headers = RequestHeaders {
+            method: parts
+                .uri
+                .path_and_query()
+                .map(PathAndQuery::to_string)
+                .unwrap_or_default(),
+            metadata,
+            timeout: None,
+        };
+
+        if let Err(e) = channel.write_headers(&stream, headers).await {
+            log::error!("error writing headers: {e}");
+            channel.close_stream_with_recv_error(stream_id, e);
+            status_code = STATUS_CODE_UNKNOWN;
+        }
+
+        let data = hyper::body::to_bytes(body).await.unwrap().to_vec();
+        if let Err(e) = channel.write_message(false, Some(stream), data).await {
+            log::error!("error sending message: {e}");
+            channel.close_stream_with_recv_error(stream_id, e);
+            status_code = STATUS_CODE_UNKNOWN;
+        };
+
+        let body = match channel.resp_body_from_stream(stream_id) {
+            Ok(body) => body,
+            Err(e) => {
+                log::error!("error receiving response from stream: {e}");
+                channel.close_stream_with_recv_error(stream_id, e);
+                status_code = STATUS_CODE_UNKNOWN;
+                Body::empty()
+            }
+        };
+
+        let response = if status_code != STATUS_CODE_OK {
+            response.header("grpc-status", &status_code.to_string())
+        } else {
+            response
+        };
+
+        response.body(body).unwrap()
+    }
+}
+
 impl Service<http::Request<BoxBody>> for ViamChannel {
     type Response = http::Response<Body>;
     type Error = tonic::transport::Error;
@@ -101,60 +157,27 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
         match self {
             Self::Direct(channel) => Box::pin(channel.call(request)),
             Self::WebRTC(channel) => {
-                let mut status_code = STATUS_CODE_OK;
-                let channel = channel.clone();
+                let mut channel = channel.clone();
                 let fut = async move {
-                    let (parts, body) = request.into_parts();
-
-                    let stream = channel.new_stream();
-                    let stream_id = stream.id;
-                    let metadata = Some(metadata_from_parts(&parts));
-                    let headers = RequestHeaders {
-                        method: parts
-                            .uri
-                            .path_and_query()
-                            .map(PathAndQuery::to_string)
-                            .unwrap_or_default(),
-                        metadata,
-                        timeout: None,
-                    };
-
-                    if let Err(e) = channel.write_headers(&stream, headers).await {
-                        log::error!("error writing headers: {e}");
-                        channel.close_stream_with_recv_error(stream_id, e);
-                        status_code = STATUS_CODE_UNKNOWN;
-                    }
-
-                    let data = hyper::body::to_bytes(body).await.unwrap().to_vec();
-                    if let Err(e) = channel.write_message(false, Some(stream), data).await {
-                        log::error!("error sending message: {e}");
-                        channel.close_stream_with_recv_error(stream_id, e);
-                        status_code = STATUS_CODE_UNKNOWN;
-                    };
-
-                    let body = match channel.resp_body_from_stream(stream_id) {
-                        Ok(body) => body,
-                        Err(e) => {
-                            log::error!("error receiving response from stream: {e}");
-                            channel.close_stream_with_recv_error(stream_id, e);
-                            status_code = STATUS_CODE_UNKNOWN;
-                            Body::empty()
-                        }
-                    };
-
                     let response = http::response::Response::builder()
                         // standardized gRPC headers.
                         .header("content-type", "application/grpc")
                         .version(Version::HTTP_2);
 
-                    let response = if status_code != STATUS_CODE_OK {
-                        response.header("grpc-status", &status_code.to_string())
-                    } else {
-                        response
-                    };
+                    match channel.new_stream() {
+                        Err(e) => {
+                            log::error!("{e}");
+                            let response = response
+                                .header("grpc-status", &STATUS_CODE_RESOURCE_EXHAUSTED.to_string())
+                                .body(Body::default())
+                                .unwrap();
 
-                    let response = response.body(Body::from(body)).unwrap();
-                    Ok(response)
+                            Ok(response)
+                        }
+                        Ok(stream) => {
+                            Ok(Self::create_resp(&mut channel, stream, request, response).await)
+                        }
+                    }
                 };
                 Box::pin(fut)
             }
