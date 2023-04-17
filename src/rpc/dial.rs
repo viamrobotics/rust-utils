@@ -23,22 +23,17 @@ use ::http::{
     uri::{Authority, Parts, PathAndQuery, Scheme},
     HeaderValue, Version,
 };
-use ::mdns::mDNSListener;
-use ::webrtc::mdns::{
-    self,
-    conn::{DnsConn, DEFAULT_DEST_ADDR},
-};
+use ::mdns::{discover, Response};
+use ::webrtc::ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateInit};
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use ::webrtc::{
-    ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
-    mdns::config::Config,
-};
 use anyhow::{Context, Result};
 use core::fmt;
+use futures::stream::FuturesUnordered;
 use futures_util::{pin_mut, stream::StreamExt};
-//use mdns::Response;
+use interfaces::Interface;
 use std::{
     collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock,
@@ -46,7 +41,6 @@ use std::{
     task::{Context as TaskContext, Poll},
     time::Duration,
 };
-use tokio::sync::mpsc;
 use tonic::codegen::{http, BoxFuture};
 use tonic::transport::{Body, Channel, Uri};
 use tonic::{body::BoxBody, transport::ClientTlsConfig};
@@ -407,123 +401,103 @@ impl DialBuilder<WithCredentials> {
         }
     }
 
+    async fn get_addr_from_interface(iface: Interface, candidates: &Vec<String>) -> Option<String> {
+        let addresses: Vec<Ipv4Addr> = iface
+            .addresses
+            .clone()
+            .iter()
+            .filter_map(|addr| {
+                addr.addr
+                    .map(|ip| match ip.ip() {
+                        IpAddr::V4(v4) => Some(v4.clone()),
+                        IpAddr::V6(_) => None,
+                    })
+                    .flatten()
+            })
+            .collect();
+
+        let mut resp: Option<Response> = None;
+        for ipv4 in addresses {
+            let discovery = discover::interface(SERVICE_NAME, Duration::from_secs(1), ipv4).ok()?;
+            let stream = discovery.listen();
+            pin_mut!(stream);
+            while let Some(Ok(response)) = stream.next().await {
+                if let Some(hostname) = response.hostname() {
+                    for c in candidates {
+                        if hostname.contains(c) {
+                            resp = Some(response);
+                            break;
+                        }
+                    }
+                }
+                if resp.is_some() {
+                    break;
+                }
+            }
+        }
+
+        let resp = resp?;
+        let mut has_grpc = false;
+        let mut has_webrtc = false;
+        for field in resp.txt_records() {
+            has_grpc = has_grpc || field.contains("grpc");
+            has_webrtc = has_webrtc || field.contains("webrtc");
+        }
+
+        let ip_addr = match resp.ip_addr() {
+            Some(std::net::IpAddr::V4(ip_v4)) => Some(ip_v4),
+            Some(std::net::IpAddr::V6(_)) | None => None,
+        };
+
+        if !(has_grpc || has_webrtc) || ip_addr.is_none() {
+            return None;
+        }
+        let mut local_addr = ip_addr?.to_string();
+        local_addr.push(':');
+        local_addr.push_str(&resp.port()?.to_string());
+        Some(local_addr)
+    }
+
     async fn get_mdns_uri(&self) -> Option<Parts> {
-        // CR erodkin: 10.1.12.11:36103
         if self.config.disable_mdns {
             return None;
         }
 
-        let uri = self.duplicate_uri()?;
+        let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
-        let candidate2 = candidate.replace(".", "-");
-        let candidates: Vec<String> = vec![candidate2, candidate]
-            //let candidates: Vec<String> = candidates
-            .iter()
-            .map(|s| {
-                let mut c = s.clone();
-                c.push('.');
-                c.push_str(SERVICE_NAME);
-                c
-            })
-            .collect();
-        println!("{candidates:?}");
 
-        //let candidates = vec![candidate.replace(".", "-"), candidate.to_string()];
+        let candidates: Vec<String> = vec![candidate.replace(".", "-"), candidate];
 
-        println!("Getting mdns uri");
-        let mut local_name = candidates.first()?.clone();
-        local_name.push('.');
-        local_name.push_str(SERVICE_NAME);
+        let ifaces = Interface::get_all().ok()?;
 
-        let server = match DnsConn::server(
-            "0.0.0.0:5353".parse().unwrap(),
-            Config {
-                query_interval: Duration::from_secs(1),
-                local_names: vec![local_name.clone()],
-            },
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                println!("Error here! {e}");
-                return None;
-            }
-        };
-
-        println!("Getting mdns uri2");
-        let (_snd, recv) = mpsc::channel(1);
-        let (answer, src) = match server.query(&local_name, recv).await {
-            Ok((a, s)) => (a, s),
-            Err(e) => {
-                println!("Errre here: {e}");
-                return None;
-            }
-        };
-        println!("{answer:?}, {src:?}");
-
-        if src.is_ipv6() {
-            return None;
+        let mut iface_futures = FuturesUnordered::new();
+        for iface in ifaces {
+            iface_futures.push(Self::get_addr_from_interface(iface, &candidates));
         }
 
-        let mut parts = uri_parts_with_defaults(&src.to_string());
-        parts.scheme = Some(Scheme::HTTP);
-        Some(parts)
+        let mut local_addr: Option<String> = None;
+        while let Some(maybe_addr) = iface_futures.next().await {
+            if maybe_addr.is_some() {
+                local_addr = maybe_addr;
+                break;
+            }
+        }
+        let local_addr = match local_addr {
+            None => {
+                log::debug!("Unable to connect via mDNS");
+                return None;
+            }
+            Some(addr) => {
+                log::debug!("Found address via mDNS: {addr}");
+                addr
+            }
+        };
 
-        //let candidates = vec![candidate.replace(".", "-"), candidate.to_string()];
+        let auth = local_addr.parse::<Authority>().ok()?;
+        uri.authority = Some(auth);
+        uri.scheme = Some(Scheme::HTTP);
 
-        //let stream = match mdns::discover::all(SERVICE_NAME, Duration::from_secs(1)) {
-        //Ok(s) => s,
-        //Err(e) => {
-        //log::debug!("Unable to connect to stream: {e}");
-        //return None;
-        //}
-        //}
-        //.listen();
-        //pin_mut!(stream);
-        //let mut resp: Option<Response> = None;
-        //while let Some(Ok(response)) = stream.next().await {
-        //if let Some(hostname) = response.hostname() {
-        //println!("got hostname: {hostname}");
-        //for c in &candidates {
-        //if hostname.contains(c) {
-        //resp = Some(response);
-        //break;
-        //}
-        //}
-        //}
-        //if resp.is_some() {
-        //break;
-        //}
-        //}
-
-        //let mut has_grpc = false;
-        //let mut has_webrtc = false;
-
-        //let resp = resp?;
-        //for field in resp.txt_records() {
-        //has_grpc = has_grpc || field.contains("grpc");
-        //has_webrtc = has_webrtc || field.contains("webrtc");
-        //}
-
-        //let ip_addr = match resp.ip_addr() {
-        //Some(std::net::IpAddr::V4(ip_v4)) => Some(ip_v4),
-        //Some(std::net::IpAddr::V6(_)) | None => None,
-        //};
-
-        //if !(has_grpc || has_webrtc) || ip_addr.is_none() {
-        //log::debug!("Unable to connect via mDNS");
-        //return None;
-        //}
-
-        //let mut local_addr = ip_addr?.to_string();
-        //local_addr.push(':');
-        //local_addr.push_str(&resp.port()?.to_string());
-        //log::debug!("Found address via mDNS: {local_addr}");
-
-        //let auth = local_addr.parse::<Authority>().ok()?;
-        //uri.authority = Some(auth);
-        //uri.scheme = Some(Scheme::HTTP);
-
-        //Some(uri)
+        Some(uri)
     }
 
     async fn connect_inner(
@@ -573,8 +547,6 @@ impl DialBuilder<WithCredentials> {
                     log::debug!(
                         "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
                     );
-                } else {
-                    println!("We weren't even trying mDNS all good");
                 }
                 Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
             }
