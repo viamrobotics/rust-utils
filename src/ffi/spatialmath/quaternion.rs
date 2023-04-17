@@ -1,8 +1,8 @@
 use ffi_helpers::null_pointer_check;
 use libc::c_double;
-use nalgebra::{Quaternion, Vector3, UnitQuaternion, Normed, UnitVector3};
+use nalgebra::{Quaternion, Vector3, UnitQuaternion, Normed, UnitVector3, Rotation3};
 
-use crate::ffi::spatialmath::vector3::to_raw_pointer as vec_to_raw_pointer;
+use crate::{ffi::spatialmath::vector3::to_raw_pointer as vec_to_raw_pointer, spatialmath::utils::{OrientationVector, rotate_vector_by_quaternion}};
 
 /// The FFI interface wrapper around the nalgebra crate for Quaternion functions 
 /// and initialization. All public functions are meant to be called externally 
@@ -215,6 +215,23 @@ pub unsafe extern "C" fn quaternion_get_normalized(quat_ptr: *const Quaternion<f
     to_raw_pointer(&(*quat_ptr).normalize())
 }
 
+/// Returns the result of rotating a vector by a quaternion
+/// 
+/// # Safety
+/// 
+/// The caller must remember to free the quaternion memory and
+/// the memory of both vectors when finished with them using the
+/// free_quaternion_memory and free_vector_memory FFI functions
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_rotate_vector(
+    quat_ptr: *const Quaternion<f64>, vec_ptr: *const Vector3<f64>
+) -> *mut Vector3<f64> {
+    null_pointer_check!(quat_ptr);
+    null_pointer_check!(vec_ptr);
+    let rotated = rotate_vector_by_quaternion(&*quat_ptr, &*vec_ptr);
+    vec_to_raw_pointer(rotated)
+}
+
 /// Converts from euler angles (in radians) to a quaternion. The euler angles are expected to
 /// be represented according to the Tait-Bryan formalism and applied in the Z-Y'-X"
 /// order (where Z -> yaw, Y -> pitch, X -> roll)
@@ -267,6 +284,37 @@ pub unsafe extern "C" fn quaternion_from_axis_angle_vector(
     let axis_angle_vec_normed = UnitVector3::new_normalize(*axis_angle_vec_ptr);
     let unit_quat = UnitQuaternion::from_axis_angle(&axis_angle_vec_normed, theta);
     to_raw_pointer(unit_quat.quaternion())
+}
+
+/// Converts from a pointer to a Rotation3<f64> to a quaternion
+/// 
+/// # Safety
+/// 
+/// When finished with the underlying quaternion initialized by this function
+/// the caller must remember to free the quaternion memory using the 
+/// free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_from_rotation_matrix(
+    rot_ptr: *const Rotation3<f64>
+) -> *mut Quaternion<f64> {
+    null_pointer_check!(rot_ptr);
+    let unit_quat = UnitQuaternion::from_rotation_matrix(&*rot_ptr);
+    to_raw_pointer(unit_quat.quaternion())
+}
+
+/// Converts from a pointer to an OrientationVector to a quaternion
+/// 
+/// # Safety
+/// 
+/// When finished with the underlying quaternion initialized by this function
+/// the caller must remember to free the quaternion memory using the 
+/// free_quaternion_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn quaternion_from_orientation_vector(
+    o_vec_ptr: *const OrientationVector
+) -> *mut Quaternion<f64> {
+    null_pointer_check!(o_vec_ptr);
+    to_raw_pointer(&(*o_vec_ptr).to_quaternion())
 }
 
 /// Scales an existing quaternion stored at the address of 

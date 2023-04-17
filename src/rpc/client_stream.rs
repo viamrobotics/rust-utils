@@ -69,6 +69,10 @@ impl WebRTCClientStream {
             }
         };
 
+        if let Some(e) = &err {
+            log::debug!("received gRPC error: {e}");
+        }
+
         self.base_stream.close_with_recv_error(&mut err.as_ref())
     }
 
@@ -107,10 +111,7 @@ impl WebRTCClientStream {
                 self.process_message(message.to_owned()).await
             }
 
-            Some(Type::Trailers(trailers)) => {
-                self.process_trailers(trailers.to_owned()).await;
-                Ok(())
-            }
+            Some(Type::Trailers(trailers)) => Ok(self.process_trailers(trailers.to_owned()).await),
             None => Ok(()),
         }
     }

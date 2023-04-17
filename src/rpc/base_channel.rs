@@ -26,6 +26,12 @@ impl Debug for WebRTCBaseChannel {
     }
 }
 
+impl Drop for WebRTCBaseChannel {
+    fn drop(&mut self) {
+        log::debug!("Dropping base channel {self:?}");
+    }
+}
+
 impl WebRTCBaseChannel {
     pub(crate) async fn new(
         peer_connection: Arc<RTCPeerConnection>,
@@ -33,23 +39,24 @@ impl WebRTCBaseChannel {
     ) -> Arc<Self> {
         let dc = data_channel.clone();
         let pc = Arc::downgrade(&peer_connection);
-        peer_connection
-            .on_ice_connection_state_change(Box::new(move |conn_state| {
-                let pc = match pc.upgrade(){
-                    Some(pc) => pc,
-                    None => return Box::pin(async  {}),
-                };
-                Box::pin(async move {
-                    let sctp = pc.sctp();
-                    let transport = sctp.transport();
-                    let transport = transport.ice_transport();
-                    let candidate_pair = transport.get_selected_candidate_pair().await;
-                    log::info!(
-                        "Selected candidate pair. Pair: {candidate_pair:?}. ID: {}. Current connection state: {conn_state}",
-                        pc.get_stats_id()
-                    );
-                })
-            }));
+        peer_connection.on_ice_connection_state_change(Box::new(move |conn_state| {
+            let pc = match pc.upgrade() {
+                Some(pc) => pc,
+                None => return Box::pin(async {}),
+            };
+            Box::pin(async move {
+                let sctp = pc.sctp();
+                let transport = sctp.transport();
+                let transport = transport.ice_transport();
+                let candidate_pair = transport.get_selected_candidate_pair().await;
+                log::info!(
+                    "Selected candidate pair. Pair: {:?}. ID: {}. Current connection state: {}",
+                    candidate_pair,
+                    conn_state,
+                    pc.get_stats_id()
+                );
+            })
+        }));
 
         let channel = Arc::new(Self {
             peer_connection,
@@ -60,27 +67,28 @@ impl WebRTCBaseChannel {
 
         let c = Arc::downgrade(&channel);
         dc.on_error(Box::new(move |err: webrtc::Error| {
+            log::error!("Data channel error: {err}");
             let c = match c.upgrade() {
                 Some(c) => c,
                 None => return Box::pin(async {}),
             };
             Box::pin(async move {
-                if let Err(e) = c.close_with_reason(Some(anyhow::Error::from(err))).await {
-                    log::error!("error closing channel: {e}")
-                }
+                let mut err = Some(anyhow::Error::from(err));
+                c.closed_reason.store(&mut err, Ordering::Release);
             })
         }));
 
         channel
     }
 
-    async fn close_with_reason(&self, err: Option<anyhow::Error>) -> Result<()> {
-        let mut err = err;
+    /// Closes the channel
+    #[allow(dead_code)]
+    pub async fn close(&self) -> Result<()> {
+        log::debug!("Closing base channel");
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
         self.closed.store(true, Ordering::Release);
-        self.closed_reason.store(&mut err, Ordering::Release);
 
         self.peer_connection
             .close()
@@ -88,11 +96,6 @@ impl WebRTCBaseChannel {
             .map_err(anyhow::Error::from)
     }
 
-    /// Closes the channel
-    #[allow(dead_code)]
-    pub async fn close(&self) -> Result<()> {
-        self.close_with_reason(None).await
-    }
     /// Returns whether or not the channel is closed
     #[allow(dead_code)]
     pub fn is_closed(&self) -> bool {

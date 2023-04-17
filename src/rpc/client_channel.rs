@@ -4,14 +4,14 @@ use crate::gen::proto::rpc::webrtc::v1::{
     RequestMessage, Response, Stream,
 };
 use anyhow::Result;
-use chashmap::CHashMap;
+use dashmap::DashMap;
 use hyper::Body;
 use prost::Message;
 use std::{
     fmt::Debug,
     sync::{
         atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
-        Arc,
+        Arc, RwLock,
     },
 };
 use webrtc::{
@@ -21,13 +21,18 @@ use webrtc::{
 
 // see golang/client_stream.go
 const MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE: usize = 16373;
+// 256 is an arbitrarily high number for maximum concurrent streams, determined based on
+// analogous value in goutils
+const MAX_CONCURRENT_STREAM_COUNT: usize = 256;
 
 /// The client-side implementation of a webRTC connection channel.
 pub struct WebRTCClientChannel {
     pub(crate) base_channel: Arc<WebRTCBaseChannel>,
     stream_id_counter: AtomicU64,
-    pub(crate) streams: CHashMap<u64, WebRTCClientStream>,
-    pub(crate) receiver_bodies: CHashMap<u64, hyper::Body>,
+    pub(crate) streams: DashMap<u64, WebRTCClientStream>,
+    pub(crate) receiver_bodies: DashMap<u64, hyper::Body>,
+    // String type rather than error type because anyhow::Error does not derive clone
+    pub(crate) error: RwLock<Option<String>>,
 }
 
 impl Debug for WebRTCClientChannel {
@@ -41,14 +46,6 @@ impl Debug for WebRTCClientChannel {
 
 impl Drop for WebRTCClientChannel {
     fn drop(&mut self) {
-        let bc = self.base_channel.clone();
-        if !bc.is_closed() {
-            let _ = tokio::spawn(async move {
-                if let Err(e) = bc.close().await {
-                    log::error!("Error closing base channel: {e}");
-                }
-            });
-        };
         log::debug!("Dropping client channel {:?}", &self);
     }
 }
@@ -59,16 +56,19 @@ impl WebRTCClientChannel {
         self.base_channel.data_channel.close().await.unwrap();
         self.base_channel.peer_connection.close().await.unwrap();
     }
+
     pub(crate) async fn new(
         peer_connection: Arc<RTCPeerConnection>,
         data_channel: Arc<RTCDataChannel>,
     ) -> Arc<Self> {
         let base_channel = WebRTCBaseChannel::new(peer_connection, data_channel.clone()).await;
+        let error = RwLock::new(None);
         let channel = Self {
+            error,
             base_channel,
-            streams: CHashMap::new(),
+            streams: DashMap::new(),
             stream_id_counter: AtomicU64::new(0),
-            receiver_bodies: CHashMap::new(),
+            receiver_bodies: DashMap::new(),
         };
 
         let channel = Arc::new(channel);
@@ -84,8 +84,14 @@ impl WebRTCClientChannel {
                         return;
                     }
                 };
-                if let Err(e) = channel.on_channel_message(msg).await {
-                    log::error!("error deserializing message: {e}");
+                let maybe_err = channel.on_channel_message(msg).await;
+                let mut err = channel.error.write().unwrap();
+                match maybe_err {
+                    Err(e) => {
+                        log::error!("error deserializing message: {e}");
+                        *err = Some(e.to_string());
+                    }
+                    Ok(()) => *err = None,
                 }
             })
         }));
@@ -93,7 +99,12 @@ impl WebRTCClientChannel {
         ret_channel
     }
 
-    pub(crate) fn new_stream(&self) -> Stream {
+    pub(crate) fn new_stream(&self) -> Result<Stream> {
+        if self.streams.len() >= MAX_CONCURRENT_STREAM_COUNT {
+            return Err(anyhow::anyhow!(
+                "Reached max concurrent stream cap of {MAX_CONCURRENT_STREAM_COUNT}; unable to add new stream."
+            ));
+        }
         let id = self.stream_id_counter.fetch_add(1, Ordering::AcqRel);
         let stream = Stream { id };
         let (message_sender, receiver_body) = hyper::Body::channel();
@@ -114,12 +125,11 @@ impl WebRTCClientChannel {
 
         let _ = self.streams.insert(id, client_stream);
         let _ = self.receiver_bodies.insert(id, receiver_body);
-        stream
+        Ok(stream)
     }
 
     async fn on_channel_message(&self, msg: DataChannelMessage) -> Result<()> {
         let response = Response::decode(&*msg.data.to_vec())?;
-        let should_drop_stream = matches!(response.r#type, Some(RespType::Trailers(_)));
         let (active_stream, stream_id) = match response.stream.as_ref() {
             None => {
                 log::error!(
@@ -141,25 +151,26 @@ impl WebRTCClientChannel {
             }
         };
 
-        match active_stream {
-            Ok(mut active_stream) => active_stream.on_response(response).await?,
-            Err(e) => {
-                log::error!("Error acquiring active stream: {e}");
-                return Ok(());
-            }
+        let should_drop_stream = matches!(response.r#type, Some(RespType::Trailers(_)));
+
+        let maybe_err = match active_stream {
+            Ok(mut active_stream) => active_stream.on_response(response).await,
+            Err(e) => Err(anyhow::anyhow!("Error acquiring active stream: {e}")),
         };
+
         if should_drop_stream {
             self.streams.remove(&stream_id);
         }
-        Ok(())
+        maybe_err
     }
 
     pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
-        self.receiver_bodies
-            .remove(&stream_id)
-            .ok_or(anyhow::anyhow!(
+        match self.receiver_bodies.remove(&stream_id) {
+            Some(entry) => Ok(entry.1),
+            None => Err(anyhow::anyhow!(
                 "Tried to receive stream {stream_id} but it didn't exist!"
-            ))
+            )),
+        }
     }
 
     pub(crate) async fn write_headers(
@@ -278,7 +289,7 @@ impl WebRTCClientChannel {
 
     pub(crate) fn close_stream_with_recv_error(&self, stream_id: u64, error: anyhow::Error) {
         match self.streams.remove(&stream_id) {
-            Some(stream) => stream.base_stream.close_with_recv_error(&mut Some(&error)),
+            Some(entry) => entry.1.base_stream.close_with_recv_error(&mut Some(&error)),
             None => {
                 log::error!("attempted to close stream with id {stream_id}, but it wasn't found!")
             }

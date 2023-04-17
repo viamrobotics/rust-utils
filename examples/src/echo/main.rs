@@ -9,13 +9,15 @@ use viam::rpc::dial;
 /// Tests unary, server, and bidi streaming with simple echo requests. To run, simply
 /// update the credentials and uri as necessary.
 async fn main() -> Result<()> {
-    let creds = dial::CredentialsExt::new(
+    env_logger::init();
+    let creds = dial::RPCCredentials::new(
+        None,
         "robot-location-secret".to_string(),
-        "ytexnwei4fu1xv9csoqxfv4ckl3htsb49mzzey5t15xo9swy".to_string(),
+        "<your secret here>".to_string(),
     );
 
     let c = dial::DialOptions::builder()
-        .uri("webrtc-test-main.jkek76kqnh.viam.cloud")
+        .uri("<your robot address here>")
         .with_credentials(creds)
         .allow_downgrade()
         .connect()

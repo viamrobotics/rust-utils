@@ -333,6 +333,15 @@ pub(crate) fn trailers_from_proto(proto: ResponseTrailers) -> HeaderMap {
         None => "0".to_string(),
     };
 
+    match proto.status {
+        Some(ref status) => {
+            let key = HeaderName::from_str("Grpc-Message").unwrap();
+            let val = HeaderValue::from_str(&status.message).unwrap();
+            trailers.insert(key, val);
+        }
+        None => (),
+    }
+
     let k = match HeaderName::from_str(status_name) {
         Ok(k) => k,
         Err(e) => {
