@@ -472,6 +472,8 @@ impl DialBuilder<WithCredentials> {
 
         let mut iface_futures = FuturesUnordered::new();
         for iface in ifaces {
+            // CR erodkin: delete me
+            log::debug!("iface: {iface:?}");
             iface_futures.push(Self::get_addr_from_interface(iface, &candidates));
         }
 
