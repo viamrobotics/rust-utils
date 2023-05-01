@@ -418,11 +418,13 @@ impl DialBuilder<WithCredentials> {
 
         let mut resp: Option<Response> = None;
         for ipv4 in addresses {
+            log::debug!("Trying to find resp for ip {ipv4:?}");
             let discovery = discover::interface(SERVICE_NAME, Duration::from_secs(1), ipv4).ok()?;
             let stream = discovery.listen();
             pin_mut!(stream);
             while let Some(Ok(response)) = stream.next().await {
                 if let Some(hostname) = response.hostname() {
+                    log::debug!("found hostname {hostname}");
                     for c in candidates {
                         if hostname.contains(c) {
                             resp = Some(response);
