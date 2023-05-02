@@ -97,8 +97,7 @@ impl fmt::Debug for Options {
 
 impl Options {
     pub(crate) fn infer_signaling_server_address(uri: &Uri) -> Option<(String, bool)> {
-        // TODO(RSDK-235): remove hard coding of signaling server
-        // address and prefer SRV lookup instead
+        // TODO(RSDK-235): remove hard coding of signaling server address and prefer SRV lookup instead
         let path = uri.to_string();
         if path.contains(".viam.cloud") {
             Some(("app.viam.com:443".to_string(), true))
@@ -288,9 +287,12 @@ pub(crate) async fn new_peer_connection_for_client(
     Ok((peer_connection, data_channel))
 }
 
-pub(crate) async fn webrtc_action_with_timeout<T>(f: impl Future<Output = T>) -> Result<T> {
+pub(crate) async fn action_with_timeout<T>(
+    f: impl Future<Output = T>,
+    timeout: Duration,
+) -> Result<T> {
     tokio::pin! {
-        let timeout = tokio::time::sleep(WEBRTC_TIMEOUT);
+        let timeout = tokio::time::sleep(timeout);
         let f = f;
     }
 
@@ -304,6 +306,10 @@ pub(crate) async fn webrtc_action_with_timeout<T>(f: impl Future<Output = T>) ->
             }
         }
     }
+}
+
+pub(crate) async fn webrtc_action_with_timeout<T>(f: impl Future<Output = T>) -> Result<T> {
+    action_with_timeout(f, WEBRTC_TIMEOUT).await
 }
 
 pub(crate) fn trailers_from_proto(proto: ResponseTrailers) -> HeaderMap {

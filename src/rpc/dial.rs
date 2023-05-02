@@ -23,21 +23,27 @@ use ::http::{
     uri::{Authority, Parts, PathAndQuery, Scheme},
     HeaderValue, Version,
 };
+use ::mdns::{discover, Response};
 use ::webrtc::ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateInit};
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use anyhow::{Context, Result};
 use core::fmt;
+use futures::stream::FuturesUnordered;
+use futures_util::{pin_mut, stream::StreamExt};
+use interfaces::Interface;
 use std::{
     collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock,
     },
     task::{Context as TaskContext, Poll},
+    time::Duration,
 };
-use tonic::body::BoxBody;
 use tonic::codegen::{http, BoxFuture};
 use tonic::transport::{Body, Channel, Uri};
+use tonic::{body::BoxBody, transport::ClientTlsConfig};
 use tower::{Service, ServiceBuilder};
 use tower_http::auth::AddAuthorization;
 use tower_http::auth::AddAuthorizationLayer;
@@ -47,6 +53,8 @@ use tower_http::set_header::{SetRequestHeader, SetRequestHeaderLayer};
 const STATUS_CODE_OK: i32 = 0;
 const STATUS_CODE_UNKNOWN: i32 = 2;
 const STATUS_CODE_RESOURCE_EXHAUSTED: i32 = 8;
+
+const SERVICE_NAME: &'static str = "_rpc._tcp.local";
 
 type SecretType = String;
 
@@ -177,6 +185,7 @@ pub struct DialOptions {
     credentials: Option<RPCCredentials>,
     webrtc_options: Option<Options>,
     uri: Option<Parts>,
+    disable_mdns: bool,
     allow_downgrade: bool,
     insecure: bool,
 }
@@ -217,6 +226,7 @@ impl DialOptions {
                 credentials: None,
                 uri: None,
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -234,6 +244,7 @@ impl DialBuilder<WantsUri> {
                 credentials: None,
                 uri: Some(uri_parts),
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -249,6 +260,7 @@ impl DialBuilder<WantsCredentials> {
                 credentials: None,
                 uri: self.config.uri,
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -262,6 +274,7 @@ impl DialBuilder<WantsCredentials> {
                 credentials: Some(creds),
                 uri: self.config.uri,
                 allow_downgrade: false,
+                disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
             },
@@ -280,6 +293,11 @@ impl<T: AuthMethod> DialBuilder<T> {
         self.config.allow_downgrade = true;
         self
     }
+    /// Disables connection via mDNS
+    pub fn disable_mdns(mut self) -> Self {
+        self.config.disable_mdns = true;
+        self
+    }
 
     /// Overrides any default connection behavior, forcing direct connection. Note that
     /// the connection itself will fail if it is between a client and server on separate
@@ -289,33 +307,144 @@ impl<T: AuthMethod> DialBuilder<T> {
         self.config.webrtc_options = Some(webrtc_options);
         self
     }
-}
 
-impl DialBuilder<WithoutCredentials> {
-    /// attempts to establish a connection without credentials to the DialBuilder's given uri
-    pub async fn connect(self) -> Result<ViamChannel> {
-        let webrtc_options = self.config.webrtc_options;
-        let disable_webrtc = match &webrtc_options {
-            Some(options) => options.disable_webrtc,
-            None => false,
-        };
-        let mut uri_parts = self.config.uri.unwrap();
-        if self.config.insecure {
-            uri_parts.scheme = Some(Scheme::HTTP);
+    async fn get_addr_from_interface(iface: Interface, candidates: &Vec<String>) -> Option<String> {
+        let addresses: Vec<Ipv4Addr> = iface
+            .addresses
+            .clone()
+            .iter()
+            .filter_map(|addr| {
+                addr.addr
+                    .map(|ip| match ip.ip() {
+                        IpAddr::V4(v4) => Some(v4.clone()),
+                        IpAddr::V6(_) => None,
+                    })
+                    .flatten()
+            })
+            .collect();
+
+        let mut resp: Option<Response> = None;
+        for ipv4 in addresses {
+            let mut addr_to_send = "".to_string();
+            addr_to_send.push_str(candidates.last()?);
+            addr_to_send.push('.');
+            addr_to_send.push_str(SERVICE_NAME);
+
+            let discovery =
+                discover::interface_with_loopback(addr_to_send, Duration::from_secs(1), ipv4)
+                    .ok()?;
+            let stream = discovery.listen();
+            pin_mut!(stream);
+            while let Some(Ok(response)) = stream.next().await {
+                println!("response is {response:?}");
+                if let Some(hostname) = response.hostname() {
+                    if candidates.iter().any(|c| hostname.contains(c)) {
+                        resp = Some(response);
+                        break;
+                    }
+                }
+                if resp.is_some() {
+                    break;
+                }
+            }
         }
-        let uri = Uri::from_parts(uri_parts)?;
-        let uri2 = uri.clone();
-        let uri = infer_remote_uri_from_authority(uri);
-        let domain = uri2.authority().to_owned().unwrap().as_str();
-        let domain = amend_domain_if_local(domain);
 
-        let channel = Channel::builder(uri.clone())
+        let resp = resp?;
+        let mut has_grpc = false;
+        let mut has_webrtc = false;
+        for field in resp.txt_records() {
+            has_grpc = has_grpc || field.contains("grpc");
+            has_webrtc = has_webrtc || field.contains("webrtc");
+        }
+
+        let ip_addr = match resp.ip_addr() {
+            Some(std::net::IpAddr::V4(ip_v4)) => Some(ip_v4),
+            Some(std::net::IpAddr::V6(_)) | None => None,
+        };
+
+        if !(has_grpc || has_webrtc) || ip_addr.is_none() {
+            return None;
+        }
+        let mut local_addr = ip_addr?.to_string();
+        local_addr.push(':');
+        local_addr.push_str(&resp.port()?.to_string());
+        Some(local_addr)
+    }
+
+    fn duplicate_uri(&self) -> Option<Parts> {
+        match &self.config.uri {
+            None => None,
+            Some(parts) => {
+                let uri = Uri::builder()
+                    .authority(parts.authority.clone()?)
+                    .path_and_query(parts.path_and_query.clone()?)
+                    .scheme(parts.scheme.clone()?);
+                Some(uri.build().ok()?.into_parts())
+            }
+        }
+    }
+
+    async fn get_mdns_uri(&self) -> Option<Parts> {
+        if self.config.disable_mdns {
+            return None;
+        }
+
+        let mut uri = self.duplicate_uri()?;
+        let candidate = uri.authority.clone()?.to_string();
+
+        let candidates: Vec<String> = vec![candidate.replace(".", "-"), candidate];
+
+        let ifaces = Interface::get_all().ok()?;
+
+        let mut iface_futures = FuturesUnordered::new();
+        for iface in ifaces {
+            iface_futures.push(Self::get_addr_from_interface(iface, &candidates));
+        }
+
+        let mut local_addr: Option<String> = None;
+        while let Some(maybe_addr) = iface_futures.next().await {
+            if maybe_addr.is_some() {
+                local_addr = maybe_addr;
+                break;
+            }
+        }
+        let local_addr = match local_addr {
+            None => {
+                log::debug!("Unable to connect via mDNS");
+                return None;
+            }
+            Some(addr) => {
+                log::debug!("Found address via mDNS: {addr}");
+                addr
+            }
+        };
+
+        let auth = local_addr.parse::<Authority>().ok()?;
+        uri.authority = Some(auth);
+        uri.scheme = Some(Scheme::HTTP);
+
+        Some(uri)
+    }
+
+    async fn create_channel(
+        allow_downgrade: bool,
+        domain: &str,
+        uri: Uri,
+        for_mdns: bool,
+    ) -> Result<Channel> {
+        let mut chan = Channel::builder(uri.clone());
+        if for_mdns {
+            let tls_config = ClientTlsConfig::new().domain_name(domain);
+            chan = chan.tls_config(tls_config)?;
+        }
+        let chan = match chan
             .connect()
             .await
-            .with_context(|| format!("Connecting to {:?}", uri.clone()));
-        let channel = match channel {
+            .with_context(|| format!("Connecting to {:?}", uri.clone()))
+        {
+            Ok(c) => c,
             Err(e) => {
-                if self.config.allow_downgrade {
+                if allow_downgrade {
                     let mut uri_parts = uri.clone().into_parts();
                     uri_parts.scheme = Some(Scheme::HTTP);
                     let uri = Uri::from_parts(uri_parts)?;
@@ -324,9 +453,64 @@ impl DialBuilder<WithoutCredentials> {
                     return Err(anyhow::anyhow!(e));
                 }
             }
-            Ok(c) => c,
+        };
+        Ok(chan)
+    }
+}
+
+impl DialBuilder<WithoutCredentials> {
+    /// attempts to establish a connection without credentials to the DialBuilder's given uri
+    async fn connect_inner(
+        self,
+        mdns_uri: Option<Parts>,
+        mut original_uri_parts: Parts,
+    ) -> Result<ViamChannel> {
+        let webrtc_options = self.config.webrtc_options;
+        let disable_webrtc = match &webrtc_options {
+            Some(options) => options.disable_webrtc,
+            None => false,
+        };
+        if self.config.insecure {
+            original_uri_parts.scheme = Some(Scheme::HTTP);
+        }
+        let original_uri = Uri::from_parts(original_uri_parts)?;
+        let uri2 = original_uri.clone();
+        let uri = infer_remote_uri_from_authority(original_uri);
+        let domain = uri2.authority().to_owned().unwrap().as_str();
+        let domain = amend_domain_if_local(domain);
+
+        let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
+        let attempting_mdns = mdns_uri.is_some();
+        if attempting_mdns {
+            log::debug!("Attempting to connect via mDNS");
+        } else {
+            log::debug!("Attempting to connect");
+        }
+
+        let channel = match mdns_uri {
+            Some(uri) => {
+                Self::create_channel(self.config.allow_downgrade, &domain, uri, true).await
+            }
+            // not actually an error necessarily, but we want to ensure that a channel is still
+            // created with the default uri
+            None => Err(anyhow::anyhow!("")),
         };
 
+        let channel = match channel {
+            Ok(c) => {
+                log::debug!("Connected via mDNS");
+                c
+            }
+            Err(e) => {
+                if attempting_mdns {
+                    log::debug!(
+                        "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
+                    );
+                }
+                Self::create_channel(self.config.allow_downgrade, &domain, uri.clone(), false)
+                    .await?
+            }
+        };
         // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
         // need to add these dummy layers.
         let intercepted_channel = ServiceBuilder::new()
@@ -352,6 +536,22 @@ impl DialBuilder<WithoutCredentials> {
             }
         }
     }
+
+    pub async fn connect(self) -> Result<ViamChannel> {
+        let original_uri = match self.duplicate_uri() {
+            Some(uri) => uri,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Attempting to connect but there was no uri"
+                ))
+            }
+        };
+        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
+            .await
+            .ok()
+            .flatten();
+        self.connect_inner(mdns_uri, original_uri).await
+    }
 }
 
 async fn get_auth_token(
@@ -361,7 +561,7 @@ async fn get_auth_token(
 ) -> Result<String> {
     let mut auth_service = AuthServiceClient::new(channel);
     let req = AuthenticateRequest {
-        entity: entity.to_string(),
+        entity,
         credentials: Some(creds),
     };
 
@@ -370,39 +570,55 @@ async fn get_auth_token(
 }
 
 impl DialBuilder<WithCredentials> {
-    /// attempts to establish a connection with credentials to the DialBuilder's given uri
-    pub async fn connect(self) -> Result<AddAuthorization<ViamChannel>> {
+    async fn connect_inner(
+        self,
+        mdns_uri: Option<Parts>,
+        mut original_uri_parts: Parts,
+    ) -> Result<AddAuthorization<ViamChannel>> {
+        let is_insecure = self.config.insecure;
+
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
             Some(options) => options.disable_webrtc,
             None => false,
         };
-        let mut uri_parts = self.config.uri.unwrap();
-        if self.config.insecure {
-            uri_parts.scheme = Some(Scheme::HTTP);
+
+        if is_insecure {
+            original_uri_parts.scheme = Some(Scheme::HTTP);
         }
 
-        let uri = Uri::from_parts(uri_parts)?;
-        let uri2 = uri.clone();
-        let domain = uri2.authority().to_owned().unwrap().to_string();
+        let original_uri = Uri::from_parts(original_uri_parts)?;
 
-        let uri = infer_remote_uri_from_authority(uri);
+        let domain = original_uri.authority().clone().unwrap().to_string();
+        let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
 
-        let real_channel = match Channel::builder(uri.clone())
-            .connect()
-            .await
-            .with_context(|| format!("Connecting to {:?}", uri.clone()))
-        {
-            Ok(c) => c,
+        let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
+        let attempting_mdns = mdns_uri.is_some();
+
+        let allow_downgrade = self.config.allow_downgrade;
+        if attempting_mdns {
+            log::debug!("Attempting to connect via mDNS");
+        } else {
+            log::debug!("Attempting to connect");
+        }
+        let channel = match mdns_uri {
+            Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true).await,
+            // not actually an error necessarily, but we want to ensure that a channel is still
+            // created with the default uri
+            None => Err(anyhow::anyhow!("")),
+        };
+        let real_channel = match channel {
+            Ok(c) => {
+                log::debug!("Connected via mDNS");
+                c
+            }
             Err(e) => {
-                if self.config.allow_downgrade {
-                    let mut uri_parts = uri.clone().into_parts();
-                    uri_parts.scheme = Some(Scheme::HTTP);
-                    let uri = Uri::from_parts(uri_parts)?;
-                    Channel::builder(uri.clone()).connect().await?
-                } else {
-                    return Err(anyhow::anyhow!(e));
+                if attempting_mdns {
+                    log::debug!(
+                        "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
+                    );
                 }
+                Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
             }
         };
 
@@ -433,7 +649,7 @@ impl DialBuilder<WithCredentials> {
         let channel = if disable_webrtc {
             ViamChannel::Direct(real_channel.clone())
         } else {
-            match maybe_connect_via_webrtc(uri.clone(), channel.clone(), webrtc_options).await {
+            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
                 Ok(webrtc_channel) => ViamChannel::WebRTC(webrtc_channel),
                 Err(e) => {
                     log::error!(
@@ -447,6 +663,23 @@ impl DialBuilder<WithCredentials> {
         Ok(ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
             .service(channel))
+    }
+
+    /// attempts to establish a connection with credentials to the DialBuilder's given uri
+    pub async fn connect(self) -> Result<AddAuthorization<ViamChannel>> {
+        let original_uri = match self.duplicate_uri() {
+            Some(uri) => uri,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Attempting to connect but there was no uri"
+                ))
+            }
+        };
+        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
+            .await
+            .ok()
+            .flatten();
+        self.connect_inner(mdns_uri, original_uri).await
     }
 }
 
@@ -773,7 +1006,6 @@ async fn maybe_connect_via_webrtc(
     exchange_done.store(true, Ordering::Release);
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
-
     Ok(client_channel)
 }
 
@@ -819,7 +1051,7 @@ fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
         .authority()
         .map(Authority::as_str)
         .unwrap_or_default()
-        .contains(".local");
+        .contains(".local.cloud");
 
     if !is_local_connection {
         if let Some((new_uri, _)) = Options::infer_signaling_server_address(&uri) {
