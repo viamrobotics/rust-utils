@@ -418,18 +418,21 @@ impl DialBuilder<WithCredentials> {
 
         let mut resp: Option<Response> = None;
         for ipv4 in addresses {
-            log::debug!("Trying to find resp for ip {ipv4:?}");
-            let discovery = discover::interface(SERVICE_NAME, Duration::from_secs(1), ipv4).ok()?;
+            let mut addr_to_send = "".to_string();
+            addr_to_send.push_str(candidates.get(1).unwrap());
+            addr_to_send.push('.');
+            addr_to_send.push_str(SERVICE_NAME);
+
+            let discovery =
+                discover::interface_with_loopback(addr_to_send, Duration::from_secs(1), ipv4)
+                    .ok()?;
             let stream = discovery.listen();
             pin_mut!(stream);
             while let Some(Ok(response)) = stream.next().await {
                 if let Some(hostname) = response.hostname() {
-                    log::debug!("found hostname {hostname}");
-                    for c in candidates {
-                        if hostname.contains(c) {
-                            resp = Some(response);
-                            break;
-                        }
+                    if candidates.iter().any(|c| hostname.contains(c)) {
+                        resp = Some(response);
+                        break;
                     }
                 }
                 if resp.is_some() {
@@ -474,8 +477,6 @@ impl DialBuilder<WithCredentials> {
 
         let mut iface_futures = FuturesUnordered::new();
         for iface in ifaces {
-            // CR erodkin: delete me
-            log::debug!("iface: {iface:?}");
             iface_futures.push(Self::get_addr_from_interface(iface, &candidates));
         }
 

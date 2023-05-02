@@ -30,7 +30,7 @@ interceptor = "0.8.0"
 interfaces = "0.0.8"
 libc = {version = "0.2"}
 log = "0.4.17"
-mdns = "3.0.0"
+mdns = { git = "https://github.com/stuqdog/mdns.git", rev = "5d85dc4bf60e4a7f665d797d3f30d7216118dd3b" }
 nalgebra = "0.31.4"
 prost = "0.10"
 prost-types = "0.10"
