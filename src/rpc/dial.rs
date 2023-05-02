@@ -496,24 +496,6 @@ impl DialBuilder<WithoutCredentials> {
             None => Err(anyhow::anyhow!("")),
         };
 
-        //let channel = Channel::builder(uri.clone())
-        //.connect()
-        //.await
-        //.with_context(|| format!("Connecting to {:?}", uri.clone()));
-        //let channel = match channel {
-        //Err(e) => {
-        //if self.config.allow_downgrade {
-        //let mut uri_parts = uri.clone().into_parts();
-        //uri_parts.scheme = Some(Scheme::HTTP);
-        //let uri = Uri::from_parts(uri_parts)?;
-        //Channel::builder(uri.clone()).connect().await?
-        //} else {
-        //return Err(anyhow::anyhow!(e));
-        //}
-        //}
-        //Ok(c) => c,
-        //};
-
         let channel = match channel {
             Ok(c) => {
                 log::debug!("Connected via mDNS");
