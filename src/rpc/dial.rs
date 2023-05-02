@@ -307,99 +307,6 @@ impl<T: AuthMethod> DialBuilder<T> {
         self.config.webrtc_options = Some(webrtc_options);
         self
     }
-}
-
-impl DialBuilder<WithoutCredentials> {
-    /// attempts to establish a connection without credentials to the DialBuilder's given uri
-    pub async fn connect(self) -> Result<ViamChannel> {
-        let webrtc_options = self.config.webrtc_options;
-        let disable_webrtc = match &webrtc_options {
-            Some(options) => options.disable_webrtc,
-            None => false,
-        };
-        let mut uri_parts = self.config.uri.unwrap();
-        if self.config.insecure {
-            uri_parts.scheme = Some(Scheme::HTTP);
-        }
-        let uri = Uri::from_parts(uri_parts)?;
-        let uri2 = uri.clone();
-        let uri = infer_remote_uri_from_authority(uri);
-        let domain = uri2.authority().to_owned().unwrap().as_str();
-        let domain = amend_domain_if_local(domain);
-
-        let channel = Channel::builder(uri.clone())
-            .connect()
-            .await
-            .with_context(|| format!("Connecting to {:?}", uri.clone()));
-        let channel = match channel {
-            Err(e) => {
-                if self.config.allow_downgrade {
-                    let mut uri_parts = uri.clone().into_parts();
-                    uri_parts.scheme = Some(Scheme::HTTP);
-                    let uri = Uri::from_parts(uri_parts)?;
-                    Channel::builder(uri.clone()).connect().await?
-                } else {
-                    return Err(anyhow::anyhow!(e));
-                }
-            }
-            Ok(c) => c,
-        };
-
-        // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
-        // need to add these dummy layers.
-        let intercepted_channel = ServiceBuilder::new()
-            .layer(AddAuthorizationLayer::basic(
-                "fake username",
-                "fake password",
-            ))
-            .layer(SetRequestHeaderLayer::overriding(
-                HeaderName::from_static("rpc-host"),
-                HeaderValue::from_str(domain)?,
-            ))
-            .service(channel.clone());
-
-        if disable_webrtc {
-            Ok(ViamChannel::Direct(channel.clone()))
-        } else {
-            match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
-                Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
-                Err(e) => {
-                    log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
-                    Ok(ViamChannel::Direct(channel.clone()))
-                }
-            }
-        }
-    }
-}
-
-async fn get_auth_token(
-    channel: &mut Channel,
-    creds: Credentials,
-    entity: String,
-) -> Result<String> {
-    let mut auth_service = AuthServiceClient::new(channel);
-    let req = AuthenticateRequest {
-        entity,
-        credentials: Some(creds),
-    };
-
-    let rsp = auth_service.authenticate(req).await?;
-    Ok(rsp.into_inner().access_token)
-}
-
-impl DialBuilder<WithCredentials> {
-    fn duplicate_uri(&self) -> Option<Parts> {
-        match &self.config.uri {
-            None => None,
-            Some(parts) => {
-                let uri = Uri::builder()
-                    .authority(parts.authority.clone()?)
-                    .path_and_query(parts.path_and_query.clone()?)
-                    .scheme(parts.scheme.clone()?);
-                Some(uri.build().ok()?.into_parts())
-            }
-        }
-    }
 
     async fn get_addr_from_interface(iface: Interface, candidates: &Vec<String>) -> Option<String> {
         let addresses: Vec<Ipv4Addr> = iface
@@ -424,11 +331,12 @@ impl DialBuilder<WithCredentials> {
             addr_to_send.push_str(SERVICE_NAME);
 
             let discovery =
-                discover::interface_with_loopback(addr_to_send, Duration::from_secs(1), ipv4)
+                discover::interface_with_loopback(SERVICE_NAME, Duration::from_secs(1), ipv4)
                     .ok()?;
             let stream = discovery.listen();
             pin_mut!(stream);
             while let Some(Ok(response)) = stream.next().await {
+                println!("response is {response:?}");
                 if let Some(hostname) = response.hostname() {
                     if candidates.iter().any(|c| hostname.contains(c)) {
                         resp = Some(response);
@@ -461,6 +369,19 @@ impl DialBuilder<WithCredentials> {
         local_addr.push(':');
         local_addr.push_str(&resp.port()?.to_string());
         Some(local_addr)
+    }
+
+    fn duplicate_uri(&self) -> Option<Parts> {
+        match &self.config.uri {
+            None => None,
+            Some(parts) => {
+                let uri = Uri::builder()
+                    .authority(parts.authority.clone()?)
+                    .path_and_query(parts.path_and_query.clone()?)
+                    .scheme(parts.scheme.clone()?);
+                Some(uri.build().ok()?.into_parts())
+            }
+        }
     }
 
     async fn get_mdns_uri(&self) -> Option<Parts> {
@@ -505,6 +426,168 @@ impl DialBuilder<WithCredentials> {
         Some(uri)
     }
 
+    async fn create_channel(
+        allow_downgrade: bool,
+        domain: &str,
+        uri: Uri,
+        for_mdns: bool,
+    ) -> Result<Channel> {
+        let mut chan = Channel::builder(uri.clone());
+        if for_mdns {
+            let tls_config = ClientTlsConfig::new().domain_name(domain);
+            chan = chan.tls_config(tls_config)?;
+        }
+        let chan = match chan
+            .connect()
+            .await
+            .with_context(|| format!("Connecting to {:?}", uri.clone()))
+        {
+            Ok(c) => c,
+            Err(e) => {
+                if allow_downgrade {
+                    let mut uri_parts = uri.clone().into_parts();
+                    uri_parts.scheme = Some(Scheme::HTTP);
+                    let uri = Uri::from_parts(uri_parts)?;
+                    Channel::builder(uri.clone()).connect().await?
+                } else {
+                    return Err(anyhow::anyhow!(e));
+                }
+            }
+        };
+        Ok(chan)
+    }
+}
+
+impl DialBuilder<WithoutCredentials> {
+    /// attempts to establish a connection without credentials to the DialBuilder's given uri
+    async fn connect_inner(
+        self,
+        mdns_uri: Option<Parts>,
+        mut original_uri_parts: Parts,
+    ) -> Result<ViamChannel> {
+        let webrtc_options = self.config.webrtc_options;
+        let disable_webrtc = match &webrtc_options {
+            Some(options) => options.disable_webrtc,
+            None => false,
+        };
+        if self.config.insecure {
+            original_uri_parts.scheme = Some(Scheme::HTTP);
+        }
+        let original_uri = Uri::from_parts(original_uri_parts)?;
+        let uri2 = original_uri.clone();
+        let uri = infer_remote_uri_from_authority(original_uri);
+        let domain = uri2.authority().to_owned().unwrap().as_str();
+        let domain = amend_domain_if_local(domain);
+
+        let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
+        let attempting_mdns = mdns_uri.is_some();
+        if attempting_mdns {
+            log::debug!("Attempting to connect via mDNS");
+        } else {
+            log::debug!("Attempting to connect");
+        }
+
+        let channel = match mdns_uri {
+            Some(uri) => {
+                Self::create_channel(self.config.allow_downgrade, &domain, uri, true).await
+            }
+            // not actually an error necessarily, but we want to ensure that a channel is still
+            // created with the default uri
+            None => Err(anyhow::anyhow!("")),
+        };
+
+        //let channel = Channel::builder(uri.clone())
+        //.connect()
+        //.await
+        //.with_context(|| format!("Connecting to {:?}", uri.clone()));
+        //let channel = match channel {
+        //Err(e) => {
+        //if self.config.allow_downgrade {
+        //let mut uri_parts = uri.clone().into_parts();
+        //uri_parts.scheme = Some(Scheme::HTTP);
+        //let uri = Uri::from_parts(uri_parts)?;
+        //Channel::builder(uri.clone()).connect().await?
+        //} else {
+        //return Err(anyhow::anyhow!(e));
+        //}
+        //}
+        //Ok(c) => c,
+        //};
+
+        let channel = match channel {
+            Ok(c) => {
+                log::debug!("Connected via mDNS");
+                c
+            }
+            Err(e) => {
+                if attempting_mdns {
+                    log::debug!(
+                        "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
+                    );
+                }
+                Self::create_channel(self.config.allow_downgrade, &domain, uri.clone(), false)
+                    .await?
+            }
+        };
+        // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
+        // need to add these dummy layers.
+        let intercepted_channel = ServiceBuilder::new()
+            .layer(AddAuthorizationLayer::basic(
+                "fake username",
+                "fake password",
+            ))
+            .layer(SetRequestHeaderLayer::overriding(
+                HeaderName::from_static("rpc-host"),
+                HeaderValue::from_str(domain)?,
+            ))
+            .service(channel.clone());
+
+        if disable_webrtc {
+            Ok(ViamChannel::Direct(channel.clone()))
+        } else {
+            match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
+                Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
+                Err(e) => {
+                    log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
+                    Ok(ViamChannel::Direct(channel.clone()))
+                }
+            }
+        }
+    }
+
+    pub async fn connect(self) -> Result<ViamChannel> {
+        let original_uri = match self.duplicate_uri() {
+            Some(uri) => uri,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Attempting to connect but there was no uri"
+                ))
+            }
+        };
+        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
+            .await
+            .ok()
+            .flatten();
+        return self.connect_inner(mdns_uri, original_uri).await;
+    }
+}
+
+async fn get_auth_token(
+    channel: &mut Channel,
+    creds: Credentials,
+    entity: String,
+) -> Result<String> {
+    let mut auth_service = AuthServiceClient::new(channel);
+    let req = AuthenticateRequest {
+        entity,
+        credentials: Some(creds),
+    };
+
+    let rsp = auth_service.authenticate(req).await?;
+    Ok(rsp.into_inner().access_token)
+}
+
+impl DialBuilder<WithCredentials> {
     async fn connect_inner(
         self,
         mdns_uri: Option<Parts>,
@@ -598,37 +681,6 @@ impl DialBuilder<WithCredentials> {
         Ok(ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
             .service(channel))
-    }
-
-    async fn create_channel(
-        allow_downgrade: bool,
-        domain: &str,
-        uri: Uri,
-        for_mdns: bool,
-    ) -> Result<Channel> {
-        let mut chan = Channel::builder(uri.clone());
-        if for_mdns {
-            let tls_config = ClientTlsConfig::new().domain_name(domain);
-            chan = chan.tls_config(tls_config)?;
-        }
-        let chan = match chan
-            .connect()
-            .await
-            .with_context(|| format!("Connecting to {:?}", uri.clone()))
-        {
-            Ok(c) => c,
-            Err(e) => {
-                if allow_downgrade {
-                    let mut uri_parts = uri.clone().into_parts();
-                    uri_parts.scheme = Some(Scheme::HTTP);
-                    let uri = Uri::from_parts(uri_parts)?;
-                    Channel::builder(uri.clone()).connect().await?
-                } else {
-                    return Err(anyhow::anyhow!(e));
-                }
-            }
-        };
-        Ok(chan)
     }
 
     /// attempts to establish a connection with credentials to the DialBuilder's given uri
