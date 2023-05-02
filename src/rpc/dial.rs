@@ -331,7 +331,7 @@ impl<T: AuthMethod> DialBuilder<T> {
             addr_to_send.push_str(SERVICE_NAME);
 
             let discovery =
-                discover::interface_with_loopback(SERVICE_NAME, Duration::from_secs(1), ipv4)
+                discover::interface_with_loopback(addr_to_send, Duration::from_secs(1), ipv4)
                     .ok()?;
             let stream = discovery.listen();
             pin_mut!(stream);
@@ -550,7 +550,7 @@ impl DialBuilder<WithoutCredentials> {
             .await
             .ok()
             .flatten();
-        return self.connect_inner(mdns_uri, original_uri).await;
+        self.connect_inner(mdns_uri, original_uri).await
     }
 }
 
@@ -679,7 +679,7 @@ impl DialBuilder<WithCredentials> {
             .await
             .ok()
             .flatten();
-        return self.connect_inner(mdns_uri, original_uri).await;
+        self.connect_inner(mdns_uri, original_uri).await
     }
 }
 
