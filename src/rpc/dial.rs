@@ -326,7 +326,7 @@ impl<T: AuthMethod> DialBuilder<T> {
         let mut resp: Option<Response> = None;
         for ipv4 in addresses {
             let mut addr_to_send = "".to_string();
-            addr_to_send.push_str(candidates.get(1).unwrap());
+            addr_to_send.push_str(candidates.last()?);
             addr_to_send.push('.');
             addr_to_send.push_str(SERVICE_NAME);
 
