@@ -336,7 +336,6 @@ impl<T: AuthMethod> DialBuilder<T> {
             let stream = discovery.listen();
             pin_mut!(stream);
             while let Some(Ok(response)) = stream.next().await {
-                println!("response is {response:?}");
                 if let Some(hostname) = response.hostname() {
                     if candidates.iter().any(|c| hostname.contains(c)) {
                         resp = Some(response);
