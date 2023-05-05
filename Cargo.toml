@@ -30,9 +30,6 @@ interceptor = "0.8.0"
 interfaces = "0.0.8"
 libc = {version = "0.2"}
 log = "0.4.17"
-# TODO: We are using a commit hash to include a bug fix that has not yet been
-# merged in a crate. Once the new crate is released, please use that instead
-# of the git revision below. As of this comment the latest version is `3.0.0`.
 nalgebra = "0.31.4"
 prost = "0.10"
 prost-types = "0.10"
