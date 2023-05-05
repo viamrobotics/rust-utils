@@ -33,7 +33,6 @@ log = "0.4.17"
 # TODO: We are using a commit hash to include a bug fix that has not yet been
 # merged in a crate. Once the new crate is released, please use that instead
 # of the git revision below. As of this comment the latest version is `3.0.0`.
-mdns = { git = "https://github.com/stuqdog/mdns.git", rev = "5d85dc4bf60e4a7f665d797d3f30d7216118dd3b" }
 nalgebra = "0.31.4"
 prost = "0.10"
 prost-types = "0.10"
@@ -48,6 +47,7 @@ tower = { version = "0.4" }
 tower-http = { version = "0.3.3", features = ["add-extension","auth","propagate-header","set-header","sensitive-headers","trace","compression-gzip"]}
 tracing = {version = "0.1.34"}
 tracing-subscriber = {version = "0.3.11", features = ["env-filter"]}
+viam-mdns = "3.0.1"
 webpki-roots = "0.21.1"
 webrtc = "0.7.2"
 

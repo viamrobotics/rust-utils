@@ -23,7 +23,7 @@ use ::http::{
     uri::{Authority, Parts, PathAndQuery, Scheme},
     HeaderValue, Version,
 };
-use ::mdns::{discover, Response};
+use ::viam_mdns::{discover, Response};
 use ::webrtc::ice_transport::ice_candidate::{RTCIceCandidate, RTCIceCandidateInit};
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use anyhow::{Context, Result};
