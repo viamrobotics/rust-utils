@@ -6,7 +6,7 @@ use crate::gen::google;
 use crate::gen::proto::rpc::webrtc::v1::{
     call_response::Stage, call_update_request::Update,
     signaling_service_client::SignalingServiceClient, CallUpdateRequest,
-    OptionalWebRtcConfigRequest,
+    OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse
 };
 use crate::gen::proto::rpc::webrtc::v1::{
     CallRequest, IceCandidate, Metadata, RequestHeaders, Strings,
@@ -752,6 +752,9 @@ async fn maybe_connect_via_webrtc(
     {
         Ok(resp) => resp,
         Err(e) => {
+            if e.code() == tonic::Code::Unimplemented {
+                OptionalWebRtcConfigResponse::default();
+            }
             return Err(anyhow::anyhow!(e));
         }
     };
