@@ -753,9 +753,10 @@ async fn maybe_connect_via_webrtc(
         Ok(resp) => resp,
         Err(e) => {
             if e.code() == tonic::Code::Unimplemented {
-                OptionalWebRtcConfigResponse::default();
+                tonic::Response::new(OptionalWebRtcConfigResponse::default())
+            } else {
+                return Err(anyhow::anyhow!(e));
             }
-            return Err(anyhow::anyhow!(e));
         }
     };
 
