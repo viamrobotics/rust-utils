@@ -147,7 +147,7 @@ fn ice_server_from_proto(ice_server: IceServer) -> RTCIceServer {
         urls: ice_server.urls,
         username: ice_server.username,
         credential: ice_server.credential,
-        ..Default::default()
+        credential_type: webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
     }
 }
 
