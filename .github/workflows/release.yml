@@ -59,7 +59,6 @@ jobs:
     runs-on: [self-hosted, x64]
     container:
       image: ghcr.io/cross-rs/${{ matrix.image }}
-      options: -v /var/run/docker.sock:/var/run/docker.sock -v ${{ github.workspace }}:/project -w /project
     strategy:
       fail-fast: false
       matrix:
@@ -76,20 +75,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Setup rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - name: Setup cross compiler
         run: |
-          cargo install cross --git https://github.com/cross-rs/cross
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
       - name: Setup build directory
         run: mkdir builds
       - name: Build
         run: |
-          cross build --release --target=${{ matrix.cross }}
-        env:
-          CROSS_CONTAINER_IN_CONTAINER: true
+          cargo build --release --target=${{ matrix.target }}
       - name: Copy
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
       - name: Upload artifacts
