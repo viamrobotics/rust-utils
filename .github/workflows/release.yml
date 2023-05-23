@@ -75,11 +75,11 @@ jobs:
             image: arm-unknown-linux-gnueabihf:main
     steps:
       - uses: actions/checkout@v3
-      # - name: Setup rust toolchain
-      #   uses: dtolnay/rust-toolchain@stable
-      #   with:
-      #     toolchain: stable
-      #     targets: ${{ matrix.target }}
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
       - name: Setup cross compiler
         run: |
           cargo install cross --git https://github.com/cross-rs/cross
