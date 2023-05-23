@@ -77,7 +77,9 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-          components: cross
+      - name: Setup cross compiler
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
       - name: Setup build directory
         run: mkdir builds
       - name: Build
