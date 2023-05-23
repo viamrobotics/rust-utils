@@ -64,10 +64,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: aarch64-unknown-linux-gnu:centos
+          - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-          - target: x86_64-unknown-linux-gnu:centos
+            cross: aarch64-unknown-linux-gnu:centos
+          - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
+            cross: x86_64-unknown-linux-gnu:centos
           - target: arm-unknown-linux-gnueabihf
             platform: linux_armv6l
     steps:
@@ -84,7 +86,7 @@ jobs:
         run: mkdir builds
       - name: Build
         run: |
-          cross build --release --target=${{ matrix.target }}
+          cross build --release --target=${{ matrix.cross }}
         env:
           CROSS_CONTAINER_IN_CONTAINER: true
       - name: Copy
