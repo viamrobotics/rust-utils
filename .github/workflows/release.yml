@@ -37,17 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Setup rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
+          targets: ${{ matrix.target }}
       - name: Setup build directory
         run: mkdir builds
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target=${{ matrix.target }}
+        run: |
+          cargo build --release --target=${{ matrix.target }}
       - name: Copy
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
@@ -68,29 +66,23 @@ jobs:
         include:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            cross: true
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
-            cross: true
           - target: arm-unknown-linux-gnueabihf
             platform: linux_armv6l
-            cross: true
     steps:
       - uses: actions/checkout@v3
       - name: Setup rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          targets: ${{ matrix.target }}
+          components: cross
       - name: Setup build directory
         run: mkdir builds
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target=${{ matrix.target }}
-          use-cross: ${{ matrix.cross }}
+        run: |
+          cross build --release --target=${{ matrix.target }}
         env:
           CROSS_CONTAINER_IN_CONTAINER: ${{ matrix.cross }}
       - name: Copy
