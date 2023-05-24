@@ -22,7 +22,7 @@ jobs:
         uses: andymckay/cancel-action@0.2
         if: |
           steps.is_organization_member.outputs.result == 'false'
-          
+
   build_macos:
     if: github.repository_owner == 'viamrobotics'
     runs-on: [self-hosted, ARM64, macOS]
@@ -37,17 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Setup rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
+          targets: ${{ matrix.target }}
       - name: Setup build directory
         run: mkdir builds
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target=${{ matrix.target }}
+        run: |
+          cargo build --release --target=${{ matrix.target }}
       - name: Copy
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
@@ -60,39 +58,35 @@ jobs:
     if: github.repository_owner == 'viamrobotics'
     runs-on: [self-hosted, x64]
     container:
-      image: ghcr.io/viamrobotics/canon:amd64-cache
-      options: -v /var/run/docker.sock:/var/run/docker.sock -v ${{ github.workspace }}:/project -w /project
+      image: ghcr.io/cross-rs/${{ matrix.image }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            cross: true
+            image: aarch64-unknown-linux-gnu:main-centos
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
-            cross: false
+            image: x86_64-unknown-linux-gnu:main-centos
           - target: arm-unknown-linux-gnueabihf
             platform: linux_armv6l
-            cross: true
+            image: arm-unknown-linux-gnueabihf:main
     steps:
       - uses: actions/checkout@v3
       - name: Setup rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+          rustup target add ${{ matrix.target }}
       - name: Setup build directory
         run: mkdir builds
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target=${{ matrix.target }}
-          use-cross: ${{ matrix.cross }}
-        env:
-          CROSS_CONTAINER_IN_CONTAINER: ${{ matrix.cross }}
+        shell: bash
+        run: |
+          source "$HOME/.cargo/env"
+          cargo build --release --target=${{ matrix.target }}
       - name: Copy
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
       - name: Upload artifacts
