@@ -26,3 +26,15 @@ jobs:
         if: |
           github.event_name == 'workflow_dispatch' && steps.is_organization_member.outputs.result == 'false'
 
+      - uses: actions/checkout@v3
+
+      - name: Setup rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+
+      - name: Publish
+      - uses: katyo/publish-crates@v2
+        with:
+            registry-token: ${{ secrets.CRATES_API_TOKEN }}
+            dry-run: true
