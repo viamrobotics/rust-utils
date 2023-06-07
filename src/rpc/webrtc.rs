@@ -215,6 +215,9 @@ pub(crate) async fn new_peer_connection_for_client(
     peer_connection.on_peer_connection_state_change(Box::new(
         move |connection: RTCPeerConnectionState| {
             log::info!("peer connection state change: {connection}");
+            if connection == RTCPeerConnectionState::Connected {
+                log::debug!("Connected via WebRTC");
+            }
             Box::pin(async move {})
         },
     ));

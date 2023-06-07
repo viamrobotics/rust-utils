@@ -6,7 +6,10 @@ use std::{
         Arc,
     },
 };
-use webrtc::{data_channel::RTCDataChannel, peer_connection::RTCPeerConnection};
+use webrtc::{
+    data_channel::RTCDataChannel, ice_transport::ice_connection_state::RTCIceConnectionState,
+    peer_connection::RTCPeerConnection,
+};
 
 // see golang/client_stream.go
 /// The base components to a webRTC channel, used on both client and server sides.
@@ -49,12 +52,13 @@ impl WebRTCBaseChannel {
                 let transport = sctp.transport();
                 let transport = transport.ice_transport();
                 let candidate_pair = transport.get_selected_candidate_pair().await;
-                log::info!(
-                    "Selected candidate pair. Pair: {:?}. ID: {}. Current connection state: {}",
-                    candidate_pair,
-                    conn_state,
-                    pc.get_stats_id()
-                );
+
+                // If ICE connection state is connected, log the Selected candidate pair.
+                if conn_state == RTCIceConnectionState::Connected {
+                    if let Some(cp) = candidate_pair {
+                        log::info!("Selected candidate pair: {}", cp);
+                    }
+                }
             })
         }));
 

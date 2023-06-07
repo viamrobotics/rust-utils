@@ -467,6 +467,7 @@ impl DialBuilder<WithoutCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
+        log::debug!("Dialing");
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
             Some(options) => options.disable_webrtc,
@@ -527,12 +528,14 @@ impl DialBuilder<WithoutCredentials> {
             .service(channel.clone());
 
         if disable_webrtc {
+            log::debug!("Connected via gRPC");
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
             match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
+                    log::debug!("Connected via gRPC");
                     Ok(ViamChannel::Direct(channel.clone()))
                 }
             }
@@ -577,6 +580,7 @@ impl DialBuilder<WithCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
+        log::debug!("Dialing");
         let is_insecure = self.config.insecure;
 
         let webrtc_options = self.config.webrtc_options;
@@ -624,6 +628,7 @@ impl DialBuilder<WithCredentials> {
             }
         };
 
+        log::debug!("Acquiring auth token");
         let token = get_auth_token(
             &mut real_channel.clone(),
             self.config
@@ -639,6 +644,7 @@ impl DialBuilder<WithCredentials> {
                 .unwrap_or_else(|| domain.clone()),
         )
         .await?;
+        log::debug!("Acquired auth token");
 
         let channel = ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
@@ -649,6 +655,7 @@ impl DialBuilder<WithCredentials> {
             .service(real_channel.clone());
 
         if disable_webrtc {
+            log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
             match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
@@ -657,6 +664,7 @@ impl DialBuilder<WithCredentials> {
                     log::error!(
                     "Unable to establish webrtc connection due to error: [{e}]. Attempting direct connection."
                 );
+                    log::debug!("Connected via gRPC");
                     Ok(ViamChannel::DirectPreAuthorized(channel))
                 }
             }
