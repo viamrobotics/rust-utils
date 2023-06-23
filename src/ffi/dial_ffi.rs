@@ -18,9 +18,8 @@ use libc::c_char;
 use crate::proxy;
 use hyper::Server;
 use std::ffi::{CStr, CString};
-use tower::{make::Shared, util::Either, ServiceBuilder};
+use tower::{make::Shared, ServiceBuilder};
 use tower_http::{
-    auth::AddAuthorization,
     trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
     LatencyUnit,
 };
@@ -33,7 +32,7 @@ use crate::proxy::grpc_proxy::GRPCProxy;
 pub struct DialFfi {
     runtime: Option<Runtime>,
     sigs: Option<Vec<oneshot::Sender<()>>>,
-    channels: Vec<Either<AddAuthorization<ViamChannel>, ViamChannel>>,
+    channels: Vec<ViamChannel>,
 }
 
 impl Drop for DialFfi {
@@ -181,14 +180,14 @@ pub unsafe extern "C" fn dial(
     }
     let (server, channel) = match runtime.block_on(async move {
         let channel = match payload {
-            Some(p) => Either::A(
+            Some(p) => {
                 dial_with_cred(uri_str, p.to_str()?, allow_insec, disable_webrtc)?
                     .connect()
-                    .await?,
-            ),
+                    .await?
+            }
             None => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
-                Either::B(c.connect().await?)
+                c.connect().await?
             }
         };
         let dial = channel.clone();
@@ -264,12 +263,9 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
     }
 
     for channel in &ctx.channels {
-        let channel = match channel {
-            Either::A(chan) => chan.get_ref(),
-            Either::B(chan) => chan,
-        };
         match channel {
             ViamChannel::Direct(_) => (),
+            ViamChannel::DirectPreAuthorized(_) => (),
             ViamChannel::WebRTC(chan) => ctx
                 .runtime
                 .as_ref()

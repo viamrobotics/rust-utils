@@ -63,6 +63,7 @@ type SecretType = String;
 /// or a webRTC channel.
 pub enum ViamChannel {
     Direct(Channel),
+    DirectPreAuthorized(AddAuthorization<SetRequestHeader<Channel, HeaderValue>>),
     WebRTC(Arc<WebRTCClientChannel>),
 }
 
@@ -143,6 +144,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
     fn poll_ready(&mut self, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
         match self {
             Self::Direct(channel) => channel.poll_ready(cx),
+            Self::DirectPreAuthorized(channel) => channel.poll_ready(cx),
             Self::WebRTC(_channel) => Poll::Ready(Ok(())),
         }
     }
@@ -150,6 +152,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
     fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
         match self {
             Self::Direct(channel) => Box::pin(channel.call(request)),
+            Self::DirectPreAuthorized(channel) => Box::pin(channel.call(request)),
             Self::WebRTC(channel) => {
                 let mut channel = channel.clone();
                 let fut = async move {
@@ -573,7 +576,7 @@ impl DialBuilder<WithCredentials> {
         self,
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
-    ) -> Result<AddAuthorization<ViamChannel>> {
+    ) -> Result<ViamChannel> {
         let is_insecure = self.config.insecure;
 
         let webrtc_options = self.config.webrtc_options;
@@ -645,27 +648,23 @@ impl DialBuilder<WithCredentials> {
             ))
             .service(real_channel.clone());
 
-        let channel = if disable_webrtc {
-            ViamChannel::Direct(real_channel.clone())
+        if disable_webrtc {
+            Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
             match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
-                Ok(webrtc_channel) => ViamChannel::WebRTC(webrtc_channel),
+                Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!(
                     "Unable to establish webrtc connection due to error: [{e}]. Attempting direct connection."
                 );
-                    ViamChannel::Direct(real_channel.clone())
+                    Ok(ViamChannel::DirectPreAuthorized(channel))
                 }
             }
-        };
-
-        Ok(ServiceBuilder::new()
-            .layer(AddAuthorizationLayer::bearer(&token))
-            .service(channel))
+        }
     }
 
     /// attempts to establish a connection with credentials to the DialBuilder's given uri
-    pub async fn connect(self) -> Result<AddAuthorization<ViamChannel>> {
+    pub async fn connect(self) -> Result<ViamChannel> {
         let original_uri = match self.duplicate_uri() {
             Some(uri) => uri,
             None => {
