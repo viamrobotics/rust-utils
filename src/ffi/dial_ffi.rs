@@ -10,6 +10,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use tracing::Level;
 
+
 use crate::rpc::dial::{
     DialBuilder, DialOptions, RPCCredentials, ViamChannel, WithCredentials, WithoutCredentials,
 };
@@ -87,13 +88,14 @@ fn dial_without_cred(
 
 fn dial_with_cred(
     uri: String,
+    r#type: &str,
     payload: &str,
     allow_insec: bool,
     disable_webrtc: bool,
 ) -> Result<DialBuilder<WithCredentials>> {
     let creds = RPCCredentials::new(
         None,
-        String::from("robot-location-secret"),
+        String::from(r#type),
         String::from(payload),
     );
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
@@ -113,12 +115,14 @@ fn dial_with_cred(
 /// When falling to dial it will return a NULL pointer
 /// # Arguments
 /// * `c_uri` a C-style string representing the address of robot you want to connect to
+/// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
 /// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
 #[no_mangle]
 pub unsafe extern "C" fn dial(
     c_uri: *const c_char,
+    c_type: *const c_char,
     c_payload: *const c_char,
     c_allow_insec: bool,
     rt_ptr: Option<&mut DialFfi>,
@@ -137,6 +141,21 @@ pub unsafe extern "C" fn dial(
         ur
     };
     let allow_insec = c_allow_insec;
+    if!c_payload.is_null() && c_type.is_null(){
+        println!("Error missing credential: secret type");
+        return ptr::null_mut();
+
+    }
+    if c_payload.is_null() && !c_type.is_null(){
+        println!("Error missing credential: payload");
+        return ptr::null_mut();
+    }
+    let r#type = {
+        match c_type.is_null() {
+            true => None,
+            false => Some(CStr::from_ptr(c_type)),
+        }
+    };
     let payload = {
         match c_payload.is_null() {
             true => None,
@@ -171,6 +190,7 @@ pub unsafe extern "C" fn dial(
     };
     let (tx, rx) = oneshot::channel::<()>();
     let uri_str = uri.to_string();
+    
     // if the uri is local then we can connect directly.
     let disable_webrtc;
     if let Some(host) = uri.host() {
@@ -179,16 +199,18 @@ pub unsafe extern "C" fn dial(
         disable_webrtc = uri_str.contains(".local") || uri_str.contains("localhost");
     }
     let (server, channel) = match runtime.block_on(async move {
-        let channel = match payload {
-            Some(p) => {
-                dial_with_cred(uri_str, p.to_str()?, allow_insec, disable_webrtc)?
+        let channel = match (r#type, payload) {
+            (Some(t), Some(p)) => {
+                dial_with_cred(uri_str, t.to_str()?, p.to_str()?, allow_insec, disable_webrtc)?
                     .connect()
                     .await?
             }
-            None => {
+            _ => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
                 c.connect().await?
+                
             }
+            
         };
         let dial = channel.clone();
         let g = GRPCProxy::new(dial, uri);

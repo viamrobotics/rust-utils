@@ -19,7 +19,7 @@ using proto::rpc::examples::echo::v1::EchoService;
 extern "C" void *init_rust_runtime();
 extern "C" int free_rust_runtime(void *ptr);
 extern "C" void free_string(char* s);
-extern "C" char *dial(const char *uri, const char *payload,
+extern "C" char *dial(const char *uri, const char *r#type, const char *payload,
                              bool allow_insecure, void *ptr);
 
 class EchoServiceClient {
