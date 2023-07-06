@@ -27,7 +27,6 @@ use tower_http::{
 
 use anyhow::Result;
 
-
 use crate::proxy::grpc_proxy::GRPCProxy;
 
 /// The DialFfi interface, returned as a pointer by init_rust_runtime. User should keep this pointer until freeing the runtime.
@@ -135,7 +134,7 @@ pub unsafe extern "C" fn dial(
         let ur = match Uri::from_maybe_shared(CStr::from_ptr(c_uri).to_bytes()) {
             Ok(ur) => ur,
             Err(e) => {
-                println!("Sorry {e:?} is not a valid URI");
+                log::error!("Sorry {e:?} is not a valid URI");
                 return ptr::null_mut();
             }
         };
@@ -169,14 +168,14 @@ pub unsafe extern "C" fn dial(
     let conn = match runtime.block_on(async { proxy::uds::UDSConnector::new_random() }) {
         Ok(conn) => conn,
         Err(e) => {
-            println!("Error creating the UDS proxy {e:?}");
+            log::error!("Error creating the UDS proxy {e:?}");
             return ptr::null_mut();
         }
     };
     let path = match CString::new(conn.get_path()) {
         Ok(s) => s,
         Err(e) => {
-            println!("Error getting the path {e:?}");
+            log::error!("Error getting the path {e:?}");
             return ptr::null_mut();
         }
     };
@@ -195,22 +194,20 @@ pub unsafe extern "C" fn dial(
             (Some(t), Some(p)) => {
                 dial_with_cred(uri_str, t.to_str()?, p.to_str()?, allow_insec, disable_webrtc)?
                     .connect()
-                    .await?
+                    .await
             }
             (None, None) => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
-                c.connect().await?
+                c.connect().await
             }
             (None, Some(_)) => {
-                // the return type here is finicky, so we are taking advantage of the ? operator to return an errenous value
-                Err(anyhow::anyhow!("Error missing credential: type"))?
+                Err(anyhow::anyhow!("Error missing credential: type"))
             }
             (Some(_), None) => {
-                // the return type here is finicky, so we are taking advantage of the ? operator to return an errenous value
-                Err(anyhow::anyhow!("Error missing credential: payload"))?
+                Err(anyhow::anyhow!("Error missing credential: payload"))
             }
             
-        };
+        }?;
         let dial = channel.clone();
         let g = GRPCProxy::new(dial, uri);
         let service = ServiceBuilder::new()
@@ -232,7 +229,7 @@ pub unsafe extern "C" fn dial(
     }) {
         Ok(s) => s,
         Err(e) => {
-            println!("Error building GRPC proxy reason : {e:?}");
+            log::error!("Error building GRPC proxy reason : {e:?}");
             return ptr::null_mut();
         }
     };
