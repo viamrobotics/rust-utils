@@ -19,7 +19,7 @@ using viam::robot::v1::ResourceNamesResponse;
 extern "C" void *init_rust_runtime();
 extern "C" int free_rust_runtime(void *ptr);
 extern "C" void free_string(char* s);
-extern "C" char *dial(const char *uri, const char *r#type, const char *payload,
+extern "C" char *dial(const char *uri, const char *type, const char *payload,
                              bool allow_insecure, void *ptr);
 
 class RobotServiceClient {
@@ -51,7 +51,7 @@ private:
 int main(int argc, char *argv[]) {
 
   void *ptr = init_rust_runtime();
-  char *path = dial("<your robot's uri>", "<your robot's payload>", "<your robot's type>", false, ptr);
+  char *path = dial("<your robot's uri>", "<your authentication type>",  "<your authentication payload>", false, ptr);
   if(path == NULL){
 	  free_rust_runtime(ptr);
 	  return 1;

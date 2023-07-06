@@ -27,6 +27,7 @@ use tower_http::{
 
 use anyhow::Result;
 
+
 use crate::proxy::grpc_proxy::GRPCProxy;
 
 /// The DialFfi interface, returned as a pointer by init_rust_runtime. User should keep this pointer until freeing the runtime.
@@ -141,15 +142,6 @@ pub unsafe extern "C" fn dial(
         ur
     };
     let allow_insec = c_allow_insec;
-    if!c_payload.is_null() && c_type.is_null(){
-        println!("Error missing credential: secret type");
-        return ptr::null_mut();
-
-    }
-    if c_payload.is_null() && !c_type.is_null(){
-        println!("Error missing credential: payload");
-        return ptr::null_mut();
-    }
     let r#type = {
         match c_type.is_null() {
             true => None,
@@ -205,10 +197,17 @@ pub unsafe extern "C" fn dial(
                     .connect()
                     .await?
             }
-            _ => {
+            (None, None) => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
                 c.connect().await?
-                
+            }
+            (None, Some(_)) => {
+                // the return type here is finicky, so we are taking advantage of the ? operator to return an errenous value
+                Err(anyhow::anyhow!("Error missing credential: type"))?
+            }
+            (Some(_), None) => {
+                // the return type here is finicky, so we are taking advantage of the ? operator to return an errenous value
+                Err(anyhow::anyhow!("Error missing credential: payload"))?
             }
             
         };
