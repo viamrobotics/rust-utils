@@ -10,7 +10,7 @@ use tokio::time::Instant;
 use viam::rpc::dial::{self, ViamChannel};
 use webrtc::stats;
 
-/// dialdbg gives information on how to connect to a Viam robot.
+/// dialdbg gives information on how rust-utils' dial function makes connections.
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -29,24 +29,24 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    /// Secret with which to connect to the robot. If not provided, dialdbg will dial without
+    /// Credential payload with which to connect to the URI. If not provided, dialdbg will dial without
     /// credentials.
     #[arg(short, long)]
-    secret: Option<String>,
+    credential: Option<String>,
 
-    /// Type of secret with which to connect to the robot. Can only be provided with "--secret".
-    /// If "--secret" is provided but "--secret-type" is not, secret type will default to a robot
-    /// location secret.
-    #[arg(short('t'), long, requires("secret"))]
-    secret_type: Option<String>,
+    /// Type of credential with which to connect to the URI. Can only be provided with
+    /// "--credential". If "--credential" is provided but "--credential-type" is not,
+    /// credential type will default to "robot-location-secret".
+    #[arg(short('t'), long, requires("credential"))]
+    credential_type: Option<String>,
 
-    /// URI of the robot to connect to. Must be provided.
+    /// URI to dial. Must be provided.
     #[arg(short, long, required(true), display_order(0))]
     uri: Option<String>,
 }
 
-async fn dial_grpc(uri: &str, secret: &str, secret_type: &str) {
-    let dial_result = match secret {
+async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) {
+    let dial_result = match credential {
         "" => {
             dial::DialOptions::builder()
                 .uri(uri)
@@ -57,8 +57,11 @@ async fn dial_grpc(uri: &str, secret: &str, secret_type: &str) {
                 .await
         }
         _ => {
-            let creds =
-                dial::RPCCredentials::new(None, secret_type.to_string(), secret.to_string());
+            let creds = dial::RPCCredentials::new(
+                None,
+                credential_type.to_string(),
+                credential.to_string(),
+            );
             dial::DialOptions::builder()
                 .uri(uri)
                 .with_credentials(creds)
@@ -76,8 +79,12 @@ async fn dial_grpc(uri: &str, secret: &str, secret_type: &str) {
     }
 }
 
-async fn dial_webrtc(uri: &str, secret: &str, secret_type: &str) -> Option<stats::StatsReport> {
-    let dial_result = match secret {
+async fn dial_webrtc(
+    uri: &str,
+    credential: &str,
+    credential_type: &str,
+) -> Option<stats::StatsReport> {
+    let dial_result = match credential {
         "" => {
             dial::DialOptions::builder()
                 .uri(uri)
@@ -87,8 +94,11 @@ async fn dial_webrtc(uri: &str, secret: &str, secret_type: &str) -> Option<stats
                 .await
         }
         _ => {
-            let creds =
-                dial::RPCCredentials::new(None, secret_type.to_string(), secret.to_string());
+            let creds = dial::RPCCredentials::new(
+                None,
+                credential_type.to_string(),
+                credential.to_string(),
+            );
             dial::DialOptions::builder()
                 .uri(uri)
                 .with_credentials(creds)
@@ -149,19 +159,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let uri = args.uri.unwrap_or_default();
-    let secret = args.secret.unwrap_or_default();
-    let secret_type = match args.secret_type {
-        Some(st) => match st.as_str() {
-            "robot-location-secret" => st,
-            "robot-secret" => st,
-            _ => {
-                return Err(anyhow!(
-                    "unrecognized secret-type '{st}', only 'robot-location-secret' and 'robot-secret' are supported"
-                ));
-            }
-        },
-        None => "robot-location-secret".to_string(),
-    };
+    let credential = args.credential.unwrap_or_default();
+    let credential_type = args
+        .credential_type
+        .unwrap_or("robot-location-secret".to_string());
 
     // Write to output file or STDOUT if none is provided.
     let mut out: Box<dyn io::Write> = match args.output {
@@ -189,7 +190,7 @@ async fn main() -> Result<()> {
             )?;
         log_config_setter = Some(log4rs::init_config(config)?);
 
-        dial_grpc(uri.as_str(), secret.as_str(), secret_type.as_str()).await;
+        dial_grpc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
         parse::parse_grpc_logs(log_path.clone(), &mut out)?;
 
         // Remove temp log file after parsing.
@@ -218,7 +219,7 @@ async fn main() -> Result<()> {
             log4rs::init_config(config)?;
         }
 
-        let sr = dial_webrtc(uri.as_str(), secret.as_str(), secret_type.as_str()).await;
+        let sr = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
         parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
 
         if let Some(sr) = sr {
