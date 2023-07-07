@@ -48,13 +48,13 @@ impl WebRTCBaseChannel {
                 None => return Box::pin(async {}),
             };
             Box::pin(async move {
-                let sctp = pc.sctp();
-                let transport = sctp.transport();
-                let transport = transport.ice_transport();
-                let candidate_pair = transport.get_selected_candidate_pair().await;
-
                 // If ICE connection state is connected, log the Selected candidate pair.
                 if conn_state == RTCIceConnectionState::Connected {
+                    let sctp = pc.sctp();
+                    let transport = sctp.transport();
+                    let transport = transport.ice_transport();
+                    let candidate_pair = transport.get_selected_candidate_pair().await;
+
                     if let Some(cp) = candidate_pair {
                         log::info!("Selected candidate pair: {}", cp);
                     }
