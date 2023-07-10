@@ -55,6 +55,28 @@ pub unsafe extern "C" fn new_orientation_vector(
     to_raw_pointer(&o_vec)
 }
 
+/// Get the components of an orientation vector as a list of C doubles, the order of the
+/// components will be (o_x, o_y, o_z, theta).
+///
+/// # Safety
+///
+/// When finished with the underlying orientation_vector passed to this function
+/// the caller must remember to free the orientation_vector memory using the
+/// free_orientation_vector_memory FFI function
+#[no_mangle]
+pub unsafe extern "C" fn orientation_vector_get_components(
+    ov_ptr: *const OrientationVector,
+) -> *const c_double {
+    null_pointer_check!(ov_ptr);
+    let components: [c_double; 4] = [
+        (*ov_ptr).o_vector.x,
+        (*ov_ptr).o_vector.y,
+        (*ov_ptr).o_vector.z,
+        (*ov_ptr).theta,
+    ];
+    Box::into_raw(Box::new(components)) as *const _
+}
+
 /// Converts a quaternion into an orientation vector.
 ///
 /// # Safety
