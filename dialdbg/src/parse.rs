@@ -1,12 +1,12 @@
 use super::strings;
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use chrono::{DateTime, Duration, FixedOffset};
 use std::{fmt, fs, io, net::SocketAddr, path::PathBuf};
 
 const DEVELOPMENT: Option<&'static str> = option_env!("DIALDBG_DEVELOPMENT");
 
 #[derive(Debug, Default)]
-struct GRPCResult {
+pub(crate) struct GRPCResult {
     // The mDNS address queried (None if mDNS was not used in connection establishment).
     mdns_address: Option<SocketAddr>,
     // The time taken to query mDNS (None if mDNS was not used in connection establishment or
@@ -70,7 +70,7 @@ impl fmt::Display for GRPCResult {
 }
 
 #[derive(Debug, Default)]
-struct WebRTCResult {
+pub(crate) struct WebRTCResult {
     // The mDNS address queried (None if mDNS was not used in connection establishment).
     mdns_address: Option<SocketAddr>,
     // The time taken to query mDNS (None if mDNS was not used in connection establishment or
@@ -144,11 +144,11 @@ impl fmt::Display for WebRTCResult {
 fn extract_timestamp(log: &str) -> Result<DateTime<FixedOffset>> {
     let split_log = log.split_whitespace().collect::<Vec<&str>>();
     if split_log.len() == 0 {
-        return Err(anyhow!("malformed log returned by dial: {log}"));
+        bail!("malformed log returned by dial: {log}");
     }
     match DateTime::parse_from_rfc3339(split_log[0]) {
         Ok(d) => Ok(d),
-        Err(e) => Err(anyhow!("error parsing timestamp in log {log}: {e}")),
+        Err(e) => bail!("error parsing timestamp in log {log}: {e}"),
     }
 }
 
@@ -159,9 +159,9 @@ fn extract_mdns_address(log: &str) -> Result<SocketAddr> {
     match split_log.pop() {
         Some(a) => match a.parse::<SocketAddr>() {
             Ok(a) => Ok(a),
-            Err(e) => Err(anyhow!("error parsing IP address {a} in log {log}: {e}",)),
+            Err(e) => bail!("error parsing IP address {a} in log {log}: {e}"),
         },
-        None => Err(anyhow!("malformed mDNS log returned by dial: {log}")),
+        None => bail!("malformed mDNS log returned by dial: {log}"),
     }
 }
 
@@ -169,12 +169,15 @@ fn extract_dial_error(log: &str) -> Result<String> {
     // Tear off LOG prefixes and reattach the DIAL_ERROR_PREFIX.
     let split_log = log.split(strings::DIAL_ERROR_PREFIX).collect::<Vec<&str>>();
     if split_log.len() != 2 {
-        return Err(anyhow!("malformed dial error message: {log}"));
+        bail!("malformed dial error message: {log}");
     }
     Ok(format!("{}{}", strings::DIAL_ERROR_PREFIX, split_log[1]))
 }
 
-pub(crate) fn parse_grpc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>) -> Result<()> {
+pub(crate) fn parse_grpc_logs(
+    log_path: PathBuf,
+    out: &mut Box<dyn io::Write>,
+) -> Result<GRPCResult> {
     let mut res = GRPCResult::default();
 
     let mut connection_establishment_start = None;
@@ -198,11 +201,11 @@ pub(crate) fn parse_grpc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>) -
                     res.mdns = Some(extract_timestamp(log)?.signed_duration_since(mqs));
                 }
                 None => {
-                    return Err(anyhow!(
+                    bail!(
                         "expected '{}' log before '{}'",
                         strings::MDNS_QUERY_ATTEMPT,
                         strings::MDNS_QUERY_SUCCESS
-                    ));
+                    );
                 }
             }
         } else if log.contains(strings::ACQUIRING_AUTH_TOKEN) {
@@ -213,11 +216,11 @@ pub(crate) fn parse_grpc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>) -
                     res.authentication = Some(extract_timestamp(log)?.signed_duration_since(aus));
                 }
                 None => {
-                    return Err(anyhow!(
+                    bail!(
                         "expected '{}' log before '{}'",
                         strings::ACQUIRING_AUTH_TOKEN,
                         strings::ACQUIRED_AUTH_TOKEN
-                    ));
+                    );
                 }
             }
         } else if log.contains(strings::DIAL_ATTEMPT) {
@@ -228,18 +231,17 @@ pub(crate) fn parse_grpc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>) -
                     res.connection = Some(extract_timestamp(log)?.signed_duration_since(ces));
                 }
                 None => {
-                    return Err(anyhow!(
+                    bail!(
                         "expected '{}' log before '{}'",
                         strings::DIAL_ATTEMPT,
                         strings::DIALED_GRPC
-                    ));
+                    );
                 }
             }
         }
     }
 
-    write!(out, "{res}")?;
-    Ok(())
+    Ok(res)
 }
 
 fn extract_ice_candidate_pair(log: &str) -> Result<String> {
@@ -248,14 +250,17 @@ fn extract_ice_candidate_pair(log: &str) -> Result<String> {
         .split(strings::CANDIDATE_SELECTED)
         .collect::<Vec<&str>>();
     if split_log.len() != 2 {
-        return Err(anyhow!("malformed selected candidate message: {log}"));
+        bail!("malformed selected candidate message: {log}");
     }
 
     // Remove annoying ": " still left over from log.
     Ok(split_log[1].strip_prefix(": ").unwrap().to_string())
 }
 
-pub(crate) fn parse_webrtc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>) -> Result<()> {
+pub(crate) fn parse_webrtc_logs(
+    log_path: PathBuf,
+    out: &mut Box<dyn io::Write>,
+) -> Result<WebRTCResult> {
     let mut res = WebRTCResult::default();
 
     let mut connection_establishment_start = None;
@@ -279,11 +284,11 @@ pub(crate) fn parse_webrtc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>)
                     res.mdns = Some(extract_timestamp(log)?.signed_duration_since(mqs));
                 }
                 None => {
-                    return Err(anyhow!(
+                    bail!(
                         "expected '{}' log before '{}'",
                         strings::MDNS_QUERY_ATTEMPT,
                         strings::MDNS_QUERY_SUCCESS
-                    ));
+                    );
                 }
             }
         } else if log.contains(strings::ACQUIRING_AUTH_TOKEN) {
@@ -294,11 +299,11 @@ pub(crate) fn parse_webrtc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>)
                     res.authentication = Some(extract_timestamp(log)?.signed_duration_since(aus));
                 }
                 None => {
-                    return Err(anyhow!(
+                    bail!(
                         "expected '{}' log before '{}'",
                         strings::ACQUIRING_AUTH_TOKEN,
                         strings::ACQUIRED_AUTH_TOKEN
-                    ));
+                    );
                 }
             }
         } else if log.contains(strings::CANDIDATE_SELECTED) {
@@ -311,16 +316,15 @@ pub(crate) fn parse_webrtc_logs(log_path: PathBuf, out: &mut Box<dyn io::Write>)
                     res.connection = Some(extract_timestamp(log)?.signed_duration_since(ces));
                 }
                 None => {
-                    return Err(anyhow!(
+                    bail!(
                         "expected '{}' log before '{}'",
                         strings::DIAL_ATTEMPT,
                         strings::DIALED_WEBRTC
-                    ));
+                    );
                 }
             }
         }
     }
 
-    write!(out, "{res}")?;
-    Ok(())
+    Ok(res)
 }

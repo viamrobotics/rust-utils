@@ -1,7 +1,7 @@
 mod parse;
 mod strings;
 
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use clap::Parser;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
@@ -169,7 +169,7 @@ async fn main() -> Result<()> {
         Some(output) => match fs::File::create(output) {
             Ok(output_file_writer) => Box::new(output_file_writer),
             Err(e) => {
-                return Err(anyhow!("error opening --output file: {e}"));
+                bail!("error opening --output file: {e}");
             }
         },
         None => Box::new(io::stdout()),
@@ -191,10 +191,13 @@ async fn main() -> Result<()> {
         log_config_setter = Some(log4rs::init_config(config)?);
 
         dial_grpc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
-        parse::parse_grpc_logs(log_path.clone(), &mut out)?;
+        let grpc_res = parse::parse_grpc_logs(log_path.clone(), &mut out)?;
+        write!(out, "{grpc_res}")?;
 
-        // Remove temp log file after parsing.
-        fs::remove_file(log_path)?;
+        // Remove temp log file after parsing if it exists.
+        if let Ok(_) = log_path.try_exists() {
+            fs::remove_file(log_path)?;
+        }
 
         writeln!(out, "\nDone debugging dial with basic gRPC.")?;
     }
@@ -220,14 +223,17 @@ async fn main() -> Result<()> {
         }
 
         let sr = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
-        parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
+        let wrtc_res = parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
+        write!(out, "{wrtc_res}")?;
 
         if let Some(sr) = sr {
             output_connection_stats(sr, &mut out)?;
         }
 
-        // Remove temp log file after parsing.
-        fs::remove_file(log_path)?;
+        // Remove temp log file after parsing if it exists.
+        if let Ok(_) = log_path.try_exists() {
+            fs::remove_file(log_path)?;
+        }
 
         writeln!(out, "\nDone debugging dial with WebRTC.")?;
     }
