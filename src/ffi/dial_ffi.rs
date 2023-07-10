@@ -87,15 +87,12 @@ fn dial_without_cred(
 
 fn dial_with_cred(
     uri: String,
+    r#type: &str,
     payload: &str,
     allow_insec: bool,
     disable_webrtc: bool,
 ) -> Result<DialBuilder<WithCredentials>> {
-    let creds = RPCCredentials::new(
-        None,
-        String::from("robot-location-secret"),
-        String::from(payload),
-    );
+    let creds = RPCCredentials::new(None, String::from(r#type), String::from(payload));
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
     let c = if disable_webrtc {
         c.disable_webrtc()
@@ -113,12 +110,14 @@ fn dial_with_cred(
 /// When falling to dial it will return a NULL pointer
 /// # Arguments
 /// * `c_uri` a C-style string representing the address of robot you want to connect to
+/// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
 /// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
 #[no_mangle]
 pub unsafe extern "C" fn dial(
     c_uri: *const c_char,
+    c_type: *const c_char,
     c_payload: *const c_char,
     c_allow_insec: bool,
     rt_ptr: Option<&mut DialFfi>,
@@ -130,19 +129,13 @@ pub unsafe extern "C" fn dial(
         let ur = match Uri::from_maybe_shared(CStr::from_ptr(c_uri).to_bytes()) {
             Ok(ur) => ur,
             Err(e) => {
-                println!("Sorry {e:?} is not a valid URI");
+                log::error!("Sorry {e:?} is not a valid URI");
                 return ptr::null_mut();
             }
         };
         ur
     };
     let allow_insec = c_allow_insec;
-    let payload = {
-        match c_payload.is_null() {
-            true => None,
-            false => Some(CStr::from_ptr(c_payload)),
-        }
-    };
     let ctx = match rt_ptr {
         Some(rt) => rt,
         None => {
@@ -158,19 +151,20 @@ pub unsafe extern "C" fn dial(
     let conn = match runtime.block_on(async { proxy::uds::UDSConnector::new_random() }) {
         Ok(conn) => conn,
         Err(e) => {
-            println!("Error creating the UDS proxy {e:?}");
+            log::error!("Error creating the UDS proxy {e:?}");
             return ptr::null_mut();
         }
     };
     let path = match CString::new(conn.get_path()) {
         Ok(s) => s,
         Err(e) => {
-            println!("Error getting the path {e:?}");
+            log::error!("Error getting the path {e:?}");
             return ptr::null_mut();
         }
     };
     let (tx, rx) = oneshot::channel::<()>();
     let uri_str = uri.to_string();
+
     // if the uri is local then we can connect directly.
     let disable_webrtc;
     if let Some(host) = uri.host() {
@@ -178,18 +172,38 @@ pub unsafe extern "C" fn dial(
     } else {
         disable_webrtc = uri_str.contains(".local") || uri_str.contains("localhost");
     }
+    let r#type = {
+        match c_type.is_null() {
+            true => None,
+            false => Some(CStr::from_ptr(c_type)),
+        }
+    };
+    let payload = {
+        match c_payload.is_null() {
+            true => None,
+            false => Some(CStr::from_ptr(c_payload)),
+        }
+    };
     let (server, channel) = match runtime.block_on(async move {
-        let channel = match payload {
-            Some(p) => {
-                dial_with_cred(uri_str, p.to_str()?, allow_insec, disable_webrtc)?
-                    .connect()
-                    .await?
+        let channel = match (r#type, payload) {
+            (Some(t), Some(p)) => {
+                dial_with_cred(
+                    uri_str,
+                    t.to_str()?,
+                    p.to_str()?,
+                    allow_insec,
+                    disable_webrtc,
+                )?
+                .connect()
+                .await
             }
-            None => {
+            (None, None) => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
-                c.connect().await?
+                c.connect().await
             }
-        };
+            (None, Some(_)) => Err(anyhow::anyhow!("Error missing credential: type")),
+            (Some(_), None) => Err(anyhow::anyhow!("Error missing credential: payload")),
+        }?;
         let dial = channel.clone();
         let g = GRPCProxy::new(dial, uri);
         let service = ServiceBuilder::new()
@@ -211,7 +225,7 @@ pub unsafe extern "C" fn dial(
     }) {
         Ok(s) => s,
         Err(e) => {
-            println!("Error building GRPC proxy reason : {e:?}");
+            log::error!("Error building GRPC proxy reason : {e:?}");
             return ptr::null_mut();
         }
     };
