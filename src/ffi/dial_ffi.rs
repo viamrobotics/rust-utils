@@ -10,7 +10,6 @@ use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use tracing::Level;
 
-
 use crate::rpc::dial::{
     DialBuilder, DialOptions, RPCCredentials, ViamChannel, WithCredentials, WithoutCredentials,
 };
@@ -93,11 +92,7 @@ fn dial_with_cred(
     allow_insec: bool,
     disable_webrtc: bool,
 ) -> Result<DialBuilder<WithCredentials>> {
-    let creds = RPCCredentials::new(
-        None,
-        String::from(r#type),
-        String::from(payload),
-    );
+    let creds = RPCCredentials::new(None, String::from(r#type), String::from(payload));
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
     let c = if disable_webrtc {
         c.disable_webrtc()
@@ -141,18 +136,6 @@ pub unsafe extern "C" fn dial(
         ur
     };
     let allow_insec = c_allow_insec;
-    let r#type = {
-        match c_type.is_null() {
-            true => None,
-            false => Some(CStr::from_ptr(c_type)),
-        }
-    };
-    let payload = {
-        match c_payload.is_null() {
-            true => None,
-            false => Some(CStr::from_ptr(c_payload)),
-        }
-    };
     let ctx = match rt_ptr {
         Some(rt) => rt,
         None => {
@@ -181,7 +164,7 @@ pub unsafe extern "C" fn dial(
     };
     let (tx, rx) = oneshot::channel::<()>();
     let uri_str = uri.to_string();
-    
+
     // if the uri is local then we can connect directly.
     let disable_webrtc;
     if let Some(host) = uri.host() {
@@ -189,24 +172,37 @@ pub unsafe extern "C" fn dial(
     } else {
         disable_webrtc = uri_str.contains(".local") || uri_str.contains("localhost");
     }
+    let r#type = {
+        match c_type.is_null() {
+            true => None,
+            false => Some(CStr::from_ptr(c_type)),
+        }
+    };
+    let payload = {
+        match c_payload.is_null() {
+            true => None,
+            false => Some(CStr::from_ptr(c_payload)),
+        }
+    };
     let (server, channel) = match runtime.block_on(async move {
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
-                dial_with_cred(uri_str, t.to_str()?, p.to_str()?, allow_insec, disable_webrtc)?
-                    .connect()
-                    .await
+                dial_with_cred(
+                    uri_str,
+                    t.to_str()?,
+                    p.to_str()?,
+                    allow_insec,
+                    disable_webrtc,
+                )?
+                .connect()
+                .await
             }
             (None, None) => {
                 let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
                 c.connect().await
             }
-            (None, Some(_)) => {
-                Err(anyhow::anyhow!("Error missing credential: type"))
-            }
-            (Some(_), None) => {
-                Err(anyhow::anyhow!("Error missing credential: payload"))
-            }
-            
+            (None, Some(_)) => Err(anyhow::anyhow!("Error missing credential: type")),
+            (Some(_), None) => Err(anyhow::anyhow!("Error missing credential: payload")),
         }?;
         let dial = channel.clone();
         let g = GRPCProxy::new(dial, uri);
