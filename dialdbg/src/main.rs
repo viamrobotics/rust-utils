@@ -1,4 +1,5 @@
 mod parse;
+mod stats;
 mod strings;
 
 use anyhow::{bail, Result};
@@ -6,9 +7,7 @@ use clap::Parser;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use std::{fs, io, path::PathBuf};
-use tokio::time::Instant;
 use viam::rpc::dial::{self, ViamChannel};
-use webrtc::stats;
 
 /// dialdbg gives information on how rust-utils' dial function makes connections.
 #[derive(Parser, Debug)]
@@ -113,7 +112,7 @@ async fn dial_webrtc(
     // no error, return the stats report of the underlying RTCPeerConnection.
     match dial_result {
         Ok(c) => match c {
-            ViamChannel::WebRTC(c) => Some(c.get_stats().await),
+            ViamChannel::WebRTC(c) => Some(stats::StatsReport(c.get_stats().await)),
             _ => None,
         },
         Err(e) => {
@@ -121,37 +120,6 @@ async fn dial_webrtc(
             None
         }
     }
-}
-
-fn output_connection_stats(stats: stats::StatsReport, out: &mut Box<dyn io::Write>) -> Result<()> {
-    // NOTE(benjirewis): StatsReport contains 13 types of stat reports; there may be more relevant stats
-    // to print here, but for now I have stuck with only printing the candidates.
-    writeln!(out, "\nnominated ICE candidates:\n")?;
-    let now = Instant::now();
-    for value in stats.reports.into_values() {
-        match value {
-            stats::StatsReportType::LocalCandidate(ref cand)
-            | stats::StatsReportType::RemoteCandidate(ref cand) => {
-                let remote_or_local = if let stats::StatsReportType::LocalCandidate(_) = value {
-                    "local"
-                } else {
-                    "remote"
-                };
-                writeln!(out, "\t{} ICE candidate:", remote_or_local)?;
-                writeln!(out, "\t\tIP address: {}", cand.ip)?;
-                writeln!(out, "\t\tport: {}", cand.port)?;
-                writeln!(
-                    out,
-                    "\t\tnominated {:#?} ago",
-                    now.duration_since(cand.timestamp)
-                )?;
-                writeln!(out, "\t\trelay protocol: {}", cand.relay_protocol)?;
-                writeln!(out, "\t\tnetwork type: {}", cand.network_type)?;
-            }
-            _ => {}
-        }
-    }
-    Ok(())
 }
 
 #[tokio::main]
@@ -225,9 +193,8 @@ async fn main() -> Result<()> {
         let sr = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
         let wrtc_res = parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
         write!(out, "{wrtc_res}")?;
-
         if let Some(sr) = sr {
-            output_connection_stats(sr, &mut out)?;
+            write!(out, "{sr}")?;
         }
 
         // Remove temp log file after parsing if it exists.
