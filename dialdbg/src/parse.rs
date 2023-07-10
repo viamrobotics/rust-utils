@@ -1,9 +1,13 @@
-use super::strings;
 use anyhow::{bail, Result};
 use chrono::{DateTime, Duration, FixedOffset};
 use std::{fmt, fs, io, net::SocketAddr, path::PathBuf};
+use viam::rpc::log_prefixes;
 
 const DEVELOPMENT: Option<&'static str> = option_env!("DIALDBG_DEVELOPMENT");
+
+// This prefix is prepended in dialdbg when connect returns an error. It is not
+// from dial itself.
+pub(crate) const DIAL_ERROR_PREFIX: &'static str = "unexpected dial connect error";
 
 #[derive(Debug, Default)]
 pub(crate) struct GRPCResult {
@@ -167,11 +171,11 @@ fn extract_mdns_address(log: &str) -> Result<SocketAddr> {
 
 fn extract_dial_error(log: &str) -> Result<String> {
     // Tear off LOG prefixes and reattach the DIAL_ERROR_PREFIX.
-    let split_log = log.split(strings::DIAL_ERROR_PREFIX).collect::<Vec<&str>>();
+    let split_log = log.split(DIAL_ERROR_PREFIX).collect::<Vec<&str>>();
     if split_log.len() != 2 {
         bail!("malformed dial error message: {log}");
     }
-    Ok(format!("{}{}", strings::DIAL_ERROR_PREFIX, split_log[1]))
+    Ok(format!("{}{}", DIAL_ERROR_PREFIX, split_log[1]))
 }
 
 pub(crate) fn parse_grpc_logs(
@@ -189,13 +193,13 @@ pub(crate) fn parse_grpc_logs(
             writeln!(out, "log message: {log}")?;
         }
 
-        if log.contains(strings::DIAL_ERROR_PREFIX) {
+        if log.contains(DIAL_ERROR_PREFIX) {
             res.dial_error_message = Some(extract_dial_error(log)?);
-        } else if log.contains(strings::MDNS_ADDRESS_FOUND) {
+        } else if log.contains(log_prefixes::MDNS_ADDRESS_FOUND) {
             res.mdns_address = Some(extract_mdns_address(log)?);
-        } else if log.contains(strings::MDNS_QUERY_ATTEMPT) {
+        } else if log.contains(log_prefixes::MDNS_QUERY_ATTEMPT) {
             mdns_query_start = Some(extract_timestamp(log)?);
-        } else if log.contains(strings::MDNS_QUERY_SUCCESS) {
+        } else if log.contains(log_prefixes::MDNS_QUERY_SUCCESS) {
             match mdns_query_start {
                 Some(mqs) => {
                     res.mdns_query = Some(extract_timestamp(log)?.signed_duration_since(mqs));
@@ -203,14 +207,14 @@ pub(crate) fn parse_grpc_logs(
                 None => {
                     bail!(
                         "expected '{}' log before '{}'",
-                        strings::MDNS_QUERY_ATTEMPT,
-                        strings::MDNS_QUERY_SUCCESS
+                        log_prefixes::MDNS_QUERY_ATTEMPT,
+                        log_prefixes::MDNS_QUERY_SUCCESS
                     );
                 }
             }
-        } else if log.contains(strings::ACQUIRING_AUTH_TOKEN) {
+        } else if log.contains(log_prefixes::ACQUIRING_AUTH_TOKEN) {
             authentication_start = Some(extract_timestamp(log)?);
-        } else if log.contains(strings::ACQUIRED_AUTH_TOKEN) {
+        } else if log.contains(log_prefixes::ACQUIRED_AUTH_TOKEN) {
             match authentication_start {
                 Some(aus) => {
                     res.authentication = Some(extract_timestamp(log)?.signed_duration_since(aus));
@@ -218,14 +222,14 @@ pub(crate) fn parse_grpc_logs(
                 None => {
                     bail!(
                         "expected '{}' log before '{}'",
-                        strings::ACQUIRING_AUTH_TOKEN,
-                        strings::ACQUIRED_AUTH_TOKEN
+                        log_prefixes::ACQUIRING_AUTH_TOKEN,
+                        log_prefixes::ACQUIRED_AUTH_TOKEN
                     );
                 }
             }
-        } else if log.contains(strings::DIAL_ATTEMPT) {
+        } else if log.contains(log_prefixes::DIAL_ATTEMPT) {
             connection_establishment_start = Some(extract_timestamp(log)?);
-        } else if log.contains(strings::DIALED_GRPC) {
+        } else if log.contains(log_prefixes::DIALED_GRPC) {
             match connection_establishment_start {
                 Some(ces) => {
                     res.connection = Some(extract_timestamp(log)?.signed_duration_since(ces));
@@ -233,8 +237,8 @@ pub(crate) fn parse_grpc_logs(
                 None => {
                     bail!(
                         "expected '{}' log before '{}'",
-                        strings::DIAL_ATTEMPT,
-                        strings::DIALED_GRPC
+                        log_prefixes::DIAL_ATTEMPT,
+                        log_prefixes::DIALED_GRPC
                     );
                 }
             }
@@ -247,7 +251,7 @@ pub(crate) fn parse_grpc_logs(
 fn extract_ice_candidate_pair(log: &str) -> Result<String> {
     // Tear off LOG prefixes.
     let split_log = log
-        .split(strings::CANDIDATE_SELECTED)
+        .split(log_prefixes::CANDIDATE_SELECTED)
         .collect::<Vec<&str>>();
     if split_log.len() != 2 {
         bail!("malformed selected candidate message: {log}");
@@ -272,13 +276,13 @@ pub(crate) fn parse_webrtc_logs(
             writeln!(out, "log message: {log}")?;
         }
 
-        if log.contains(strings::DIAL_ERROR_PREFIX) {
+        if log.contains(DIAL_ERROR_PREFIX) {
             res.dial_error_message = Some(extract_dial_error(log)?);
-        } else if log.contains(strings::MDNS_ADDRESS_FOUND) {
+        } else if log.contains(log_prefixes::MDNS_ADDRESS_FOUND) {
             res.mdns_address = Some(extract_mdns_address(log)?);
-        } else if log.contains(strings::MDNS_QUERY_ATTEMPT) {
+        } else if log.contains(log_prefixes::MDNS_QUERY_ATTEMPT) {
             mdns_query_start = Some(extract_timestamp(log)?);
-        } else if log.contains(strings::MDNS_QUERY_SUCCESS) {
+        } else if log.contains(log_prefixes::MDNS_QUERY_SUCCESS) {
             match mdns_query_start {
                 Some(mqs) => {
                     res.mdns = Some(extract_timestamp(log)?.signed_duration_since(mqs));
@@ -286,14 +290,14 @@ pub(crate) fn parse_webrtc_logs(
                 None => {
                     bail!(
                         "expected '{}' log before '{}'",
-                        strings::MDNS_QUERY_ATTEMPT,
-                        strings::MDNS_QUERY_SUCCESS
+                        log_prefixes::MDNS_QUERY_ATTEMPT,
+                        log_prefixes::MDNS_QUERY_SUCCESS
                     );
                 }
             }
-        } else if log.contains(strings::ACQUIRING_AUTH_TOKEN) {
+        } else if log.contains(log_prefixes::ACQUIRING_AUTH_TOKEN) {
             authentication_start = Some(extract_timestamp(log)?);
-        } else if log.contains(strings::ACQUIRED_AUTH_TOKEN) {
+        } else if log.contains(log_prefixes::ACQUIRED_AUTH_TOKEN) {
             match authentication_start {
                 Some(aus) => {
                     res.authentication = Some(extract_timestamp(log)?.signed_duration_since(aus));
@@ -301,16 +305,16 @@ pub(crate) fn parse_webrtc_logs(
                 None => {
                     bail!(
                         "expected '{}' log before '{}'",
-                        strings::ACQUIRING_AUTH_TOKEN,
-                        strings::ACQUIRED_AUTH_TOKEN
+                        log_prefixes::ACQUIRING_AUTH_TOKEN,
+                        log_prefixes::ACQUIRED_AUTH_TOKEN
                     );
                 }
             }
-        } else if log.contains(strings::CANDIDATE_SELECTED) {
+        } else if log.contains(log_prefixes::CANDIDATE_SELECTED) {
             res.selected_candidate_pair = Some(extract_ice_candidate_pair(log)?);
-        } else if log.contains(strings::DIAL_ATTEMPT) {
+        } else if log.contains(log_prefixes::DIAL_ATTEMPT) {
             connection_establishment_start = Some(extract_timestamp(log)?);
-        } else if log.contains(strings::DIALED_WEBRTC) {
+        } else if log.contains(log_prefixes::DIALED_WEBRTC) {
             match connection_establishment_start {
                 Some(ces) => {
                     res.connection = Some(extract_timestamp(log)?.signed_duration_since(ces));
@@ -318,8 +322,8 @@ pub(crate) fn parse_webrtc_logs(
                 None => {
                     bail!(
                         "expected '{}' log before '{}'",
-                        strings::DIAL_ATTEMPT,
-                        strings::DIALED_WEBRTC
+                        log_prefixes::DIAL_ATTEMPT,
+                        log_prefixes::DIALED_WEBRTC
                     );
                 }
             }

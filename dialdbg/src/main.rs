@@ -1,6 +1,5 @@
 mod parse;
 mod stats;
-mod strings;
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -74,7 +73,7 @@ async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) {
     // `connect` may propagate an error here; log the error with a prefix so we can still
     // process logs and not immediately return from the main function.
     if let Err(e) = dial_result {
-        log::error!("{}: {e}", strings::DIAL_ERROR_PREFIX);
+        log::error!("{}: {e}", parse::DIAL_ERROR_PREFIX);
     }
 }
 
@@ -116,7 +115,7 @@ async fn dial_webrtc(
             _ => None,
         },
         Err(e) => {
-            log::error!("{}: {e}", strings::DIAL_ERROR_PREFIX);
+            log::error!("{}: {e}", parse::DIAL_ERROR_PREFIX);
             None
         }
     }

@@ -1,3 +1,4 @@
+use super::log_prefixes;
 use anyhow::Result;
 use std::{
     fmt::Debug,
@@ -56,7 +57,7 @@ impl WebRTCBaseChannel {
                     let candidate_pair = transport.get_selected_candidate_pair().await;
 
                     if let Some(cp) = candidate_pair {
-                        log::info!("Selected candidate pair: {}", cp);
+                        log::info!("{}: {cp}", log_prefixes::CANDIDATE_SELECTED);
                     }
                 }
             })

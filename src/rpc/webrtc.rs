@@ -1,3 +1,4 @@
+use super::log_prefixes;
 use crate::gen::proto::rpc::webrtc::v1::{IceServer, ResponseTrailers, WebRtcConfig};
 use anyhow::Result;
 use bytes::Bytes;
@@ -216,7 +217,7 @@ pub(crate) async fn new_peer_connection_for_client(
         move |connection: RTCPeerConnectionState| {
             log::info!("peer connection state change: {connection}");
             if connection == RTCPeerConnectionState::Connected {
-                log::debug!("Connected via WebRTC");
+                log::debug!("{}", log_prefixes::DIALED_WEBRTC);
             }
             Box::pin(async move {})
         },

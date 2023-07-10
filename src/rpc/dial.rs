@@ -1,5 +1,6 @@
 use super::{
     client_channel::*,
+    log_prefixes,
     webrtc::{webrtc_action_with_timeout, Options},
 };
 use crate::gen::google;
@@ -416,7 +417,7 @@ impl<T: AuthMethod> DialBuilder<T> {
                 return None;
             }
             Some(addr) => {
-                log::debug!("Found address via mDNS: {addr}");
+                log::debug!("{}: {addr}", log_prefixes::MDNS_ADDRESS_FOUND);
                 addr
             }
         };
@@ -467,7 +468,7 @@ impl DialBuilder<WithoutCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
-        log::debug!("Dialing");
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
             Some(options) => options.disable_webrtc,
@@ -485,7 +486,7 @@ impl DialBuilder<WithoutCredentials> {
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
         if attempting_mdns {
-            log::debug!("Attempting to connect via mDNS");
+            log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
         } else {
             log::debug!("Attempting to connect");
         }
@@ -501,7 +502,7 @@ impl DialBuilder<WithoutCredentials> {
 
         let channel = match channel {
             Ok(c) => {
-                log::debug!("Connected via mDNS");
+                log::debug!("{}", log_prefixes::MDNS_QUERY_SUCCESS);
                 c
             }
             Err(e) => {
@@ -528,14 +529,14 @@ impl DialBuilder<WithoutCredentials> {
             .service(channel.clone());
 
         if disable_webrtc {
-            log::debug!("Connected via gRPC");
+            log::debug!("{}", log_prefixes::DIALED_GRPC);
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
             match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
-                    log::debug!("Connected via gRPC");
+                    log::debug!("{}", log_prefixes::DIALED_GRPC);
                     Ok(ViamChannel::Direct(channel.clone()))
                 }
             }
@@ -580,7 +581,7 @@ impl DialBuilder<WithCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
-        log::debug!("Dialing");
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let is_insecure = self.config.insecure;
 
         let webrtc_options = self.config.webrtc_options;
@@ -603,7 +604,7 @@ impl DialBuilder<WithCredentials> {
 
         let allow_downgrade = self.config.allow_downgrade;
         if attempting_mdns {
-            log::debug!("Attempting to connect via mDNS");
+            log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
         } else {
             log::debug!("Attempting to connect");
         }
@@ -615,7 +616,7 @@ impl DialBuilder<WithCredentials> {
         };
         let real_channel = match channel {
             Ok(c) => {
-                log::debug!("Connected via mDNS");
+                log::debug!("{}", log_prefixes::MDNS_QUERY_SUCCESS);
                 c
             }
             Err(e) => {
@@ -628,7 +629,7 @@ impl DialBuilder<WithCredentials> {
             }
         };
 
-        log::debug!("Acquiring auth token");
+        log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
         let token = get_auth_token(
             &mut real_channel.clone(),
             self.config
@@ -644,7 +645,7 @@ impl DialBuilder<WithCredentials> {
                 .unwrap_or_else(|| domain.clone()),
         )
         .await?;
-        log::debug!("Acquired auth token");
+        log::debug!("{}", log_prefixes::ACQUIRED_AUTH_TOKEN);
 
         let channel = ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
