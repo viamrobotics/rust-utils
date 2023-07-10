@@ -1,4 +1,5 @@
 use ffi_helpers::null_pointer_check;
+use libc::c_double;
 use nalgebra::Quaternion;
 
 use crate::spatialmath::utils::OrientationVector;
