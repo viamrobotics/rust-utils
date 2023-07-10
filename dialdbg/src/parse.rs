@@ -11,7 +11,7 @@ pub(crate) struct GRPCResult {
     mdns_address: Option<SocketAddr>,
     // The time taken to query mDNS (None if mDNS was not used in connection establishment or
     // query failed).
-    mdns: Option<Duration>,
+    mdns_query: Option<Duration>,
 
     // The time taken to complete authentication (None if authentication was unsuccessful).
     authentication: Option<Duration>,
@@ -30,7 +30,7 @@ impl fmt::Display for GRPCResult {
         if let Some(a) = self.mdns_address {
             writeln!(f, "mDNS address {} was used for connection", a)?;
         }
-        match self.mdns {
+        match self.mdns_query {
             Some(d) => {
                 writeln!(f, "mDNS queried in {}ms", d.num_milliseconds(),)?;
             }
@@ -198,7 +198,7 @@ pub(crate) fn parse_grpc_logs(
         } else if log.contains(strings::MDNS_QUERY_SUCCESS) {
             match mdns_query_start {
                 Some(mqs) => {
-                    res.mdns = Some(extract_timestamp(log)?.signed_duration_since(mqs));
+                    res.mdns_query = Some(extract_timestamp(log)?.signed_duration_since(mqs));
                 }
                 None => {
                     bail!(

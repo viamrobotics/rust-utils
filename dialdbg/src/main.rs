@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
         None => Box::new(io::stdout()),
     };
 
-    let mut log_config_setter = None;
+    let mut log_config_setter: Option<log4rs::Handle> = None;
     if !args.nogrpc {
         writeln!(out, "\nDebugging dial with basic gRPC...\n")?;
         // Start logger with Debug-level logging and append logs to a file in a temp directory.
@@ -184,8 +184,8 @@ async fn main() -> Result<()> {
 
         // Logging may have been initialized by gRPC, in which case we should use the
         // log4rs::Handle to set a new config.
-        if log_config_setter.is_some() {
-            log_config_setter.unwrap().set_config(config);
+        if let Some(log_config_setter) = log_config_setter {
+            log_config_setter.set_config(config);
         } else {
             log4rs::init_config(config)?;
         }
