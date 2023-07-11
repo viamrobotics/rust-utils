@@ -335,7 +335,7 @@ impl<T: AuthMethod> DialBuilder<T> {
             addr_to_send.push_str(SERVICE_NAME);
 
             let discovery =
-                discover::interface_with_loopback(addr_to_send, Duration::from_secs(1), ipv4)
+                discover::interface_with_loopback(addr_to_send, Duration::from_millis(250), ipv4)
                     .ok()?;
             let stream = discovery.listen();
             pin_mut!(stream);
@@ -683,10 +683,15 @@ impl DialBuilder<WithCredentials> {
                 ))
             }
         };
-        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(2))
-            .await
-            .ok()
-            .flatten();
+        // NOTE(benjirewis): Use a duration of 1500ms for getting the mDNS URI. I've anecdotally
+        // seen times as great as 922ms to fetch a non-loopback mDNS URI. With an
+        // interface_with_loopback query interval of 250ms, 1500ms here should give us time for ~6
+        // queries.
+        let mdns_uri =
+            webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_millis(1500))
+                .await
+                .ok()
+                .flatten();
         self.connect_inner(mdns_uri, original_uri).await
     }
 }
