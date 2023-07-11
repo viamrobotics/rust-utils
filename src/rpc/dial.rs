@@ -469,7 +469,6 @@ impl DialBuilder<WithoutCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
-        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
             Some(options) => options.disable_webrtc,
@@ -545,6 +544,7 @@ impl DialBuilder<WithoutCredentials> {
     }
 
     pub async fn connect(self) -> Result<ViamChannel> {
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let original_uri = match self.duplicate_uri() {
             Some(uri) => uri,
             None => {
@@ -582,7 +582,6 @@ impl DialBuilder<WithCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
-        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let is_insecure = self.config.insecure;
 
         let webrtc_options = self.config.webrtc_options;
@@ -675,6 +674,7 @@ impl DialBuilder<WithCredentials> {
 
     /// attempts to establish a connection with credentials to the DialBuilder's given uri
     pub async fn connect(self) -> Result<ViamChannel> {
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let original_uri = match self.duplicate_uri() {
             Some(uri) => uri,
             None => {
