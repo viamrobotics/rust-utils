@@ -195,11 +195,9 @@ pub(crate) fn parse_grpc_logs(
 
         if log.contains(DIAL_ERROR_PREFIX) {
             res.dial_error_message = Some(extract_dial_error(log)?);
-        } else if log.contains(log_prefixes::MDNS_ADDRESS_FOUND) {
-            res.mdns_address = Some(extract_mdns_address(log)?);
         } else if log.contains(log_prefixes::MDNS_QUERY_ATTEMPT) {
             mdns_query_start = Some(extract_timestamp(log)?);
-        } else if log.contains(log_prefixes::MDNS_QUERY_SUCCESS) {
+        } else if log.contains(log_prefixes::MDNS_ADDRESS_FOUND) {
             match mdns_query_start {
                 Some(mqs) => {
                     res.mdns_query = Some(extract_timestamp(log)?.signed_duration_since(mqs));
@@ -208,10 +206,11 @@ pub(crate) fn parse_grpc_logs(
                     bail!(
                         "expected '{}' log before '{}'",
                         log_prefixes::MDNS_QUERY_ATTEMPT,
-                        log_prefixes::MDNS_QUERY_SUCCESS
+                        log_prefixes::MDNS_ADDRESS_FOUND
                     );
                 }
             }
+            res.mdns_address = Some(extract_mdns_address(log)?);
         } else if log.contains(log_prefixes::ACQUIRING_AUTH_TOKEN) {
             authentication_start = Some(extract_timestamp(log)?);
         } else if log.contains(log_prefixes::ACQUIRED_AUTH_TOKEN) {
@@ -278,11 +277,9 @@ pub(crate) fn parse_webrtc_logs(
 
         if log.contains(DIAL_ERROR_PREFIX) {
             res.dial_error_message = Some(extract_dial_error(log)?);
-        } else if log.contains(log_prefixes::MDNS_ADDRESS_FOUND) {
-            res.mdns_address = Some(extract_mdns_address(log)?);
         } else if log.contains(log_prefixes::MDNS_QUERY_ATTEMPT) {
             mdns_query_start = Some(extract_timestamp(log)?);
-        } else if log.contains(log_prefixes::MDNS_QUERY_SUCCESS) {
+        } else if log.contains(log_prefixes::MDNS_ADDRESS_FOUND) {
             match mdns_query_start {
                 Some(mqs) => {
                     res.mdns_query = Some(extract_timestamp(log)?.signed_duration_since(mqs));
@@ -291,10 +288,11 @@ pub(crate) fn parse_webrtc_logs(
                     bail!(
                         "expected '{}' log before '{}'",
                         log_prefixes::MDNS_QUERY_ATTEMPT,
-                        log_prefixes::MDNS_QUERY_SUCCESS
+                        log_prefixes::MDNS_ADDRESS_FOUND
                     );
                 }
             }
+            res.mdns_address = Some(extract_mdns_address(log)?);
         } else if log.contains(log_prefixes::ACQUIRING_AUTH_TOKEN) {
             authentication_start = Some(extract_timestamp(log)?);
         } else if log.contains(log_prefixes::ACQUIRED_AUTH_TOKEN) {

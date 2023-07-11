@@ -388,6 +388,7 @@ impl<T: AuthMethod> DialBuilder<T> {
     }
 
     async fn get_mdns_uri(&self) -> Option<Parts> {
+        log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
         if self.config.disable_mdns {
             return None;
         }
@@ -486,7 +487,7 @@ impl DialBuilder<WithoutCredentials> {
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
         if attempting_mdns {
-            log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
+            log::debug!("Attempting connect via mDNS");
         } else {
             log::debug!("Attempting to connect");
         }
@@ -502,7 +503,7 @@ impl DialBuilder<WithoutCredentials> {
 
         let channel = match channel {
             Ok(c) => {
-                log::debug!("{}", log_prefixes::MDNS_QUERY_SUCCESS);
+                log::debug!("Connected via mDNS");
                 c
             }
             Err(e) => {
@@ -604,7 +605,7 @@ impl DialBuilder<WithCredentials> {
 
         let allow_downgrade = self.config.allow_downgrade;
         if attempting_mdns {
-            log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
+            log::debug!("Attemping to connect via mDNS");
         } else {
             log::debug!("Attempting to connect");
         }
@@ -616,7 +617,7 @@ impl DialBuilder<WithCredentials> {
         };
         let real_channel = match channel {
             Ok(c) => {
-                log::debug!("{}", log_prefixes::MDNS_QUERY_SUCCESS);
+                log::debug!("Connected via mDNS");
                 c
             }
             Err(e) => {
@@ -682,7 +683,7 @@ impl DialBuilder<WithCredentials> {
                 ))
             }
         };
-        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
+        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(2))
             .await
             .ok()
             .flatten();

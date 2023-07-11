@@ -2,9 +2,8 @@
 // workspace in this crate), parses these prefixes to determine dial behavior. Ensure modifications
 // to this file are accordingly respected in dialdbg.
 
+pub const MDNS_QUERY_ATTEMPT: &'static str = "Starting mDNS query";
 pub const MDNS_ADDRESS_FOUND: &'static str = "Found address via mDNS";
-pub const MDNS_QUERY_ATTEMPT: &'static str = "Attempting to connect via mDNS";
-pub const MDNS_QUERY_SUCCESS: &'static str = "Connected via mDNS";
 
 pub const ACQUIRING_AUTH_TOKEN: &'static str = "Acquiring auth token";
 pub const ACQUIRED_AUTH_TOKEN: &'static str = "Acquired auth token";
