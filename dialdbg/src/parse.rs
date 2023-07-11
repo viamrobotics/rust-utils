@@ -257,7 +257,10 @@ fn extract_ice_candidate_pair(log: &str) -> Result<String> {
     }
 
     // Remove annoying ": " still left over from log.
-    Ok(split_log[1].strip_prefix(": ").unwrap().to_string())
+    Ok(split_log[1]
+        .strip_prefix(": ")
+        .unwrap_or_default()
+        .to_string())
 }
 
 pub(crate) fn parse_webrtc_logs(
