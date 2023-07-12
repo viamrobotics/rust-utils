@@ -1,5 +1,5 @@
 use float_cmp::{ApproxEq, F64Margin};
-use nalgebra::{Quaternion, Vector3, UnitQuaternion, UnitVector3};
+use nalgebra::{Quaternion, UnitQuaternion, UnitVector3, Vector3};
 
 const ANGLE_ACCEPTANCE: f64 = 0.0001;
 
@@ -8,7 +8,7 @@ const ANGLE_ACCEPTANCE: f64 = 0.0001;
 pub struct EulerAngles {
     pub roll: f64,
     pub pitch: f64,
-    pub yaw: f64
+    pub yaw: f64,
 }
 
 impl EulerAngles {
@@ -16,16 +16,18 @@ impl EulerAngles {
         EulerAngles { roll, pitch, yaw }
     }
 
-    /// Converts a quaternion into euler angles (in radians). The euler angles are 
-    /// represented according to the Tait-Bryan formalism and applied 
+    /// Converts a quaternion into euler angles (in radians). The euler angles are
+    /// represented according to the Tait-Bryan formalism and applied
     /// in the Z-Y'-X" order (where Z -> yaw, Y -> pitch, X -> roll).
     pub fn from_quaternion(quat: &Quaternion<f64>) -> Self {
         // get a normalized version of the quaternion
         let norm_quat = quat.normalize();
 
         // calculate yaw
-        let yaw_sin_pitch_cos: f64 = 2.0 * ((norm_quat.w * norm_quat.k) + (norm_quat.i * norm_quat.j));
-        let yaw_cos_pitch_cos: f64 = 1.0 - 2.0 * ((norm_quat.j * norm_quat.j) + (norm_quat.k * norm_quat.k));
+        let yaw_sin_pitch_cos: f64 =
+            2.0 * ((norm_quat.w * norm_quat.k) + (norm_quat.i * norm_quat.j));
+        let yaw_cos_pitch_cos: f64 =
+            1.0 - 2.0 * ((norm_quat.j * norm_quat.j) + (norm_quat.k * norm_quat.k));
         let yaw = yaw_sin_pitch_cos.atan2(yaw_cos_pitch_cos);
 
         // calculate pitch and roll
@@ -39,8 +41,10 @@ impl EulerAngles {
             roll = (2.0 * norm_quat.i.atan2(norm_quat.w)) + yaw.copysign(pitch_sin);
         } else {
             pitch = pitch_sin.asin();
-            let roll_sin_pitch_cos = 2.0 * ((norm_quat.w * norm_quat.i) + (norm_quat.j * norm_quat.k));
-            let roll_cos_pitch_cos = 1.0 - 2.0 * ((norm_quat.i * norm_quat.i) + (norm_quat.j * norm_quat.j));
+            let roll_sin_pitch_cos =
+                2.0 * ((norm_quat.w * norm_quat.i) + (norm_quat.j * norm_quat.k));
+            let roll_cos_pitch_cos =
+                1.0 - 2.0 * ((norm_quat.i * norm_quat.i) + (norm_quat.j * norm_quat.j));
             roll = roll_sin_pitch_cos.atan2(roll_cos_pitch_cos);
         }
 
@@ -54,8 +58,10 @@ impl From<Quaternion<f64>> for EulerAngles {
         let norm_quat = quat.normalize();
 
         // calculate yaw
-        let yaw_sin_pitch_cos: f64 = 2.0 * ((norm_quat.w * norm_quat.k) + (norm_quat.i * norm_quat.j));
-        let yaw_cos_pitch_cos: f64 = 1.0 - 2.0 * ((norm_quat.j * norm_quat.j) + (norm_quat.k * norm_quat.k));
+        let yaw_sin_pitch_cos: f64 =
+            2.0 * ((norm_quat.w * norm_quat.k) + (norm_quat.i * norm_quat.j));
+        let yaw_cos_pitch_cos: f64 =
+            1.0 - 2.0 * ((norm_quat.j * norm_quat.j) + (norm_quat.k * norm_quat.k));
         let yaw = yaw_sin_pitch_cos.atan2(yaw_cos_pitch_cos);
 
         // calculate pitch and roll
@@ -69,8 +75,10 @@ impl From<Quaternion<f64>> for EulerAngles {
             roll = (2.0 * norm_quat.i.atan2(norm_quat.w)) + yaw.copysign(pitch_sin);
         } else {
             pitch = pitch_sin.asin();
-            let roll_sin_pitch_cos = 2.0 * ((norm_quat.w * norm_quat.i) + (norm_quat.j * norm_quat.k));
-            let roll_cos_pitch_cos = 1.0 - 2.0 * ((norm_quat.i * norm_quat.i) + (norm_quat.j * norm_quat.j));
+            let roll_sin_pitch_cos =
+                2.0 * ((norm_quat.w * norm_quat.i) + (norm_quat.j * norm_quat.k));
+            let roll_cos_pitch_cos =
+                1.0 - 2.0 * ((norm_quat.i * norm_quat.i) + (norm_quat.j * norm_quat.j));
             roll = roll_sin_pitch_cos.atan2(roll_cos_pitch_cos);
         }
 
@@ -82,12 +90,15 @@ impl From<Quaternion<f64>> for EulerAngles {
 #[derive(Clone, Copy, Debug)]
 pub struct AxisAngle {
     pub axis: Vector3<f64>,
-    pub theta: f64
+    pub theta: f64,
 }
 
 impl AxisAngle {
     pub fn new(x: f64, y: f64, z: f64, theta: f64) -> Self {
-        AxisAngle { axis: Vector3::new(x, y, z), theta }
+        AxisAngle {
+            axis: Vector3::new(x, y, z),
+            theta,
+        }
     }
 }
 
@@ -99,12 +110,8 @@ impl TryFrom<Quaternion<f64>> for AxisAngle {
         let axis_opt = unit_quat.axis();
         let angle = unit_quat.angle();
         match axis_opt {
-            Some(value) => {
-                Ok(Self::new(value[0], value[1], value[2], angle))
-            },
-            None => {
-                Err(())
-            },
+            Some(value) => Ok(Self::new(value[0], value[1], value[2], angle)),
+            None => Err(()),
         }
     }
 }
@@ -113,40 +120,40 @@ impl TryFrom<Quaternion<f64>> for AxisAngle {
 #[derive(Clone, Copy, Debug)]
 pub struct OrientationVector {
     pub o_vector: UnitVector3<f64>,
-    pub theta: f64
+    pub theta: f64,
 }
 
 impl OrientationVector {
     pub fn new(o_x: f64, o_y: f64, o_z: f64, theta: f64) -> Self {
         let o_vector = UnitVector3::new_normalize(Vector3::new(o_x, o_y, o_z));
-        OrientationVector{o_vector, theta}
+        OrientationVector { o_vector, theta }
     }
 
     pub fn to_quaternion(&self) -> Quaternion<f64> {
         let lat = self.o_vector.z.acos();
         let lon = match self.o_vector.z {
             val if 1.0 - val > ANGLE_ACCEPTANCE => self.o_vector.y.atan2(self.o_vector.x),
-            _ => 0.0
+            _ => 0.0,
         };
 
         // convert angles as euler angles (lon, lat, theta) to quaternion
         // using the zyz rotational order
-        let s: [f64;3] = [
+        let s: [f64; 3] = [
             (lon / 2.0).sin(),
             (lat / 2.0).sin(),
-            (self.theta / 2.0).sin()
+            (self.theta / 2.0).sin(),
         ];
 
-        let c: [f64;3] = [
+        let c: [f64; 3] = [
             (lon / 2.0).cos(),
             (lat / 2.0).cos(),
-            (self.theta / 2.0).cos()
+            (self.theta / 2.0).cos(),
         ];
 
-        let real = c[0]*c[1]*c[2] - s[0]*c[1]*s[2];
-        let i = c[0]*s[1]*s[2] - s[0]*s[1]*c[2];
-        let j = c[0]*s[1]*c[2] + s[0]*s[1]*s[2];
-        let k = s[0]*c[1]*c[2] + c[0]*c[1]*s[2];
+        let real = c[0] * c[1] * c[2] - s[0] * c[1] * s[2];
+        let i = c[0] * s[1] * s[2] - s[0] * s[1] * c[2];
+        let j = c[0] * s[1] * c[2] + s[0] * s[1] * s[2];
+        let k = s[0] * c[1] * c[2] + c[0] * c[1] * s[2];
 
         Quaternion::new(real, i, j, k)
     }
@@ -185,53 +192,55 @@ impl From<Quaternion<f64>> for OrientationVector {
                 let cos_theta = match cos_theta_cand {
                     val if val < -1.0 => -1.0,
                     val if val > 1.0 => 1.0,
-                    _ => cos_theta_cand
+                    _ => cos_theta_cand,
                 };
 
                 match cos_theta.acos() {
                     val if val > ANGLE_ACCEPTANCE => {
                         let new_z_imag_unit = UnitVector3::new_normalize(new_z_imag);
-                        let rot_quat_unit = UnitQuaternion::from_axis_angle(&new_z_imag_unit, -1.0 * val);
+                        let rot_quat_unit =
+                            UnitQuaternion::from_axis_angle(&new_z_imag_unit, -1.0 * val);
                         let rot_quat = rot_quat_unit.quaternion();
                         let z_axis_quat = Quaternion::new(0.0, 0.0, 0.0, 1.0);
                         let test_z = (rot_quat * z_axis_quat) * rot_quat.conjugate();
                         let test_z_imag = test_z.imag();
 
                         let normal_3 = new_z_imag.cross(&test_z_imag);
-                        let cos_test = normal_1.dot(&normal_3) / (normal_3.norm() * normal_1.norm());
+                        let cos_test =
+                            normal_1.dot(&normal_3) / (normal_3.norm() * normal_1.norm());
                         match cos_test {
-                            val2 if (1.0 - val2) < (ANGLE_ACCEPTANCE * ANGLE_ACCEPTANCE) => -1.0 * val,
-                            _ => val
+                            val2 if (1.0 - val2) < (ANGLE_ACCEPTANCE * ANGLE_ACCEPTANCE) => {
+                                -1.0 * val
+                            }
+                            _ => val,
                         }
-                    },
-                    _ => 0.0
+                    }
+                    _ => 0.0,
                 }
-            },
+            }
             _ => match new_z.k {
                 val if val < 0.0 => -1.0 * new_x.j.atan2(new_x.i),
-                _ => -1.0 * new_x.j.atan2(new_x.i * -1.0)
-            }
+                _ => -1.0 * new_x.j.atan2(new_x.i * -1.0),
+            },
         };
         Self { o_vector, theta }
     }
 }
 
-pub fn rotate_vector_by_quaternion(
-    quat: &Quaternion<f64>, vector: &Vector3<f64>
-) -> Vector3<f64> {
+pub fn rotate_vector_by_quaternion(quat: &Quaternion<f64>, vector: &Vector3<f64>) -> Vector3<f64> {
     let quat_vec = Vector3::new(quat.i, quat.j, quat.k);
     let quat_real = quat.w;
     (2.0 * quat_vec.dot(vector) * quat_vec)
-    + ((quat_real * quat_real - quat_vec.norm_squared()) * vector)
-    + (2.0 * quat_real) * quat_vec.cross(vector)
+        + ((quat_real * quat_real - quat_vec.norm_squared()) * vector)
+        + (2.0 * quat_real) * quat_vec.cross(vector)
 }
 
 #[cfg(test)]
 mod tests {
-    use float_cmp::{assert_approx_eq};
+    use float_cmp::assert_approx_eq;
     use nalgebra::{Quaternion, Vector3};
 
-    use super::{EulerAngles, OrientationVector, rotate_vector_by_quaternion};
+    use super::{rotate_vector_by_quaternion, EulerAngles, OrientationVector};
 
     fn get_quaternion_diff_norm(quat1: &Quaternion<f64>, quat2: &Quaternion<f64>) -> f64 {
         let quat_diff = quat1.coords - quat2.coords;
@@ -245,164 +254,126 @@ mod tests {
 
     #[test]
     fn quaternion_to_orientation_vector_works() {
-        let quat = Quaternion::new(
-            0.7071067811865476, 0.7071067811865476, 0.0, 0.0
-        );
-        let expected_ov = OrientationVector::new(
-            0.0, -1.0, 0.0, 1.5707963267948966
-        );
+        let quat = Quaternion::new(0.7071067811865476, 0.7071067811865476, 0.0, 0.0);
+        let expected_ov = OrientationVector::new(0.0, -1.0, 0.0, 1.5707963267948966);
         let calc_ov: OrientationVector = quat.into();
         assert_approx_eq!(OrientationVector, calc_ov, expected_ov);
 
-        let quat2 = Quaternion::new(
-            0.7071067811865476, -0.7071067811865476, 0.0, 0.0
-        );
-        let expected_ov2 = OrientationVector::new(
-            0.0, 1.0, 0.0, -1.5707963267948966
-        );
+        let quat2 = Quaternion::new(0.7071067811865476, -0.7071067811865476, 0.0, 0.0);
+        let expected_ov2 = OrientationVector::new(0.0, 1.0, 0.0, -1.5707963267948966);
         let calc_ov2: OrientationVector = quat2.into();
         assert_approx_eq!(OrientationVector, calc_ov2, expected_ov2);
 
-        let quat3 = Quaternion::new(
-            0.96, 0.0, -0.28, 0.0
-        );
-        let expected_ov3 = OrientationVector::new(
-            -0.5376, 0.0, 0.8432, -1.0 * std::f64::consts::PI
-        );
+        let quat3 = Quaternion::new(0.96, 0.0, -0.28, 0.0);
+        let expected_ov3 =
+            OrientationVector::new(-0.5376, 0.0, 0.8432, -1.0 * std::f64::consts::PI);
         let calc_ov3: OrientationVector = quat3.into();
         assert_approx_eq!(OrientationVector, calc_ov3, expected_ov3);
 
-        let quat4 = Quaternion::new(
-            0.96, 0.0, 0.0, -0.28
-        );
-        let expected_ov4 = OrientationVector::new(
-            0.0, 0.0, 1.0, -0.5675882184166557
-        );
+        let quat4 = Quaternion::new(0.96, 0.0, 0.0, -0.28);
+        let expected_ov4 = OrientationVector::new(0.0, 0.0, 1.0, -0.5675882184166557);
         let calc_ov4: OrientationVector = quat4.into();
         assert_approx_eq!(OrientationVector, calc_ov4, expected_ov4);
 
-        let quat5 = Quaternion::new(
-            0.96, -0.28, 0.0, 0.0
-        );
-        let expected_ov5 = OrientationVector::new(
-            0.0, 0.5376, 0.8432, -1.5707963267948966
-        );
+        let quat5 = Quaternion::new(0.96, -0.28, 0.0, 0.0);
+        let expected_ov5 = OrientationVector::new(0.0, 0.5376, 0.8432, -1.5707963267948966);
         let calc_ov5: OrientationVector = quat5.into();
         assert_approx_eq!(OrientationVector, calc_ov5, expected_ov5);
 
-        let quat6 = Quaternion::new(
-            0.96, 0.28, 0.0, 0.0
-        );
-        let expected_ov6 = OrientationVector::new(
-            0.0, -0.5376, 0.8432, 1.5707963267948966
-        );
+        let quat6 = Quaternion::new(0.96, 0.28, 0.0, 0.0);
+        let expected_ov6 = OrientationVector::new(0.0, -0.5376, 0.8432, 1.5707963267948966);
         let calc_ov6: OrientationVector = quat6.into();
         assert_approx_eq!(OrientationVector, calc_ov6, expected_ov6);
 
         let quat7 = Quaternion::new(0.5, -0.5, -0.5, -0.5);
-        let expected_ov7 = OrientationVector::new(
-            0.0, 1.0, 0.0, -1.0 * std::f64::consts::PI
-        );
+        let expected_ov7 = OrientationVector::new(0.0, 1.0, 0.0, -1.0 * std::f64::consts::PI);
         let calc_ov7: OrientationVector = quat7.into();
         assert_approx_eq!(OrientationVector, calc_ov7, expected_ov7);
 
         let quat8 = Quaternion::new(
-            0.816632212270443, -0.17555966025413142, 0.39198397193979817, 0.3855375485164001
+            0.816632212270443,
+            -0.17555966025413142,
+            0.39198397193979817,
+            0.3855375485164001,
         );
         let expected_ov8 = OrientationVector::new(
-            0.5048437942940054, 0.5889844266763397, 0.631054742867507, 0.02
+            0.5048437942940054,
+            0.5889844266763397,
+            0.631054742867507,
+            0.02,
         );
         let calc_ov8: OrientationVector = quat8.into();
         assert_approx_eq!(OrientationVector, calc_ov8, expected_ov8, epsilon = 0.0001);
-
     }
 
     #[test]
     fn orientation_vector_to_quaternion_works() {
-        let ov = OrientationVector::new(
-            0.0, -1.0, 0.0, 1.5707963267948966
-        );
-        let expected_quat = Quaternion::new(
-            0.7071067811865476, 0.7071067811865476, 0.0, 0.0
-        );
+        let ov = OrientationVector::new(0.0, -1.0, 0.0, 1.5707963267948966);
+        let expected_quat = Quaternion::new(0.7071067811865476, 0.7071067811865476, 0.0, 0.0);
         let calc_quat = ov.to_quaternion();
         let mut diff = get_quaternion_diff_norm(&expected_quat, &calc_quat);
         assert_approx_eq!(f64, diff, 0.0);
 
-        let ov2 = OrientationVector::new(
-            0.0, 1.0, 0.0, -1.5707963267948966
-        );
-        let expected_quat2 = Quaternion::new(
-            0.7071067811865476, -0.7071067811865476, 0.0, 0.0
-        );
+        let ov2 = OrientationVector::new(0.0, 1.0, 0.0, -1.5707963267948966);
+        let expected_quat2 = Quaternion::new(0.7071067811865476, -0.7071067811865476, 0.0, 0.0);
         let calc_quat2 = ov2.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat2, &calc_quat2);
         assert_approx_eq!(f64, diff, 0.0);
 
-        let ov3 = OrientationVector::new(
-            -0.5376, 0.0, 0.8432, -1.0 * std::f64::consts::PI
-        );
-        let expected_quat3 = Quaternion::new(
-            0.96, 0.0, -0.28, 0.0
-        );
+        let ov3 = OrientationVector::new(-0.5376, 0.0, 0.8432, -1.0 * std::f64::consts::PI);
+        let expected_quat3 = Quaternion::new(0.96, 0.0, -0.28, 0.0);
         let calc_quat3 = ov3.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat3, &calc_quat3);
         assert_approx_eq!(f64, diff, 0.0);
 
-        let ov4 = OrientationVector::new(
-            0.0, 0.0, 1.0, -0.5675882184166557
-        );
-        let expected_quat4 = Quaternion::new(
-            0.96, 0.0, 0.0, -0.28
-        );
+        let ov4 = OrientationVector::new(0.0, 0.0, 1.0, -0.5675882184166557);
+        let expected_quat4 = Quaternion::new(0.96, 0.0, 0.0, -0.28);
         let calc_quat4 = ov4.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat4, &calc_quat4);
         assert_approx_eq!(f64, diff, 0.0);
 
-        let ov5 = OrientationVector::new(
-            0.0, 0.5376, 0.8432, -1.5707963267948966
-        );
-        let expected_quat5 = Quaternion::new(
-            0.96, -0.28, 0.0, 0.0
-        );
+        let ov5 = OrientationVector::new(0.0, 0.5376, 0.8432, -1.5707963267948966);
+        let expected_quat5 = Quaternion::new(0.96, -0.28, 0.0, 0.0);
         let calc_quat5 = ov5.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat5, &calc_quat5);
         assert_approx_eq!(f64, diff, 0.0);
 
-        let ov6 = OrientationVector::new(
-            0.0, -0.5376, 0.8432, 1.5707963267948966
-        );
-        let expected_quat6 = Quaternion::new(
-            0.96, 0.28, 0.0, 0.0
-        );
+        let ov6 = OrientationVector::new(0.0, -0.5376, 0.8432, 1.5707963267948966);
+        let expected_quat6 = Quaternion::new(0.96, 0.28, 0.0, 0.0);
         let calc_quat6 = ov6.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat6, &calc_quat6);
         assert_approx_eq!(f64, diff, 0.0);
 
-        let ov7 = OrientationVector::new(
-            0.0, 1.0, 0.0, -1.0 * std::f64::consts::PI
-        );
+        let ov7 = OrientationVector::new(0.0, 1.0, 0.0, -1.0 * std::f64::consts::PI);
         let expected_quat7 = Quaternion::new(0.5, -0.5, -0.5, -0.5);
         let calc_quat7 = ov7.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat7, &calc_quat7);
         assert_approx_eq!(f64, diff, 0.0);
 
         let ov8 = OrientationVector::new(
-            0.5048437942940054, 0.5889844266763397, 0.631054742867507, 0.02
+            0.5048437942940054,
+            0.5889844266763397,
+            0.631054742867507,
+            0.02,
         );
         let expected_quat8 = Quaternion::new(
-            0.816632212270443, -0.17555966025413142, 0.39198397193979817, 0.3855375485164001
+            0.816632212270443,
+            -0.17555966025413142,
+            0.39198397193979817,
+            0.3855375485164001,
         );
         let calc_quat8 = ov8.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat8, &calc_quat8);
         assert_approx_eq!(f64, diff, 0.0);
-
     }
 
     #[test]
     fn euler_angles_from_quaternion_works() {
         let quat = Quaternion::new(
-            0.2705980500730985, -0.6532814824381882, 0.27059805007309856, 0.6532814824381883
+            0.2705980500730985,
+            -0.6532814824381882,
+            0.27059805007309856,
+            0.6532814824381883,
         );
         let euler_angles: EulerAngles = quat.into();
         assert_approx_eq!(f64, euler_angles.pitch, std::f64::consts::PI / 2.0);
@@ -410,7 +381,10 @@ mod tests {
         assert_approx_eq!(f64, euler_angles.roll, std::f64::consts::PI / 4.0);
 
         let quat2 = Quaternion::new(
-            0.4619397662556435, -0.19134171618254486, 0.4619397662556434, 0.7325378163287418
+            0.4619397662556435,
+            -0.19134171618254486,
+            0.4619397662556434,
+            0.7325378163287418,
         );
         let euler_angles2: EulerAngles = quat2.into();
         assert_approx_eq!(f64, euler_angles2.pitch, std::f64::consts::PI / 4.0);
@@ -436,5 +410,4 @@ mod tests {
         let diff = get_vector_diff_norm(&expected_vector2, &rotated_vector2);
         assert_approx_eq!(f64, diff, 0.0, epsilon = 0.0001);
     }
-    
 }
