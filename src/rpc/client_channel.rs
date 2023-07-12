@@ -295,4 +295,9 @@ impl WebRTCClientChannel {
             }
         }
     }
+
+    /// Returns the current stats report associated with the underlying peer connection.
+    pub async fn get_stats(&self) -> webrtc::stats::StatsReport {
+        self.base_channel.peer_connection.get_stats().await
+    }
 }

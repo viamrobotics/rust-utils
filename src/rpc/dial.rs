@@ -1,5 +1,6 @@
 use super::{
     client_channel::*,
+    log_prefixes,
     webrtc::{webrtc_action_with_timeout, Options},
 };
 use crate::gen::google;
@@ -334,7 +335,7 @@ impl<T: AuthMethod> DialBuilder<T> {
             addr_to_send.push_str(SERVICE_NAME);
 
             let discovery =
-                discover::interface_with_loopback(addr_to_send, Duration::from_secs(1), ipv4)
+                discover::interface_with_loopback(addr_to_send, Duration::from_millis(250), ipv4)
                     .ok()?;
             let stream = discovery.listen();
             pin_mut!(stream);
@@ -387,6 +388,7 @@ impl<T: AuthMethod> DialBuilder<T> {
     }
 
     async fn get_mdns_uri(&self) -> Option<Parts> {
+        log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
         if self.config.disable_mdns {
             return None;
         }
@@ -416,7 +418,7 @@ impl<T: AuthMethod> DialBuilder<T> {
                 return None;
             }
             Some(addr) => {
-                log::debug!("Found address via mDNS: {addr}");
+                log::debug!("{}: {addr}", log_prefixes::MDNS_ADDRESS_FOUND);
                 addr
             }
         };
@@ -527,12 +529,14 @@ impl DialBuilder<WithoutCredentials> {
             .service(channel.clone());
 
         if disable_webrtc {
+            log::debug!("{}", log_prefixes::DIALED_GRPC);
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
             match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
+                    log::debug!("{}", log_prefixes::DIALED_GRPC);
                     Ok(ViamChannel::Direct(channel.clone()))
                 }
             }
@@ -540,6 +544,7 @@ impl DialBuilder<WithoutCredentials> {
     }
 
     pub async fn connect(self) -> Result<ViamChannel> {
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let original_uri = match self.duplicate_uri() {
             Some(uri) => uri,
             None => {
@@ -624,6 +629,7 @@ impl DialBuilder<WithCredentials> {
             }
         };
 
+        log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
         let token = get_auth_token(
             &mut real_channel.clone(),
             self.config
@@ -639,6 +645,7 @@ impl DialBuilder<WithCredentials> {
                 .unwrap_or_else(|| domain.clone()),
         )
         .await?;
+        log::debug!("{}", log_prefixes::ACQUIRED_AUTH_TOKEN);
 
         let channel = ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
@@ -649,6 +656,7 @@ impl DialBuilder<WithCredentials> {
             .service(real_channel.clone());
 
         if disable_webrtc {
+            log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
             match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
@@ -657,6 +665,7 @@ impl DialBuilder<WithCredentials> {
                     log::error!(
                     "Unable to establish webrtc connection due to error: [{e}]. Attempting direct connection."
                 );
+                    log::debug!("Connected via gRPC");
                     Ok(ViamChannel::DirectPreAuthorized(channel))
                 }
             }
@@ -665,6 +674,7 @@ impl DialBuilder<WithCredentials> {
 
     /// attempts to establish a connection with credentials to the DialBuilder's given uri
     pub async fn connect(self) -> Result<ViamChannel> {
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
         let original_uri = match self.duplicate_uri() {
             Some(uri) => uri,
             None => {
@@ -673,10 +683,15 @@ impl DialBuilder<WithCredentials> {
                 ))
             }
         };
-        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
-            .await
-            .ok()
-            .flatten();
+        // NOTE(benjirewis): Use a duration of 1500ms for getting the mDNS URI. I've anecdotally
+        // seen times as great as 922ms to fetch a non-loopback mDNS URI. With an
+        // interface_with_loopback query interval of 250ms, 1500ms here should give us time for ~6
+        // queries.
+        let mdns_uri =
+            webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_millis(1500))
+                .await
+                .ok()
+                .flatten();
         self.connect_inner(mdns_uri, original_uri).await
     }
 }
