@@ -1,5 +1,3 @@
-# This file is NOT optimized for human-readability - please use the
-# `license_finder` program to read and edit it: <TODO: add link to README instructions>
 ---
 - - :permit
   - MIT
@@ -10,7 +8,7 @@
 - - :permit
   - " MIT"
   - :who:
-    :why: "TODO: whitespace detection issue - submit patch to license finder"
+    :why: 'TODO: whitespace detection issue - submit patch to license finder'
     :versions: []
     :when: 2022-09-08 15:39:55.751943000 Z
 - - :permit
@@ -28,7 +26,7 @@
 - - :permit
   - " Apache-2.0"
   - :who:
-    :why: "TODO: whitespace detection issue - submit patch to license finder"
+    :why: 'TODO: whitespace detection issue - submit patch to license finder'
     :versions: []
     :when: 2022-09-08 15:39:55.751943000 Z
 - - :permit
@@ -52,6 +50,12 @@
 - - :approve
   - viam-rust-utils
   - :who:
-    :why: 'this is our library'
+    :why: this is our library
     :versions: []
     :when: 2022-09-08 15:39:55.751943000 Z
+- - :approve
+  - viam-dialdbg
+  - :who:
+    :why: this is our library
+    :versions: []
+    :when: 2023-07-12 16:08:47.166282000 Z
