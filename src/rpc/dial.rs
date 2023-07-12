@@ -486,7 +486,7 @@ impl DialBuilder<WithoutCredentials> {
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
         if attempting_mdns {
-            log::debug!("Attempting connect via mDNS");
+            log::debug!("Attempting to connect via mDNS");
         } else {
             log::debug!("Attempting to connect");
         }
@@ -604,7 +604,7 @@ impl DialBuilder<WithCredentials> {
 
         let allow_downgrade = self.config.allow_downgrade;
         if attempting_mdns {
-            log::debug!("Attemping to connect via mDNS");
+            log::debug!("Attempting to connect via mDNS");
         } else {
             log::debug!("Attempting to connect");
         }

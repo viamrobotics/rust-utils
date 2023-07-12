@@ -1,7 +1,7 @@
 mod parse;
 mod stats;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
@@ -133,12 +133,9 @@ async fn main() -> Result<()> {
 
     // Write to output file or STDOUT if none is provided.
     let mut out: Box<dyn io::Write> = match args.output {
-        Some(output) => match fs::File::create(output) {
-            Ok(output_file_writer) => Box::new(output_file_writer),
-            Err(e) => {
-                bail!("error opening --output file: {e}");
-            }
-        },
+        Some(output) => fs::File::create(output)
+            .map(Box::new)
+            .map_err(|e| anyhow!("error opening --output file: {e}"))?,
         None => Box::new(io::stdout()),
     };
 
