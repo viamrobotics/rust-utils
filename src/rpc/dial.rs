@@ -55,7 +55,7 @@ const STATUS_CODE_OK: i32 = 0;
 const STATUS_CODE_UNKNOWN: i32 = 2;
 const STATUS_CODE_RESOURCE_EXHAUSTED: i32 = 8;
 
-pub const SERVICE_NAME: &'static str = "_rpc._tcp.local";
+pub const VIAM_MDNS_SERVICE_NAME: &'static str = "_rpc._tcp.local";
 
 type SecretType = String;
 
@@ -333,7 +333,7 @@ impl<T: AuthMethod> DialBuilder<T> {
                 let mut addr_to_send = "".to_string();
                 addr_to_send.push_str(candidate.as_str());
                 addr_to_send.push('.');
-                addr_to_send.push_str(SERVICE_NAME);
+                addr_to_send.push_str(VIAM_MDNS_SERVICE_NAME);
 
                 let discovery = discover::interface_with_loopback(
                     addr_to_send,

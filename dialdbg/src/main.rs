@@ -7,7 +7,7 @@ use futures_util::{pin_mut, stream::StreamExt};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use std::{collections::HashSet, fs, io, path::PathBuf, time::Duration};
-use viam::rpc::dial::{self, ViamChannel, SERVICE_NAME};
+use viam::rpc::dial::{self, ViamChannel, VIAM_MDNS_SERVICE_NAME};
 
 /// dialdbg gives information on how rust-utils' dial function makes connections.
 #[derive(Parser, Debug)]
@@ -142,7 +142,8 @@ async fn all_mdns_addresses() -> Result<HashSet<String>> {
 
     // The 250ms query interval and 1500ms timeout here are meant to mimic the mDNS query
     // timeouts that dial itself used.
-    let stream = viam_mdns::discover::all(SERVICE_NAME, Duration::from_millis(250))?.listen();
+    let stream =
+        viam_mdns::discover::all(VIAM_MDNS_SERVICE_NAME, Duration::from_millis(250))?.listen();
     let waiter = tokio::time::sleep(Duration::from_millis(1500));
 
     pin_mut!(stream);
