@@ -8,7 +8,6 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use std::{collections::HashSet, fs, io, path::PathBuf, time::Duration};
 use viam::rpc::dial::{self, ViamChannel};
-use viam_mdns;
 
 /// dialdbg gives information on how rust-utils' dial function makes connections.
 #[derive(Parser, Debug)]
