@@ -291,10 +291,7 @@ pub(crate) async fn new_peer_connection_for_client(
     Ok((peer_connection, data_channel))
 }
 
-pub(crate) async fn action_with_timeout<T>(
-    f: impl Future<Output = T>,
-    timeout: Duration,
-) -> Result<T> {
+pub async fn action_with_timeout<T>(f: impl Future<Output = T>, timeout: Duration) -> Result<T> {
     tokio::pin! {
         let timeout = tokio::time::sleep(timeout);
         let f = f;

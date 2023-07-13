@@ -17,3 +17,5 @@ chrono = "0.4.26"
 # Must match version of webrtc of rust-utils.
 webrtc = "0.7.3"
 serde = "1.0.164"
+futures-util = "0.3.28"
+viam-mdns = "3.0.1"

@@ -4,4 +4,4 @@ mod client_channel;
 mod client_stream;
 pub mod dial;
 pub mod log_prefixes;
-mod webrtc;
+pub mod webrtc;

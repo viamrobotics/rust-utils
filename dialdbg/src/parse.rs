@@ -15,7 +15,7 @@ pub(crate) struct GRPCResult {
     mdns_address: Option<SocketAddr>,
     // The time taken to query mDNS (None if mDNS was not used in connection establishment or
     // query failed).
-    mdns_query: Option<Duration>,
+    pub(crate) mdns_query: Option<Duration>,
 
     // The time taken to complete authentication (None if authentication was unsuccessful).
     authentication: Option<Duration>,
@@ -79,7 +79,7 @@ pub(crate) struct WebRTCResult {
     mdns_address: Option<SocketAddr>,
     // The time taken to query mDNS (None if mDNS was not used in connection establishment or
     // query failed).
-    mdns_query: Option<Duration>,
+    pub(crate) mdns_query: Option<Duration>,
 
     // The time taken to complete authentication (None if authentication was unsuccessful).
     authentication: Option<Duration>,
