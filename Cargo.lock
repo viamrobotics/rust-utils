@@ -3765,11 +3765,13 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "futures-util",
  "log 0.4.19",
  "log4rs",
  "serde",
  "serde_json",
  "tokio",
+ "viam-mdns",
  "viam-rust-utils",
  "webrtc",
 ]

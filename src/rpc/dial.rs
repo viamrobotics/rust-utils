@@ -55,7 +55,7 @@ const STATUS_CODE_OK: i32 = 0;
 const STATUS_CODE_UNKNOWN: i32 = 2;
 const STATUS_CODE_RESOURCE_EXHAUSTED: i32 = 8;
 
-const SERVICE_NAME: &'static str = "_rpc._tcp.local";
+pub const VIAM_MDNS_SERVICE_NAME: &'static str = "_rpc._tcp.local";
 
 type SecretType = String;
 
@@ -329,25 +329,30 @@ impl<T: AuthMethod> DialBuilder<T> {
 
         let mut resp: Option<Response> = None;
         for ipv4 in addresses {
-            let mut addr_to_send = "".to_string();
-            addr_to_send.push_str(candidates.last()?);
-            addr_to_send.push('.');
-            addr_to_send.push_str(SERVICE_NAME);
+            for candidate in candidates {
+                let mut addr_to_send = "".to_string();
+                addr_to_send.push_str(candidate.as_str());
+                addr_to_send.push('.');
+                addr_to_send.push_str(VIAM_MDNS_SERVICE_NAME);
 
-            let discovery =
-                discover::interface_with_loopback(addr_to_send, Duration::from_millis(250), ipv4)
-                    .ok()?;
-            let stream = discovery.listen();
-            pin_mut!(stream);
-            while let Some(Ok(response)) = stream.next().await {
-                if let Some(hostname) = response.hostname() {
-                    if candidates.iter().any(|c| hostname.contains(c)) {
-                        resp = Some(response);
+                let discovery = discover::interface_with_loopback(
+                    addr_to_send,
+                    Duration::from_millis(250),
+                    ipv4,
+                )
+                .ok()?;
+                let stream = discovery.listen();
+                pin_mut!(stream);
+                while let Some(Ok(response)) = stream.next().await {
+                    if let Some(hostname) = response.hostname() {
+                        if hostname.contains(candidate.as_str()) {
+                            resp = Some(response);
+                            break;
+                        }
+                    }
+                    if resp.is_some() {
                         break;
                     }
-                }
-                if resp.is_some() {
-                    break;
                 }
             }
         }

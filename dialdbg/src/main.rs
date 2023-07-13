@@ -3,10 +3,11 @@ mod stats;
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
+use futures_util::{pin_mut, stream::StreamExt};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
-use std::{fs, io, path::PathBuf};
-use viam::rpc::dial::{self, ViamChannel};
+use std::{collections::HashSet, fs, io, path::PathBuf, time::Duration};
+use viam::rpc::dial::{self, ViamChannel, VIAM_MDNS_SERVICE_NAME};
 
 /// dialdbg gives information on how rust-utils' dial function makes connections.
 #[derive(Parser, Debug)]
@@ -121,6 +122,47 @@ async fn dial_webrtc(
     }
 }
 
+async fn output_all_mdns_addresses(out: &mut Box<dyn io::Write>) -> Result<()> {
+    let responses = all_mdns_addresses().await?;
+    if responses.len() == 0 {
+        writeln!(out, "\nno mDNS addresses discovered on current subnet")?;
+        return Ok(());
+    }
+
+    writeln!(out, "\ndiscovered mDNS addresses:")?;
+    for response in responses {
+        writeln!(out, "\t{}", response)?;
+    }
+
+    Ok(())
+}
+
+async fn all_mdns_addresses() -> Result<HashSet<String>> {
+    let mut responses = HashSet::new();
+
+    // The 250ms query interval and 1500ms timeout here are meant to mimic the mDNS query
+    // timeouts that dial itself used.
+    let stream =
+        viam_mdns::discover::all(VIAM_MDNS_SERVICE_NAME, Duration::from_millis(250))?.listen();
+    let waiter = tokio::time::sleep(Duration::from_millis(1500));
+
+    pin_mut!(stream);
+    pin_mut!(waiter);
+    loop {
+        tokio::select! {
+            _ = &mut waiter => {
+                break;
+            }
+            response = stream.next() => {
+                if let Some(Ok(response)) = response {
+                    responses.insert(format!("{response:?}"));
+                }
+            }
+        }
+    }
+    Ok(responses)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -158,6 +200,12 @@ async fn main() -> Result<()> {
         let grpc_res = parse::parse_grpc_logs(log_path.clone(), &mut out)?;
         write!(out, "{grpc_res}")?;
 
+        // If mDNS could not be used to connect; show discovered mDNS addresses on current
+        // subnet.
+        if grpc_res.mdns_query.is_none() {
+            output_all_mdns_addresses(&mut out).await?;
+        }
+
         // Remove temp log file after parsing if it exists.
         if let Ok(_) = log_path.try_exists() {
             fs::remove_file(log_path)?;
@@ -189,6 +237,13 @@ async fn main() -> Result<()> {
         let sr = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
         let wrtc_res = parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
         write!(out, "{wrtc_res}")?;
+
+        // If mDNS could not be used to connect; show discovered mDNS addresses on current
+        // subnet.
+        if wrtc_res.mdns_query.is_none() {
+            output_all_mdns_addresses(&mut out).await?;
+        }
+
         if let Some(sr) = sr {
             write!(out, "{sr}")?;
         }
