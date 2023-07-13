@@ -126,14 +126,13 @@ async fn dial_webrtc(
 const MDNS_SERVICE_NAME: &'static str = "_rpc._tcp.local";
 
 async fn output_all_mdns_addresses(out: &mut Box<dyn io::Write>) -> Result<()> {
-    writeln!(out, "\ndiscovered mDNS addresses:")?;
-
     let responses = all_mdns_addresses().await?;
     if responses.len() == 0 {
-        writeln!(out, "no mDNS addresses discovered on current subnet")?;
+        writeln!(out, "\nno mDNS addresses discovered on current subnet")?;
         return Ok(());
     }
 
+    writeln!(out, "\ndiscovered mDNS addresses:")?;
     for response in responses {
         writeln!(out, "\t{}", response)?;
     }
