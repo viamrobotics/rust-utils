@@ -143,8 +143,7 @@ async fn all_mdns_addresses() -> Result<HashSet<String>> {
     // The 250ms query interval and 1500ms timeout here are meant to mimic the mDNS query
     // timeouts that dial itself used.
     let stream =
-        viam_mdns::discover::all_with_loopback(VIAM_MDNS_SERVICE_NAME, Duration::from_millis(250))?
-            .listen();
+        viam_mdns::discover::all(VIAM_MDNS_SERVICE_NAME, Duration::from_millis(250))?.listen();
     let waiter = tokio::time::sleep(Duration::from_millis(1500));
 
     pin_mut!(stream);
