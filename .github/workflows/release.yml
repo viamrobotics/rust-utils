@@ -48,8 +48,8 @@ jobs:
         shell: bash
         if: inputs.version != 'nobump'
         run: |
-          cargo install cargo-bump
-          cargo bump ${{ inputs.version }}
+          cargo install cargo-release
+          cargo release ${{ inputs.version }} --no-publish --no-push --execute
 
       - name: Which Version
         id: which_version
