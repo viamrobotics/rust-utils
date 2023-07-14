@@ -49,7 +49,7 @@ jobs:
         if: inputs.version != 'nobump'
         run: |
           cargo install cargo-release
-          cargo release version ${{ inputs.version }} --execute
+          cargo release version ${{ inputs.version }} --execute --no-confirm
 
       - name: Which Version
         id: which_version
