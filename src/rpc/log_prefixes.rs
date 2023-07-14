@@ -13,3 +13,7 @@ pub const DIALED_GRPC: &'static str = "Connected via gRPC";
 pub const DIALED_WEBRTC: &'static str = "Connected via WebRTC";
 
 pub const CANDIDATE_SELECTED: &'static str = "Selected candidate pair";
+
+// `_EXTERN` because we do not have ownership of this message; matching on it should only
+// ever be used as a fallback.
+pub const ICE_CONNECTED_EXTERN: &'static str = "ICE connection state changed: connected";

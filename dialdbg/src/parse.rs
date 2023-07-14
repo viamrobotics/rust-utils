@@ -315,7 +315,15 @@ pub(crate) fn parse_webrtc_logs(
             res.selected_candidate_pair = Some(extract_ice_candidate_pair(log)?);
         } else if log.contains(log_prefixes::DIAL_ATTEMPT) {
             connection_establishment_start = Some(extract_timestamp(log)?);
-        } else if log.contains(log_prefixes::DIALED_WEBRTC) {
+            // TODO(RSDK-4036): we don't currently see the `DIALED_WEBRTC` log reliably,
+            // even when we should. We therefore match also on the `ICE_CONNECTED` external
+            // log as a fallback, as it serves as a reliable proxy and indicates that a WebRTC
+            // connection is (or soon will be) successful. The preferred `DIALED_WEBRTC` log
+            // will always appear afterwards in our logs, and so will always be preferred
+            // when it exists.
+        } else if log.contains(log_prefixes::DIALED_WEBRTC)
+            || log.contains(log_prefixes::ICE_CONNECTED_EXTERN)
+        {
             match connection_establishment_start {
                 Some(ces) => {
                     res.connection = Some(extract_timestamp(log)?.signed_duration_since(ces));
