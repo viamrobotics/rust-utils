@@ -77,6 +77,7 @@ jobs:
         with:
           default_author: github_actions
           message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
+          commit: --allow-empty
 
   build_macos:
     if: github.repository_owner == 'viamrobotics'
