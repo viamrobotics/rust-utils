@@ -1,4 +1,5 @@
 mod parse;
+mod rtt;
 mod stats;
 
 use anyhow::{anyhow, Result};
@@ -23,6 +24,11 @@ struct Args {
     #[arg(long, action, conflicts_with("nogrpc"))]
     nowebrtc: bool,
 
+    /// Whether round-trip-time across established connections should be measured. If not provided,
+    /// round-time-time will be measured.
+    #[arg(long, action)]
+    nortt: bool,
+
     /// Filepath for output of dialdbg (file will be overwritten). If not provided, dialdbg will
     /// output to STDOUT.
     #[arg(short, long)]
@@ -44,7 +50,7 @@ struct Args {
     uri: Option<String>,
 }
 
-async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) {
+async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) -> Option<ViamChannel> {
     let dial_result = match credential {
         "" => {
             dial::DialOptions::builder()
@@ -73,16 +79,16 @@ async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) {
 
     // `connect` may propagate an error here; log the error with a prefix so we can still
     // process logs and not immediately return from the main function.
-    if let Err(e) = dial_result {
-        log::error!("{}: {e}", parse::DIAL_ERROR_PREFIX);
+    match dial_result {
+        Ok(ch) => Some(ch),
+        Err(e) => {
+            log::error!("{}: {e}", parse::DIAL_ERROR_PREFIX);
+            None
+        }
     }
 }
 
-async fn dial_webrtc(
-    uri: &str,
-    credential: &str,
-    credential_type: &str,
-) -> Option<stats::StatsReport> {
+async fn dial_webrtc(uri: &str, credential: &str, credential_type: &str) -> Option<ViamChannel> {
     let dial_result = match credential {
         "" => {
             dial::DialOptions::builder()
@@ -108,13 +114,9 @@ async fn dial_webrtc(
     };
 
     // `connect` may propagate an error here; log the error with a prefix so we can still
-    // process logs and not immediately return from the main function. Assuming there was
-    // no error, return the stats report of the underlying RTCPeerConnection.
+    // process logs and not immediately return from the main function.
     match dial_result {
-        Ok(c) => match c {
-            ViamChannel::WebRTC(c) => Some(stats::StatsReport(c.get_stats().await)),
-            _ => None,
-        },
+        Ok(ch) => Some(ch),
         Err(e) => {
             log::error!("{}: {e}", parse::DIAL_ERROR_PREFIX);
             None
@@ -197,9 +199,19 @@ async fn main() -> Result<()> {
             )?;
         log_config_setter = Some(log4rs::init_config(config)?);
 
-        dial_grpc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
+        let ch = dial_grpc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
         let grpc_res = parse::parse_grpc_logs(log_path.clone(), &mut out)?;
         write!(out, "{grpc_res}")?;
+
+        if let Some(ch) = ch {
+            if !args.nortt {
+                let average_rtt = rtt::measure_rtt(ch.clone(), 5).await?;
+                writeln!(
+                    out,
+                    "average RTT across established gRPC connection: {average_rtt}"
+                )?;
+            }
+        }
 
         // If mDNS could not be used to connect; show discovered mDNS addresses on current
         // subnet.
@@ -235,18 +247,29 @@ async fn main() -> Result<()> {
             log4rs::init_config(config)?;
         }
 
-        let sr = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
+        let ch = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
         let wrtc_res = parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
         write!(out, "{wrtc_res}")?;
+
+        if let Some(ch) = ch {
+            if !args.nortt {
+                let average_rtt = rtt::measure_rtt(ch.clone(), 5).await?;
+                writeln!(
+                    out,
+                    "average RTT across established WebRTC connection: {average_rtt}"
+                )?;
+            }
+
+            if let ViamChannel::WebRTC(ch) = ch {
+                let sr = stats::StatsReport(ch.get_stats().await);
+                write!(out, "{sr}")?;
+            }
+        }
 
         // If mDNS could not be used to connect; show discovered mDNS addresses on current
         // subnet.
         if wrtc_res.mdns_query.is_none() {
             output_all_mdns_addresses(&mut out).await?;
-        }
-
-        if let Some(sr) = sr {
-            write!(out, "{sr}")?;
         }
 
         // Remove temp log file after parsing if it exists.
