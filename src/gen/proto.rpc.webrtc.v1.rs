@@ -367,5 +367,4 @@ pub struct OptionalWebRtcConfigResponse {
     #[prost(message, optional, tag="1")]
     pub config: ::core::option::Option<WebRtcConfig>,
 }
-include!("proto.rpc.webrtc.v1.tonic.rs");
 // @@protoc_insertion_point(module)

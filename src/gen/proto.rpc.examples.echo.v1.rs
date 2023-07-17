@@ -35,5 +35,4 @@ pub struct EchoBiDiResponse {
     #[prost(string, tag="1")]
     pub message: ::prost::alloc::string::String,
 }
-include!("proto.rpc.examples.echo.v1.tonic.rs");
 // @@protoc_insertion_point(module)

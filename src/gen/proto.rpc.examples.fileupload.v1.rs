@@ -24,5 +24,4 @@ pub struct UploadFileResponse {
     #[prost(int64, tag="2")]
     pub size: i64,
 }
-include!("proto.rpc.examples.fileupload.v1.tonic.rs");
 // @@protoc_insertion_point(module)
