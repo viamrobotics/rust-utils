@@ -47,5 +47,4 @@ pub struct AuthenticateToResponse {
     #[prost(string, tag="1")]
     pub access_token: ::prost::alloc::string::String,
 }
-include!("proto.rpc.v1.tonic.rs");
 // @@protoc_insertion_point(module)

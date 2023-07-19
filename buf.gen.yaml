@@ -4,3 +4,5 @@ plugins:
     out: src/gen/
   - plugin: buf.build/community/neoeinstein-tonic:v0.3.0
     out: src/gen/
+    opt:
+        - no_include=true
