@@ -3624,7 +3624,7 @@ dependencies = [
 
 [[package]]
 name = "viam-rust-utils"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "base64 0.13.1",

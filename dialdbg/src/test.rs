@@ -1,10 +1,12 @@
+/// Tests dialdbg against an echo server running on localhost:$SERVER_PORT.
 use crate::{main_inner, Args};
+use std::env;
 
 #[tokio::test]
 async fn dial() {
     let mut args = Args::default();
-    args.uri = Some("[redacted]".to_string());
-    args.credential = Some("[redacted]".to_string());
+    let port = env::var("SERVER_PORT").unwrap().to_owned();
+    args.uri = Some(["localhost:".to_string(), port].join(""));
 
     // NOTE(benjirewis): simply assert that main_inner retunred no error. It may be overkill right
     // now to assert anything about the output.
