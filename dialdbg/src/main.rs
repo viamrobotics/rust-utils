@@ -205,7 +205,7 @@ async fn main() -> Result<()> {
 
         if let Some(ch) = ch {
             if !args.nortt {
-                let average_rtt = rtt::measure_rtt(ch.clone(), 10).await?;
+                let average_rtt = rtt::measure_rtt(ch, 10).await?;
                 writeln!(
                     out,
                     "average RTT across established gRPC connection: {}ms",
