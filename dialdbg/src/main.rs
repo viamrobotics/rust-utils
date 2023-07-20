@@ -1,6 +1,8 @@
 mod parse;
 mod rtt;
 mod stats;
+#[cfg(test)]
+mod test;
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
@@ -11,9 +13,9 @@ use std::{collections::HashSet, fs, io, path::PathBuf, time::Duration};
 use viam::rpc::dial::{self, ViamChannel, VIAM_MDNS_SERVICE_NAME};
 
 /// dialdbg gives information on how rust-utils' dial function makes connections.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Default)]
 #[command(author, version, about)]
-struct Args {
+pub(crate) struct Args {
     /// Whether direct gRPC connection should not be examined. If not provided, gRPC connection
     /// will be examined.
     #[arg(long, action, conflicts_with("nowebrtc"), display_order(1))]
@@ -166,10 +168,7 @@ async fn all_mdns_addresses() -> Result<HashSet<String>> {
     Ok(responses)
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Args::parse();
-
+pub(crate) async fn main_inner(args: Args) -> Result<()> {
     let uri = args.uri.unwrap_or_default();
     let credential = args.credential.unwrap_or_default();
     let credential_type = args
@@ -283,4 +282,9 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    main_inner(Args::parse()).await
 }
