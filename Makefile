@@ -6,6 +6,8 @@ build:
 	cargo build
 build-example:
 	cd examples/ && cargo build
+build-dialdbg:
+	cd dialdbg/ && cargo build
 buf-clean:
 	find src/gen -type f \( -iname "*.rs" ! -iname "mod.rs" \) -delete
 buf-install:
