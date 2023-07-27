@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use chrono::{DateTime, Duration, FixedOffset};
 use std::{fmt, fs, io, net::SocketAddr, path::PathBuf};
-use viam::rpc::log_prefixes;
+use viam_rust_utils::rpc::log_prefixes;
 
 const DEVELOPMENT: Option<&'static str> = option_env!("DIALDBG_DEVELOPMENT");
 

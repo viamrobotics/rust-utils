@@ -2,13 +2,21 @@
 A CLI tool to give information on how Viam rust utils' dial function makes connections.
 
 ## Installation
-TODO(RSDK-3446): ensure installation constructions are correct.
-
-viam-dialdbg can be installed via homebrew.
+viam-dialdbg can currently only be installed via homebrew.
 
 ``` shell
-brew install viam-dialdbg
+brew tap viamrobotics/brews && brew install viam-dialdbg
 ```
+
+## Building from source
+viam-dialdbg is only built as a binary when the "dialdbg" feature is enabled. Run
+
+``` shell
+cargo build --release --features dialdbg
+```
+
+to build. Upon success, binary should be accessible under target/release.
+
 
 ## Usage examples
 
@@ -37,4 +45,4 @@ Use `viam-dialdbg --help` for more information.
 ## License
 Copyright 2023 Viam Inc.
 
-Apache 2.0 - See [LICENSE](https://github.com/viamrobotics/rust-utils/blob/main/dialdbg/LICENSE) file
+Apache 2.0 - See [LICENSE](https://github.com/viamrobotics/rust-utils/blob/main/LICENSE) file

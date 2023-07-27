@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::{ops::Add, time};
-use viam::gen::proto::rpc::examples::echo::v1::{
+use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
     echo_service_client::EchoServiceClient, EchoRequest,
 };
-use viam::rpc::dial::ViamChannel;
+use viam_rust_utils::rpc::dial::ViamChannel;
 
 // Returns the average round-trip-time over num_pings for the passed-in channel.
 pub(crate) async fn measure_rtt(ch: ViamChannel, num_pings: u32) -> Result<time::Duration> {

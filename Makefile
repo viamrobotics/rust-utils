@@ -7,7 +7,8 @@ build:
 build-example:
 	cd examples/ && cargo build
 build-dialdbg:
-	cd dialdbg/ && cargo build
+	# this target is used by homebrew; if altering, update homebrew formula.
+	cargo build --release --features dialdbg
 buf-clean:
 	find src/gen -type f \( -iname "*.rs" ! -iname "mod.rs" \) -delete
 buf-install:

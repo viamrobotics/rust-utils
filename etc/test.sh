@@ -13,7 +13,7 @@ while ! lsof -i ":$SERVER_PORT" | grep -q LISTEN; do
   sleep 0.1
 done
 
-SERVER_PORT=$SERVER_PORT cargo test --workspace
+SERVER_PORT=$SERVER_PORT cargo test --workspace --features dialdbg
 result=$?
 
 kill "$(lsof -t -i:$SERVER_PORT)"
