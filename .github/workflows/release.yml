@@ -49,7 +49,10 @@ jobs:
         if: inputs.version != 'nobump'
         run: |
           cargo install cargo-release
-          cargo release version ${{ inputs.version }} --execute --no-confirm
+          # Include dialdbg feature to publish dialdbg. Users can later use 
+          # `cargo add viam-rust-utils --features dialdbg` if they want access
+          # to dialdbg for some reason.
+          cargo release version ${{ inputs.version }} --features dialdbg --execute --no-confirm
 
       - name: Which Version
         id: which_version

@@ -774,9 +774,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.3.17"
+version = "4.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b0827b011f6f8ab38590295339817b0d26f344aa4932c3ced71b45b0c54b4a9"
+checksum = "5fd304a20bff958a57f04c4e96a2e7594cc4490a0e809cbd48bb6437edaa452d"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -785,9 +785,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.3.17"
+version = "4.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9441b403be87be858db6a23edb493e7f694761acdc3343d5a0fcaafd304cbc9e"
+checksum = "01c6a3f08f1fe5662a35cfe393aec09c4df95f60ee93b7556505260f75eee9e1"
 dependencies = [
  "anstream",
  "anstyle",
@@ -3793,24 +3793,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "viam-dialdbg"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "futures-util",
- "log 0.4.19",
- "log4rs",
- "serde",
- "serde_json",
- "tokio",
- "viam-mdns",
- "viam-rust-utils",
- "webrtc",
-]
-
-[[package]]
 name = "viam-mdns"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3835,6 +3817,8 @@ dependencies = [
  "base64 0.13.1",
  "byteorder",
  "bytes",
+ "chrono",
+ "clap",
  "dashmap",
  "derivative",
  "env_logger",
@@ -3850,6 +3834,7 @@ dependencies = [
  "interfaces",
  "libc",
  "log 0.4.19",
+ "log4rs",
  "nalgebra",
  "prost",
  "prost-types",

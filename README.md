@@ -12,6 +12,7 @@ Next run the following command `curl --proto '=https' --tlsv1.2 -sSf https://sh.
 ## Repository Layout
 - `src/gen` All the google and viam api proto files
 - `src/dial` The implementation of gRPC over webRTC used for p2p connection to robots
+- `src/dialdbg` A CLI debugging tool for dial logic. See `src/dialdbg/README.md`.
 - `src/ffi` FFI wrapper for dial logic
 - `src/proxy` Logic for creating a unix socket to serve as connectiong proxy
 - `examples` A list of examples
