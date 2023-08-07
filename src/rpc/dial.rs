@@ -870,6 +870,15 @@ async fn maybe_connect_via_webrtc(
     }
 
     let local_description = peer_connection.local_description().await.unwrap();
+
+    // Local SD will be multi-line, so use two log messages to indicate start, SD and end.
+    log::debug!(
+        "{}\n{}",
+        log_prefixes::START_LOCAL_SESSION_DESCRIPTION,
+        local_description.sdp
+    );
+    log::debug!("{}", log_prefixes::END_LOCAL_SESSION_DESCRIPTION);
+
     let sdp = encode_sdp(local_description)?;
     let call_request = CallRequest {
         sdp,

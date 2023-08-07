@@ -84,6 +84,9 @@ pub(crate) struct WebRTCResult {
     // The time taken to complete authentication (None if authentication was unsuccessful).
     authentication: Option<Duration>,
 
+    // The local session description that was offered.
+    local_session_description: String,
+
     // An error message possibly returned by dial's `connect` method (None if connection
     // establishment was successful).
     dial_error_message: Option<String>,
@@ -119,6 +122,12 @@ impl fmt::Display for WebRTCResult {
                 writeln!(f, "authentication failed")?;
             }
         }
+
+        writeln!(
+            f,
+            "offered local session description was {}",
+            self.local_session_description
+        )?;
 
         match self.connection {
             Some(d) => {
@@ -272,13 +281,26 @@ pub(crate) fn parse_webrtc_logs(
     let mut connection_establishment_start = None;
     let mut authentication_start = None;
     let mut mdns_query_start = None;
+    let mut recording_session_description = false;
     for log in fs::read_to_string(log_path)?.lines() {
         // Write actual log if in development mode.
         if DEVELOPMENT.is_some() {
             writeln!(out, "log message: {log}")?;
         }
 
-        if log.contains(DIAL_ERROR_PREFIX) {
+        if recording_session_description {
+            // Only add log to session description if recording SD and log is not
+            // END_LOCAL_SESSION_DESCRIPTION.
+            if log.contains(log_prefixes::END_LOCAL_SESSION_DESCRIPTION) {
+                recording_session_description = false;
+                continue;
+            }
+            res.local_session_description.push('\n');
+            res.local_session_description.push('\t');
+            res.local_session_description.push_str(log);
+        } else if log.contains(log_prefixes::START_LOCAL_SESSION_DESCRIPTION) {
+            recording_session_description = true;
+        } else if log.contains(DIAL_ERROR_PREFIX) {
             res.dial_error_message = Some(extract_dial_error(log)?);
         } else if log.contains(log_prefixes::MDNS_QUERY_ATTEMPT) {
             mdns_query_start = Some(extract_timestamp(log)?);
