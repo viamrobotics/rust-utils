@@ -1,0 +1,13 @@
+[project]
+name = "viam_rust_utils"
+dependencies = [
+  "cffi",
+]
+
+[build-system]
+requires = ["maturin>=1.2,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+profile = "release"
+bindings = "cffi"
