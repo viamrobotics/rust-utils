@@ -109,7 +109,7 @@ jobs:
         run: cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Correct install path
         run: |
-          install_name_tool -id "@rpath/libviam_rust_utils-${{ matrix.platform }}.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+          install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
