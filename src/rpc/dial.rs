@@ -70,12 +70,12 @@ pub enum ViamChannel {
 
 #[derive(Debug)]
 pub struct RPCCredentials {
-    entity: Option<String>,
+    entity: Option<&'static str>,
     credentials: Credentials,
 }
 
 impl RPCCredentials {
-    pub fn new(entity: Option<String>, r#type: SecretType, payload: String) -> Self {
+    pub fn new(entity: Option<&str>, r#type: SecretType, payload: String) -> Self {
         Self {
             credentials: Credentials { r#type, payload },
             entity,
@@ -569,11 +569,11 @@ impl DialBuilder<WithoutCredentials> {
 async fn get_auth_token(
     channel: &mut Channel,
     creds: Credentials,
-    entity: String,
+    entity: &str,
 ) -> Result<String> {
     let mut auth_service = AuthServiceClient::new(channel);
     let req = AuthenticateRequest {
-        entity,
+        entity: entity.to_string(),
         credentials: Some(creds),
     };
 
@@ -647,7 +647,7 @@ impl DialBuilder<WithCredentials> {
                 .credentials
                 .unwrap()
                 .entity
-                .unwrap_or_else(|| domain.clone()),
+                .unwrap_or_else(|| &domain),
         )
         .await?;
         log::debug!("{}", log_prefixes::ACQUIRED_AUTH_TOKEN);
@@ -1094,7 +1094,7 @@ fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
 
 fn uri_parts_with_defaults(uri: &str) -> Parts {
     let mut uri_parts = uri.parse::<Uri>().unwrap().into_parts();
-    uri_parts.scheme = Some(Scheme::HTTPS);
+    uri_parts.scheme = Some(Scheme::HTTP);
     uri_parts.path_and_query = Some(PathAndQuery::from_static(""));
     uri_parts
 }

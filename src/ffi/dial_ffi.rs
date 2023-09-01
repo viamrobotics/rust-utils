@@ -87,12 +87,15 @@ fn dial_without_cred(
 
 fn dial_with_cred(
     uri: String,
+    entity: Option<&str>,
     r#type: &str,
     payload: &str,
     allow_insec: bool,
     disable_webrtc: bool,
 ) -> Result<DialBuilder<WithCredentials>> {
-    let creds = RPCCredentials::new(None, String::from(r#type), String::from(payload));
+    log::error!("dial_with_cred\n\n\n\n\n");
+    // let creds = RPCCredentials::new(None, String::from(r#type), String::from(payload));
+    let creds = RPCCredentials::new(entity, String::from(r#type), String::from(payload));
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
     let c = if disable_webrtc {
         c.disable_webrtc()
@@ -110,6 +113,7 @@ fn dial_with_cred(
 /// When falling to dial it will return a NULL pointer
 /// # Arguments
 /// * `c_uri` a C-style string representing the address of robot you want to connect to
+/// * `c_entity` a C-style string representing the entity passed into the auth API
 /// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
 /// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
@@ -117,11 +121,13 @@ fn dial_with_cred(
 #[no_mangle]
 pub unsafe extern "C" fn dial(
     c_uri: *const c_char,
+    c_entity: *const c_char,
     c_type: *const c_char,
     c_payload: *const c_char,
     c_allow_insec: bool,
     rt_ptr: Option<&mut DialFfi>,
 ) -> *mut c_char {
+    log::error!("inside dial function in dial_ffi.rs\n\n\n\n\n");
     let uri = {
         if c_uri.is_null() {
             return ptr::null_mut();
@@ -184,11 +190,24 @@ pub unsafe extern "C" fn dial(
             false => Some(CStr::from_ptr(c_payload)),
         }
     };
+    let entity = {
+        match c_entity.is_null() {
+            true => None,
+            false => Some(CStr::from_ptr(c_entity)),
+        }
+    };
+
     let (server, channel) = match runtime.block_on(async move {
+        let e = match entity {
+            Some(ent) => Some(ent.to_str()?),
+            None => None,
+        };
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
+                log::error!("EMILY before dial_with_cred\n\n\n\n\n");
                 dial_with_cred(
                     uri_str,
+                    e,
                     t.to_str()?,
                     p.to_str()?,
                     allow_insec,
