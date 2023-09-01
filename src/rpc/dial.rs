@@ -70,12 +70,12 @@ pub enum ViamChannel {
 
 #[derive(Debug)]
 pub struct RPCCredentials {
-    entity: Option<&'static str>,
+    entity: Option<String>,
     credentials: Credentials,
 }
 
 impl RPCCredentials {
-    pub fn new(entity: Option<&str>, r#type: SecretType, payload: String) -> Self {
+    pub fn new(entity: Option<String>, r#type: SecretType, payload: String) -> Self {
         Self {
             credentials: Credentials { r#type, payload },
             entity,
@@ -569,11 +569,11 @@ impl DialBuilder<WithoutCredentials> {
 async fn get_auth_token(
     channel: &mut Channel,
     creds: Credentials,
-    entity: &str,
+    entity: String,
 ) -> Result<String> {
     let mut auth_service = AuthServiceClient::new(channel);
     let req = AuthenticateRequest {
-        entity: entity.to_string(),
+        entity,
         credentials: Some(creds),
     };
 
@@ -647,7 +647,7 @@ impl DialBuilder<WithCredentials> {
                 .credentials
                 .unwrap()
                 .entity
-                .unwrap_or_else(|| &domain),
+                .unwrap_or_else(|| domain.clone()),
         )
         .await?;
         log::debug!("{}", log_prefixes::ACQUIRED_AUTH_TOKEN);
