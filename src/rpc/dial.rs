@@ -1094,7 +1094,7 @@ fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
 
 fn uri_parts_with_defaults(uri: &str) -> Parts {
     let mut uri_parts = uri.parse::<Uri>().unwrap().into_parts();
-    uri_parts.scheme = Some(Scheme::HTTP);
+    uri_parts.scheme = Some(Scheme::HTTPS);
     uri_parts.path_and_query = Some(PathAndQuery::from_static(""));
     uri_parts
 }
