@@ -87,13 +87,13 @@ fn dial_without_cred(
 
 fn dial_with_cred(
     uri: String,
-    entity: &str,
+    entity: Option<String>,
     r#type: &str,
     payload: &str,
     allow_insec: bool,
     disable_webrtc: bool,
 ) -> Result<DialBuilder<WithCredentials>> {
-    let creds = RPCCredentials::new(Some(entity.to_string()), String::from(r#type), String::from(payload));
+    let creds = RPCCredentials::new(entity, String::from(r#type), String::from(payload));
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
     let c = if disable_webrtc {
         c.disable_webrtc()
@@ -124,7 +124,6 @@ pub unsafe extern "C" fn dial(
     c_allow_insec: bool,
     rt_ptr: Option<&mut DialFfi>,
 ) -> *mut c_char {
-    log::error!("inside dial function in dial_ffi.rs\n\n\n\n\n");
     let uri = {
         if c_uri.is_null() {
             return ptr::null_mut();
@@ -187,12 +186,25 @@ pub unsafe extern "C" fn dial(
             false => Some(CStr::from_ptr(c_payload)),
         }
     };
+    let entity_opt = {
+        match c_entity.is_null() {
+            true => None,
+            false => match CStr::from_ptr(c_entity).to_str() {
+                Ok(ent) => Some(ent.to_string()),
+                Err(e) => {
+                    log::error!("Error unexpectedly received an invalid entity string {:?}", e);
+                    return ptr::null_mut();
+                }
+            }
+        }
+    };
+
     let (server, channel) = match runtime.block_on(async move {
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
                 dial_with_cred(
                     uri_str,
-                    CStr::from_ptr(c_entity).to_str()?,
+                    entity_opt,
                     t.to_str()?,
                     p.to_str()?,
                     allow_insec,
