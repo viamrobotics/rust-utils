@@ -106,7 +106,9 @@ jobs:
         run: |
           cargo build --release --target=${{ matrix.target }}
       - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+        run: |
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
       - name: Correct install path
         run: |
           install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
@@ -154,7 +156,9 @@ jobs:
           source "$HOME/.cargo/env"
           cargo build --release --target=${{ matrix.target }}
       - name: Copy
-        run: cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
+        run: |
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
