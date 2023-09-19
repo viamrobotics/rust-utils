@@ -31,7 +31,7 @@ use anyhow::{Context, Result};
 use core::fmt;
 use futures::stream::FuturesUnordered;
 use futures_util::{pin_mut, stream::StreamExt};
-use interfaces::Interface;
+use local_ip_address::list_afinet_netifas;
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
@@ -312,18 +312,16 @@ impl<T: AuthMethod> DialBuilder<T> {
         self
     }
 
-    async fn get_addr_from_interface(iface: Interface, candidates: &Vec<String>) -> Option<String> {
+    async fn get_addr_from_interface(
+        iface: (&str, Vec<&IpAddr>),
+        candidates: &Vec<String>,
+    ) -> Option<String> {
         let addresses: Vec<Ipv4Addr> = iface
-            .addresses
-            .clone()
+            .1
             .iter()
-            .filter_map(|addr| {
-                addr.addr
-                    .map(|ip| match ip.ip() {
-                        IpAddr::V4(v4) => Some(v4.clone()),
-                        IpAddr::V6(_) => None,
-                    })
-                    .flatten()
+            .filter_map(|ip| match ip {
+                IpAddr::V4(v4) => Some(*v4),
+                IpAddr::V6(_) => None,
             })
             .collect();
 
@@ -401,9 +399,15 @@ impl<T: AuthMethod> DialBuilder<T> {
         let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
 
-        let candidates: Vec<String> = vec![candidate.replace(".", "-"), candidate];
+        let candidates: Vec<String> = vec![candidate.replace('.', "-"), candidate];
 
-        let ifaces = Interface::get_all().ok()?;
+        let ifaces = list_afinet_netifas().ok()?;
+
+        let ifaces: HashMap<&str, Vec<&IpAddr>> =
+            ifaces.iter().fold(HashMap::new(), |mut map, (k, v)| {
+                map.entry(k).or_insert(vec![]).push(v);
+                map
+            });
 
         let mut iface_futures = FuturesUnordered::new();
         for iface in ifaces {
