@@ -51,7 +51,7 @@ serde_json = "1.0"
 tokio = {version = "1.19", features = ["rt-multi-thread", "time", "fs", "macros", "net"]}
 tokio-stream = {version = "0.1", features = ["net"]}
 tokio-rustls = { version = "0.23.4"}
-tonic = {version = "0.9.2",features = [ "tls", "gzip", "tls-roots",]}
+tonic = {version = "0.9.2",features = [ "tls", "gzip", "tls-roots","tls-webpki-roots"]}
 tower = { version = "0.4" }
 tower-http = { version = "0.3.3", features = ["add-extension","auth","propagate-header","set-header","sensitive-headers","trace","compression-gzip"]}
 tracing = {version = "0.1.34"}
