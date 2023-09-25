@@ -252,7 +252,7 @@ pub unsafe extern "C" fn dial(
     }) {
         Ok(s) => s,
         Err(e) => {
-            log::error!("Error building GRPC proxy reason : {}", e);
+            log::error!("Error building GRPC proxy reason : {:?}\n{}", e, e);
             return ptr::null_mut();
         }
     };
