@@ -116,7 +116,7 @@ fn dial_with_cred(
 /// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
 /// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
-/// * `c_timeout` a float, set how long we should try dial before timing out
+/// * `c_timeout` a float, set how long we should try to dial in seconds before timing out
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
 #[no_mangle]
 pub unsafe extern "C" fn dial(
