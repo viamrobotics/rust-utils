@@ -6,7 +6,7 @@
 
 use http::uri::Uri;
 use std::{ptr, time::Duration};
-use tokio::{runtime::Runtime, time::error::Elapsed};
+use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tracing::Level;
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn dial(
     }) {
         Ok(s) => s,
         Err(e) => {
-            log::error!("Error building GRPC proxy reason : {:?}\n{}", e, e);
+            log::error!("Error building GRPC proxy reason : {}", e);
             return ptr::null_mut();
         }
     };
