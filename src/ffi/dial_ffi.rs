@@ -8,6 +8,7 @@ use http::uri::Uri;
 use std::{ptr, time::Duration};
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
+use tokio::time::timeout;
 use tracing::Level;
 
 use crate::rpc::dial::{
@@ -103,6 +104,7 @@ fn dial_with_cred(
     let c = if allow_insec { c.allow_downgrade() } else { c };
     Ok(c)
 }
+
 /// Returns a path to a UDS proxy to a robot
 /// # Safety
 ///
@@ -114,6 +116,7 @@ fn dial_with_cred(
 /// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
 /// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
+/// * `c_timeout` a float, set how long we should try dial before timing out
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
 #[no_mangle]
 pub unsafe extern "C" fn dial(
@@ -122,6 +125,7 @@ pub unsafe extern "C" fn dial(
     c_type: *const c_char,
     c_payload: *const c_char,
     c_allow_insec: bool,
+    c_timeout: f32,
     rt_ptr: Option<&mut DialFfi>,
 ) -> *mut c_char {
     let uri = {
@@ -198,11 +202,14 @@ pub unsafe extern "C" fn dial(
             }
         }
     };
+    let timeout_duration = Duration::from_secs_f32(c_timeout);
 
     let (server, channel) = match runtime.block_on(async move {
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
-                dial_with_cred(
+                let res = timeout(
+                    timeout_duration, 
+                    dial_with_cred(
                     uri_str,
                     entity_opt,
                     t.to_str()?,
@@ -211,11 +218,15 @@ pub unsafe extern "C" fn dial(
                     disable_webrtc,
                 )?
                 .connect()
-                .await
+                )
+                .await?;
+                res
             }
             (None, None) => {
-                let c = dial_without_cred(uri_str, allow_insec, disable_webrtc)?;
-                c.connect().await
+                let res = timeout(
+                    timeout_duration, 
+                    dial_without_cred(uri_str, allow_insec, disable_webrtc)?.connect()).await?;
+                res
             }
             (None, Some(_)) => Err(anyhow::anyhow!("Error missing credential: type")),
             (Some(_), None) => Err(anyhow::anyhow!("Error missing credential: payload")),
@@ -241,7 +252,8 @@ pub unsafe extern "C" fn dial(
     }) {
         Ok(s) => s,
         Err(e) => {
-            log::error!("Error building GRPC proxy reason : {e:?}");
+            let msg = e.to_string();
+            log::error!("Error building GRPC proxy reason : {msg}");
             return ptr::null_mut();
         }
     };
