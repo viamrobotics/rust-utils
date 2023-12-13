@@ -53,6 +53,7 @@ pub(crate) struct Args {
         short('e'),
         long,
         requires("credential"),
+        requires("credential_type"),
         required_if_eq("credential_type", "api-key")
     )]
     entity: Option<String>,
