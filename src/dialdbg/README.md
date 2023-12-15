@@ -40,6 +40,11 @@ viam-dialdbg --uri myremote.com --credential mycredential --output ./foo.txt --c
 ```
 Same as above, but only examines WebRTC connection establishment.
 
+``` shell
+viam-dialdbg --uri myremote.com --credential mycredential --output ./foo.txt --credential-type api-key --entity myentity --nogrpc
+```
+Same as above, but uses "api-key" credential type and "myentity" auth entity for "mycredential".
+
 Use `viam-dialdbg --help` for more information.
 
 ## License

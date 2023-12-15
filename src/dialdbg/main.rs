@@ -47,12 +47,28 @@ pub(crate) struct Args {
     #[arg(short('t'), long, requires("credential"))]
     credential_type: Option<String>,
 
+    /// Authentication entity with which to connect to the URI. Can only be provided with
+    /// "--credential" and must be provided with "--credential-type api-key".
+    #[arg(
+        short('e'),
+        long,
+        requires("credential"),
+        requires("credential_type"),
+        required_if_eq("credential_type", "api-key")
+    )]
+    entity: Option<String>,
+
     /// URI to dial. Must be provided.
     #[arg(short, long, required(true), display_order(0))]
     uri: Option<String>,
 }
 
-async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) -> Option<ViamChannel> {
+async fn dial_grpc(
+    uri: &str,
+    credential: &str,
+    credential_type: &str,
+    entity: Option<String>,
+) -> Option<ViamChannel> {
     let dial_result = match credential {
         "" => {
             dial::DialOptions::builder()
@@ -65,7 +81,7 @@ async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) -> Option
         }
         _ => {
             let creds = dial::RPCCredentials::new(
-                None,
+                entity,
                 credential_type.to_string(),
                 credential.to_string(),
             );
@@ -90,7 +106,12 @@ async fn dial_grpc(uri: &str, credential: &str, credential_type: &str) -> Option
     }
 }
 
-async fn dial_webrtc(uri: &str, credential: &str, credential_type: &str) -> Option<ViamChannel> {
+async fn dial_webrtc(
+    uri: &str,
+    credential: &str,
+    credential_type: &str,
+    entity: Option<String>,
+) -> Option<ViamChannel> {
     let dial_result = match credential {
         "" => {
             dial::DialOptions::builder()
@@ -102,7 +123,7 @@ async fn dial_webrtc(uri: &str, credential: &str, credential_type: &str) -> Opti
         }
         _ => {
             let creds = dial::RPCCredentials::new(
-                None,
+                entity,
                 credential_type.to_string(),
                 credential.to_string(),
             );
@@ -198,17 +219,31 @@ pub(crate) async fn main_inner(args: Args) -> Result<()> {
             )?;
         log_config_setter = Some(log4rs::init_config(config)?);
 
-        let ch = dial_grpc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
+        let ch = dial_grpc(
+            uri.as_str(),
+            credential.as_str(),
+            credential_type.as_str(),
+            args.entity.clone(),
+        )
+        .await;
         let grpc_res = parse::parse_grpc_logs(log_path.clone(), &mut out)?;
         write!(out, "{grpc_res}")?;
 
         if let Some(ch) = ch {
             if !args.nortt {
-                let average_rtt = rtt::measure_rtt(ch, 10).await?;
+                let average_rtt = rtt::measure_rtt(ch, 10).await?.as_millis();
+
+                // If average RTT is less than 1ms, report < 1ms instead of
+                // floored "0ms" value.
+                let millis_str = if average_rtt < 1 {
+                    "<1".to_string()
+                } else {
+                    average_rtt.to_string()
+                };
                 writeln!(
                     out,
                     "average RTT across established gRPC connection: {}ms",
-                    average_rtt.as_millis()
+                    millis_str,
                 )?;
             }
         }
@@ -247,17 +282,31 @@ pub(crate) async fn main_inner(args: Args) -> Result<()> {
             log4rs::init_config(config)?;
         }
 
-        let ch = dial_webrtc(uri.as_str(), credential.as_str(), credential_type.as_str()).await;
+        let ch = dial_webrtc(
+            uri.as_str(),
+            credential.as_str(),
+            credential_type.as_str(),
+            args.entity.clone(),
+        )
+        .await;
         let wrtc_res = parse::parse_webrtc_logs(log_path.clone(), &mut out)?;
         write!(out, "{wrtc_res}")?;
 
         if let Some(ch) = ch {
             if !args.nortt {
-                let average_rtt = rtt::measure_rtt(ch.clone(), 10).await?;
+                let average_rtt = rtt::measure_rtt(ch.clone(), 10).await?.as_millis();
+
+                // If average RTT is less than 1ms, report < 1ms instead of
+                // floored "0ms" value.
+                let millis_str = if average_rtt < 1 {
+                    "<1".to_string()
+                } else {
+                    average_rtt.to_string()
+                };
                 writeln!(
                     out,
                     "average RTT across established WebRTC connection: {}ms",
-                    average_rtt.as_millis()
+                    millis_str,
                 )?;
             }
 

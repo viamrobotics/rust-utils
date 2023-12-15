@@ -300,14 +300,12 @@ pub(crate) async fn action_with_timeout<T>(
         let f = f;
     }
 
-    loop {
-        tokio::select! {
-            res = &mut f => {
-                return Ok(res);
-            }
-            _ = &mut timeout => {
-                return Err(anyhow::anyhow!("Action timed out"));
-            }
+    tokio::select! {
+        res = &mut f => {
+            return Ok(res);
+        }
+        _ = &mut timeout => {
+            return Err(anyhow::anyhow!("Action timed out"));
         }
     }
 }
