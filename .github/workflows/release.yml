@@ -189,8 +189,8 @@ jobs:
     - name: Build
       run: |
         cargo build --release --locked --target aarch64-unknown-linux-gnu
-        cp target/aarch64-unknown-linux-gnu/release/libviam_rust_utils.so builds/libviam_rust_utils-aarch64-unknown-linux-gnu.so
-        cp target/aarch64-unknown-linux-gnu/release/libviam_rust_utils.a builds/libviam_rust_utils-aarch64-unknown-linux-gnu.a
+        cp target/aarch64-unknown-linux-gnu/release/libviam_rust_utils.so builds/libviam_rust_utils-linux_aarch64.so
+        cp target/aarch64-unknown-linux-gnu/release/libviam_rust_utils.a builds/libviam_rust_utils-linux_aarch64.a
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
