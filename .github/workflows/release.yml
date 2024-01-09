@@ -124,7 +124,7 @@ jobs:
     needs: [prepare]
     runs-on: ${{ matrix.runs-on }}
     container:
-      image: ghcr.io/cross-rs/${{ matrix.image }}
+      image: ${{ matrix.image }}
     strategy:
       fail-fast: false
       matrix:
