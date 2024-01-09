@@ -78,45 +78,45 @@ jobs:
           default_author: github_actions
           message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
 
-  build_macos:
-    if: github.repository_owner == 'viamrobotics'
-    needs: [prepare]
-    runs-on: [self-hosted, ARM64, macOS]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            platform: macosx_arm64
-          - target: x86_64-apple-darwin
-            platform: macosx_x86_64
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-      - name: Setup rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - name: Setup build directory
-        run: mkdir builds
-      - name: Build
-        run: |
-          cargo build --release --target=${{ matrix.target }}
-      - name: Copy
-        run: |
-          cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
-          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
-      - name: Correct install path
-        run: |
-          install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: builds
-          path: builds
+  # build_macos:
+  #   if: github.repository_owner == 'viamrobotics'
+  #   needs: [prepare]
+  #   runs-on: [self-hosted, ARM64, macOS]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - target: aarch64-apple-darwin
+  #           platform: macosx_arm64
+  #         - target: x86_64-apple-darwin
+  #           platform: macosx_x86_64
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v3
+  #       with:
+  #         ref: ${{ needs.prepare.outputs.sha }}
+  #     - name: Setup rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         toolchain: stable
+  #         targets: ${{ matrix.target }}
+  #     - name: Setup build directory
+  #       run: mkdir builds
+  #     - name: Build
+  #       run: |
+  #         cargo build --release --target=${{ matrix.target }}
+  #     - name: Copy
+  #       run: |
+  #         cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+  #         cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
+  #     - name: Correct install path
+  #       run: |
+  #         install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+  #     - name: Upload artifacts
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: builds
+  #         path: builds
 
   # build_linux builds all but aarch64.
   build_linux:
