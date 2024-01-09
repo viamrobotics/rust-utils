@@ -147,6 +147,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Setup rust toolchain
+        if: ${{ matrix.image }} != 'rust'
         shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
