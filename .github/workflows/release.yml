@@ -131,7 +131,7 @@ jobs:
         include:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            image: centos:7
+            image: ubuntu:20.04
             runs-on: buildjet-2vcpu-ubuntu-2204-arm
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
@@ -143,10 +143,11 @@ jobs:
             runs-on: buildjet-2vcpu-ubuntu-2204
     steps:
       - name: Setup dependencies
-        if: ${{ startsWith(matrix.image, 'centos') }}
+        if: ${{ startsWith(matrix.image, 'ubuntu') }}
         shell: bash
-        run: |  # (njooma) These are the deps that cross uses for cent-os. I haven't tried pruning/optimizing
-          yum install -y autoconf \
+        run: |  # (njooma) These are the deps that cross uses. I haven't tried pruning/optimizing
+          apt-get update && apt-get upgrade -y
+          apt-get install -y autoconf \
             automake \
             binutils \
             ca-certificates \
