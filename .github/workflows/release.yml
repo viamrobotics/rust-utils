@@ -122,7 +122,7 @@ jobs:
   build_linux:
     if: github.repository_owner == 'viamrobotics'
     needs: [prepare]
-    runs-on: buildjet-2vcpu-ubuntu-2204
+    runs-on: ${{ matrix.runs-on }}
     container:
       image: ghcr.io/cross-rs/${{ matrix.image }}
     strategy:
@@ -132,12 +132,15 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
             image: aarch64-unknown-linux-gnu:main-centos
+            runs-on: buildjet-2vcpu-ubuntu-2204-arm
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
             image: x86_64-unknown-linux-gnu:main-centos
+            runs-on: buildjet-2vcpu-ubuntu-2204
           - target: arm-unknown-linux-gnueabihf
             platform: linux_armv6l
             image: arm-unknown-linux-gnueabihf:main
+            runs-on: buildjet-2vcpu-ubuntu-2204
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
