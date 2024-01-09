@@ -131,7 +131,7 @@ jobs:
         include:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            image: rust
+            image: centos:7
             runs-on: buildjet-2vcpu-ubuntu-2204-arm
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
@@ -142,12 +142,26 @@ jobs:
             image: ghcr.io/cross-rs/arm-unknown-linux-gnueabihf:main
             runs-on: buildjet-2vcpu-ubuntu-2204
     steps:
+      - name: Setup dependencies
+        if: ${{ startsWith(matrix.image, 'centos') }}
+        shell: bash
+        run: |  # (njooma) These are the deps that cross uses for cent-os. I haven't tried pruning/optimizing
+          yum install -y autoconf \
+            automake \
+            binutils \
+            ca-certificates \
+            curl \
+            file \
+            gcc \
+            git \
+            libtool \
+            m4 \
+            make
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Setup rust toolchain
-        if: ${{ matrix.image }} != 'rust'
         shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
