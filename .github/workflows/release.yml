@@ -131,15 +131,15 @@ jobs:
         include:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
-            image: aarch64-unknown-linux-gnu:main-centos
+            image: ubuntu:20.04
             runs-on: buildjet-2vcpu-ubuntu-2204-arm
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
-            image: x86_64-unknown-linux-gnu:main-centos
+            image: ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos
             runs-on: buildjet-2vcpu-ubuntu-2204
           - target: arm-unknown-linux-gnueabihf
             platform: linux_armv6l
-            image: arm-unknown-linux-gnueabihf:main
+            image: ghcr.io/cross-rs/arm-unknown-linux-gnueabihf:main
             runs-on: buildjet-2vcpu-ubuntu-2204
     steps:
       - name: Checkout Code
