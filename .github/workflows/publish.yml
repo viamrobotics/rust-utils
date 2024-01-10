@@ -24,7 +24,7 @@ jobs:
         if: |
           github.event_name == 'workflow_dispatch' && steps.is_organization_member.outputs.result == 'false'
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup rust toolchain
         uses: dtolnay/rust-toolchain@stable
