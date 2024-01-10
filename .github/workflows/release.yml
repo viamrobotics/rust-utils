@@ -185,7 +185,7 @@ jobs:
   release:
     needs: [prepare, build_macos, build_linux]
     if: github.repository_owner == 'viamrobotics'
-    runs-on: buildjet-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/download-artifact@v3
