@@ -17,8 +17,6 @@ jobs:
   prepare:
     if: github.repository_owner == 'viamrobotics'
     runs-on: [buildjet-2vcpu-ubuntu-2204-arm]
-    # container:
-    #   image: ghcr.io/viamrobotics/canon:arm64
     outputs:
       version: ${{ steps.which_version.outputs.version }}
       sha: ${{ steps.commit.outputs.commit_long_sha }}
@@ -78,47 +76,46 @@ jobs:
           default_author: github_actions
           message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
 
-  # build_macos:
-  #   if: github.repository_owner == 'viamrobotics'
-  #   needs: [prepare]
-  #   runs-on: [self-hosted, ARM64, macOS]
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       include:
-  #         - target: aarch64-apple-darwin
-  #           platform: macosx_arm64
-  #         - target: x86_64-apple-darwin
-  #           platform: macosx_x86_64
-  #   steps:
-  #     - name: Checkout Code
-  #       uses: actions/checkout@v3
-  #       with:
-  #         ref: ${{ needs.prepare.outputs.sha }}
-  #     - name: Setup rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #       with:
-  #         toolchain: stable
-  #         targets: ${{ matrix.target }}
-  #     - name: Setup build directory
-  #       run: mkdir builds
-  #     - name: Build
-  #       run: |
-  #         cargo build --release --target=${{ matrix.target }}
-  #     - name: Copy
-  #       run: |
-  #         cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
-  #         cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
-  #     - name: Correct install path
-  #       run: |
-  #         install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: builds
-  #         path: builds
+  build_macos:
+    if: github.repository_owner == 'viamrobotics'
+    needs: [prepare]
+    runs-on: [self-hosted, ARM64, macOS]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            platform: macosx_arm64
+          - target: x86_64-apple-darwin
+            platform: macosx_x86_64
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - name: Setup build directory
+        run: mkdir builds
+      - name: Build
+        run: |
+          cargo build --release --target=${{ matrix.target }}
+      - name: Copy
+        run: |
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
+      - name: Correct install path
+        run: |
+          install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: builds
+          path: builds
 
-  # build_linux builds all but aarch64.
   build_linux:
     if: github.repository_owner == 'viamrobotics'
     needs: [prepare]
@@ -132,7 +129,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             platform: linux_aarch64
             image: ubuntu:20.04
-            runs-on: buildjet-2vcpu-ubuntu-2204-arm
+            runs-on: buildjet-8vcpu-ubuntu-2204-arm
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
             image: ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos
@@ -185,42 +182,8 @@ jobs:
           name: builds
           path: builds
 
-  # build_aarch64_linux:
-  #   if: github.repository_owner == 'viamrobotics'
-  #   needs: [prepare]
-  #   runs-on: [buildjet-8vcpu-ubuntu-2204-arm]
-  #   strategy:
-  #     fail-fast: false
-  #   steps:
-  #   - name: Checkout Code
-  #     uses: actions/checkout@v3
-  #     with:
-  #       ref: ${{ needs.prepare.outputs.sha }}
-  #   # Variables for rust toolchain setup copied from the micro-rdk release
-  #   # process.
-  #   - name: Setup rust toolchain
-  #     uses: actions-rs/toolchain@v1
-  #     with:
-  #       profile: minimal
-  #       toolchain: 1.70.0
-  #       override: true
-  #       target: aarch64-unknown-linux-gnu
-  #       default: true
-  #   - name: Setup build directory
-  #     run: mkdir builds
-  #   - name: Build
-  #     run: |
-  #       cargo build --release --locked --target aarch64-unknown-linux-gnu
-  #       cp target/aarch64-unknown-linux-gnu/release/libviam_rust_utils.so builds/libviam_rust_utils-linux_aarch64.so
-  #       cp target/aarch64-unknown-linux-gnu/release/libviam_rust_utils.a builds/libviam_rust_utils-linux_aarch64.a
-  #   - name: Upload artifacts
-  #     uses: actions/upload-artifact@v3
-  #     with:
-  #       name: builds
-  #       path: builds
-
   release:
-    needs: [prepare, build_linux]
+    needs: [prepare, build_macos, build_linux]
     if: github.repository_owner == 'viamrobotics'
     runs-on: [self-hosted, x64]
     container:
