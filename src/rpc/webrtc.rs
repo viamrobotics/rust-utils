@@ -7,6 +7,7 @@ use futures::Future;
 use http::{header::HeaderName, HeaderMap, HeaderValue, Uri};
 use std::{
     hint,
+    net::IpAddr,
     pin::Pin,
     str::FromStr,
     sync::{atomic::AtomicBool, Arc},
@@ -182,6 +183,12 @@ fn new_webrtc_api() -> Result<API> {
 
     let mut setting_engine = SettingEngine::default();
     setting_engine.set_ice_multicast_dns_mode(MulticastDnsMode::QueryAndGather);
+
+    // Disallow ipv6 addresses since grpc-go does not currently support IPv6 scoped literals.
+    // See related grpc-go issue: https://github.com/grpc/grpc-go/issues/3272.
+    // In communicating with WebRTC agents using go (such as an RDK), we do not want to elect
+    // an IPV6 address.
+    setting_engine.set_ip_filter(Box::new(|ip: IpAddr| -> bool { ip.is_ipv4() }));
 
     Ok(APIBuilder::new()
         .with_media_engine(media_engine)
