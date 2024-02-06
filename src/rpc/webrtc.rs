@@ -5,14 +5,7 @@ use bytes::Bytes;
 use core::fmt;
 use futures::Future;
 use http::{header::HeaderName, HeaderMap, HeaderValue, Uri};
-use std::{
-    hint,
-    pin::Pin,
-    str::FromStr,
-    sync::{atomic::AtomicBool, Arc},
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::{hint, str::FromStr, sync::Arc, time::Duration};
 use webrtc::{
     api::{
         interceptor_registry, media_engine::MediaEngine, setting_engine::SettingEngine, APIBuilder,
@@ -43,35 +36,6 @@ pub(crate) struct Options {
     pub(crate) config: RTCConfiguration,
     pub(crate) signaling_insecure: bool,
     pub(crate) signaling_server_address: String,
-}
-
-// an Arc<AtomicBool> that is pollable as a future. Pending when false, Ready(()) when true
-pub(crate) struct PollableAtomicBool {
-    // TODO(RSDK-598): expand the PollableAtomicBool to include load and store methods, and
-    // to keep a Waker field that awakens when the value is true.
-    inner: Arc<AtomicBool>,
-}
-
-impl PollableAtomicBool {
-    pub(crate) fn new(inner: Arc<AtomicBool>) -> Self {
-        Self { inner }
-    }
-}
-
-// implementing Future for AtomicBool allows us to use an AtomicBool in a `tokio::select!`
-// statement
-impl Future for PollableAtomicBool {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.inner.load(std::sync::atomic::Ordering::Acquire) {
-            false => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            true => Poll::Ready(()),
-        }
-    }
 }
 
 impl fmt::Debug for Options {
@@ -302,10 +266,10 @@ pub(crate) async fn action_with_timeout<T>(
 
     tokio::select! {
         res = &mut f => {
-            return Ok(res);
+            Ok(res)
         }
         _ = &mut timeout => {
-            return Err(anyhow::anyhow!("Action timed out"));
+            Err(anyhow::anyhow!("Action timed out"))
         }
     }
 }

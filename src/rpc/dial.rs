@@ -4,6 +4,9 @@ use super::{
     webrtc::{webrtc_action_with_timeout, Options},
 };
 use crate::gen::google;
+use crate::gen::proto::rpc::v1::{
+    auth_service_client::AuthServiceClient, AuthenticateRequest, Credentials,
+};
 use crate::gen::proto::rpc::webrtc::v1::{
     call_response::Stage, call_update_request::Update,
     signaling_service_client::SignalingServiceClient, CallUpdateRequest,
@@ -13,12 +16,6 @@ use crate::gen::proto::rpc::webrtc::v1::{
     CallRequest, IceCandidate, Metadata, RequestHeaders, Strings,
 };
 use crate::rpc::webrtc;
-use crate::{
-    gen::proto::rpc::v1::{
-        auth_service_client::AuthServiceClient, AuthenticateRequest, Credentials,
-    },
-    rpc::webrtc::PollableAtomicBool,
-};
 use ::http::header::HeaderName;
 use ::http::{
     uri::{Authority, Parts, PathAndQuery, Scheme},
@@ -42,6 +39,7 @@ use std::{
     task::{Context as TaskContext, Poll},
     time::Duration,
 };
+use tokio::sync::{mpsc, watch};
 use tonic::codegen::{http, BoxFuture};
 use tonic::transport::{Body, Channel, Uri};
 use tonic::{body::BoxBody, transport::ClientTlsConfig};
@@ -792,16 +790,21 @@ async fn maybe_connect_via_webrtc(
     let sent_done_or_error = Arc::new(AtomicBool::new(false));
     let uuid_lock = Arc::new(RwLock::new("".to_string()));
     let uuid_for_ice_gathering_thread = uuid_lock.clone();
-    let is_open = Arc::new(AtomicBool::new(false));
-    let is_open_read = is_open.clone();
+
+    // Using an mpsc channel to report unrecoverable errors during Signaling, the way we
+    // don't have to wait until the timeout expire before giving up on this connection attempt.
+    // The size is one since any error (or one success) will terminate the function
+    let (is_open_s, mut is_open_r) = mpsc::channel(1);
+    let on_open_is_open = is_open_s.clone();
+
     data_channel.on_open(Box::new(move || {
-        is_open.store(true, Ordering::Release);
+        let _ = on_open_is_open.try_send(None); // ignore sending errors, either and error was already sent or the operation will succeed
         Box::pin(async move {})
     }));
 
     let exchange_done = Arc::new(AtomicBool::new(false));
-    let remote_description_set = Arc::new(AtomicBool::new(false));
-    let ice_done = Arc::new(AtomicBool::new(false));
+    let (remote_description_set_s, remote_description_set_r) = watch::channel(None);
+    let ice_done = Arc::new(tokio::sync::Notify::new());
     let ice_done2 = ice_done.clone();
 
     if !webrtc_options.disable_trickle_ice {
@@ -811,10 +814,10 @@ async fn maybe_connect_via_webrtc(
         let sent_done_or_error2 = sent_done_or_error.clone();
 
         let exchange_done = exchange_done.clone();
-        let remote_description_set = remote_description_set.clone();
+
+        let on_local_ice_candidate_failure = is_open_s.clone();
         peer_connection.on_ice_candidate(Box::new(
             move |ice_candidate: Option<RTCIceCandidate>| {
-                let remote_description_set = remote_description_set.clone();
                 if exchange_done.load(Ordering::Acquire) {
                     return Box::pin(async move {});
                 }
@@ -822,19 +825,33 @@ async fn maybe_connect_via_webrtc(
                 let sent_done_or_error = sent_done_or_error2.clone();
                 let ice_done = ice_done.clone();
                 let uuid_lock = uuid_lock2.clone();
+                let on_local_ice_candidate_failure = on_local_ice_candidate_failure.clone();
+                let mut remote_description_set_r = remote_description_set_r.clone();
                 Box::pin(async move {
-                    let remote_description_set = PollableAtomicBool::new(remote_description_set);
-                    if webrtc_action_with_timeout(remote_description_set)
-                        .await
-                        .is_err()
-                    {
-                        log::info!("timed out on_ice_candidate; remote description was never set");
-                        return;
+                    // If the value in the watch channel has not been set yet, we wait until it does so
+                    // afterwards Some(()) should be visible to all watcher and any watcher waiting of send will
+                    // return
+                    if remote_description_set_r.borrow().is_none() {
+                        match webrtc_action_with_timeout(remote_description_set_r.changed()).await {
+                            Ok(Err(e)) => {
+                                let _ = on_local_ice_candidate_failure.try_send(Some(Box::new(
+                                    anyhow::anyhow!(
+                                        "remote description watch channel is closed with error {e}"
+                                    ),
+                                )));
+                            }
+                            Err(_) => {
+                                log::info!(
+                                    "timed out on_ice_candidate; remote description was never set"
+                                );
+                                let _ = on_local_ice_candidate_failure.try_send(Some(Box::new(
+                                    anyhow::anyhow!("timed out waiting for remote description"),
+                                )));
+                            }
+                            _ => (),
+                        }
                     }
 
-                    if ice_done.load(Ordering::Acquire) {
-                        return;
-                    }
                     let uuid = uuid_lock.read().unwrap().to_string();
                     let mut signaling_client = SignalingServiceClient::new(channel.clone());
                     match ice_candidate {
@@ -856,13 +873,19 @@ async fn maybe_connect_via_webrtc(
                                     .and_then(|resp| resp.map_err(anyhow::Error::from))
                                     {
                                         log::error!("Error sending ice candidate: {e}");
+                                        let _ = on_local_ice_candidate_failure.try_send(Some(
+                                            Box::new(anyhow::anyhow!(
+                                                "Error sending ice candidate: {e}"
+                                            )),
+                                        ));
                                     }
                                 }
                                 Err(e) => log::error!("Error parsing ice candidate: {e}"),
                             }
                         }
                         None => {
-                            ice_done.store(true, Ordering::Release);
+                            // will only be executed once when gathering is finished
+                            ice_done.notify_one();
                             send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
                         }
                     }
@@ -910,10 +933,9 @@ async fn maybe_connect_via_webrtc(
                 Ok(cr) => match cr {
                     Some(cr) => cr,
                     None => {
-                        let ice_done = PollableAtomicBool::new(ice_done2);
                         // want to delay sending done until we either are actually done, or
                         // we hit a timeout
-                        let _ = webrtc_action_with_timeout(ice_done).await;
+                        let _ = webrtc_action_with_timeout(ice_done2.notified()).await;
                         let uuid = uuid.read().unwrap().to_string();
                         send_done_once(sent_done.clone(), &uuid, channel2.clone()).await;
                         break;
@@ -921,6 +943,7 @@ async fn maybe_connect_via_webrtc(
                 },
                 Err(e) => {
                     log::error!("Error processing call response: {e}");
+                    let _ = is_open_s.try_send(Some(Box::new(e)));
                     break;
                 }
             };
@@ -931,6 +954,7 @@ async fn maybe_connect_via_webrtc(
                         let uuid = uuid.read().unwrap().to_string();
                         let e = anyhow::anyhow!("Init received more than once");
                         send_error_once(sent_done.clone(), &uuid, &e, channel2.clone()).await;
+                        let _ = is_open_s.try_send(Some(Box::new(e)));
                         break;
                     }
                     init_received.store(true, Ordering::Release);
@@ -949,6 +973,7 @@ async fn maybe_connect_via_webrtc(
                                 channel2.clone(),
                             )
                             .await;
+                            let _ = is_open_s.try_send(Some(Box::new(e)));
                             break;
                         }
                     };
@@ -973,10 +998,11 @@ async fn maybe_connect_via_webrtc(
                                 channel2.clone(),
                             )
                             .await;
+                            let _ = is_open_s.try_send(Some(Box::new(e)));
                             break;
                         }
                     }
-                    remote_description_set.store(true, Ordering::Release);
+                    let _ = remote_description_set_s.send_replace(Some(()));
                     if webrtc_options.disable_trickle_ice {
                         send_done_once(sent_done.clone(), &response.uuid, channel2.clone()).await;
                         break;
@@ -988,6 +1014,7 @@ async fn maybe_connect_via_webrtc(
                     if !init_received.load(Ordering::Acquire) {
                         let e = anyhow::anyhow!("Got update before init stage");
                         send_error_once(sent_done.clone(), &uuid_s, &e, channel2.clone()).await;
+                        let _ = is_open_s.try_send(Some(Box::new(e)));
                         break;
                     }
 
@@ -998,6 +1025,7 @@ async fn maybe_connect_via_webrtc(
                             uuid_s,
                         );
                         send_error_once(sent_done.clone(), &uuid_s, &e, channel2.clone()).await;
+                        let _ = is_open_s.try_send(Some(Box::new(e)));
                         break;
                     }
                     match ice_candidate_from_proto(update.candidate) {
@@ -1017,10 +1045,11 @@ async fn maybe_connect_via_webrtc(
                                 let e = anyhow::Error::from(e);
                                 send_error_once(sent_done.clone(), &uuid_s, &e, channel2.clone())
                                     .await;
+                                let _ = is_open_s.try_send(Some(Box::new(e)));
                                 break;
                             }
                         }
-                        Err(e) => log::error!("Error adding ice candidate: {e}"),
+                        Err(e) => log::error!("Error parsing ice candidate: {e}"),
                     }
                 }
                 None => continue,
@@ -1028,14 +1057,19 @@ async fn maybe_connect_via_webrtc(
         }
     });
 
-    let is_open_read = is_open_read.clone();
-    let is_open = PollableAtomicBool::new(is_open_read);
-
     // TODO (GOUT-11): create separate authorization if external_auth_addr and/or creds.Type is `Some`
 
     // Delay returning the client channel until data channel is open, so we don't lose messages
-    if webrtc_action_with_timeout(is_open).await.is_err() {
-        return Err(anyhow::anyhow!("Timed out opening data channel."));
+    let is_open = webrtc_action_with_timeout(is_open_r.recv()).await;
+    match is_open {
+        Ok(is_open) => {
+            if let Some(Some(e)) = is_open {
+                return Err(anyhow::anyhow!("Couldn't connect to peer with error {e}"));
+            }
+        }
+        Err(_) => {
+            return Err(anyhow::anyhow!("Timed out opening data channel."));
+        }
     }
 
     exchange_done.store(true, Ordering::Release);
