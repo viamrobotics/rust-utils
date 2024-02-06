@@ -791,14 +791,14 @@ async fn maybe_connect_via_webrtc(
     let uuid_lock = Arc::new(RwLock::new("".to_string()));
     let uuid_for_ice_gathering_thread = uuid_lock.clone();
 
-    // Using an mpsc channel to report unrecoverable errors during Signaling, the way we
-    // don't have to wait until the timeout expire before giving up on this connection attempt.
-    // The size is one since any error (or one success) will terminate the function
+    // Using an mpsc channel to report unrecoverable errors during Signaling, so we
+    // don't have to wait until the timeout expires before giving up on this attempt.
+    // The size of the channel is set to 1 since any error (or success) should terminate the function
     let (is_open_s, mut is_open_r) = mpsc::channel(1);
     let on_open_is_open = is_open_s.clone();
 
     data_channel.on_open(Box::new(move || {
-        let _ = on_open_is_open.try_send(None); // ignore sending errors, either and error was already sent or the operation will succeed
+        let _ = on_open_is_open.try_send(None); // ignore sending errors, either an error (or success) was already sent or the operation will succeed
         Box::pin(async move {})
     }));
 
@@ -828,8 +828,8 @@ async fn maybe_connect_via_webrtc(
                 let on_local_ice_candidate_failure = on_local_ice_candidate_failure.clone();
                 let mut remote_description_set_r = remote_description_set_r.clone();
                 Box::pin(async move {
-                    // If the value in the watch channel has not been set yet, we wait until it does so
-                    // afterwards Some(()) should be visible to all watcher and any watcher waiting of send will
+                    // If the value in the watch channel has not been set yet, we wait until it does.
+                    // Afterwards Some(()) should be visible to all watcher and any watcher waiting  will
                     // return
                     if remote_description_set_r.borrow().is_none() {
                         match webrtc_action_with_timeout(remote_description_set_r.changed()).await {
