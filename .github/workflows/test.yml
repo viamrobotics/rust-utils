@@ -16,7 +16,7 @@ jobs:
     container:
       # Use rdk-devenv for now which has a go version >= 1.20 in order to run
       # tests with goutils which requires at least 1.20.
-      image: https://github.com/viamrobotics/rdk/pkgs/container/rdk-devenv
+      image: ghcr.io/viamrobotics/rdk-devenv:amd64-cache
     steps:
       - name: Checkout PR/Push/Workflow Dispatch
         uses: actions/checkout@v4
