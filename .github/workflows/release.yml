@@ -134,6 +134,14 @@ jobs:
             platform: linux_x86_64
             image: ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos
             runs-on: buildjet-4vcpu-ubuntu-2204
+          - target: aarch64-unknown-linux-musl
+            platform: musllinux_aarch64
+            image: alpine
+            runs-on: buildjet-8vcpu-ubuntu-2204-arm
+          - target: x86_64-unknown-linux-musl
+            platform: musllinux_x86_64
+            image: alpine
+            runs-on: buildjet-4vcpu-ubuntu-2204
           - target: arm-unknown-linux-gnueabihf
             platform: linux_armv6l
             image: ghcr.io/cross-rs/arm-unknown-linux-gnueabihf:main
@@ -155,6 +163,12 @@ jobs:
             libtool \
             m4 \
             make
+      - name: Setup alpine dependencies
+        if: ${{ startsWith(matrix.image, 'alpine') }}
+        shell: sh
+        run: | 
+          apk add libgcc \
+            curl
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
