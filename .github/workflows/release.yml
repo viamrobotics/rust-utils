@@ -168,7 +168,8 @@ jobs:
         shell: sh
         run: | 
           apk add libgcc \
-            curl
+            curl \
+            bash
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
