@@ -545,6 +545,10 @@ pub struct Publishing {
     /// <https://cloud.google.com/pubsub/lite/docs/reference/rpc>
     #[prost(string, tag="110")]
     pub proto_reference_documentation_uri: ::prost::alloc::string::String,
+    /// Optional link to REST reference documentation.  Example:
+    /// <https://cloud.google.com/pubsub/lite/docs/reference/rest>
+    #[prost(string, tag="111")]
+    pub rest_reference_documentation_uri: ::prost::alloc::string::String,
 }
 /// Settings for Java client libraries.
 #[allow(clippy::derive_partial_eq_without_eq)]
