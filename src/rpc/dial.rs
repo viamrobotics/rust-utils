@@ -109,7 +109,7 @@ impl ViamChannel {
         }
 
         let data = hyper::body::to_bytes(body).await.unwrap().to_vec();
-        if let Err(e) = channel.write_message(false, Some(stream), data).await {
+        if let Err(e) = channel.write_message(Some(stream), data).await {
             log::error!("error sending message: {e}");
             channel.close_stream_with_recv_error(stream_id, e);
             status_code = STATUS_CODE_UNKNOWN;

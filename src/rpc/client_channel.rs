@@ -188,7 +188,6 @@ impl WebRTCClientChannel {
 
     pub(crate) async fn write_message(
         &self,
-        eos: bool,
         stream: Option<Stream>,
         mut data: Vec<u8>,
     ) -> Result<()> {
@@ -222,10 +221,6 @@ impl WebRTCClientChannel {
             to_add_bytes.clone_from_slice(&data[1..5]);
             let mut next_message_length: usize =
                 u32::from_be_bytes(to_add_bytes).try_into().unwrap();
-            // if this is all streaming calls we need to tell the server when we're done with
-            // the stream, otherwise neither side will know we're done, trailers will never be
-            // sent/processed, and we'll hang on the stream.
-            let it_was_all_a_stream = next_message_length + 5 < data.len();
 
             data = data.split_off(5);
             // we need an internal loop because a single message may be longer than the
@@ -241,20 +236,14 @@ impl WebRTCClientChannel {
                 let (to_send, remaining) = data.split_at(split_at);
                 next_message_length -= split_at;
                 let stream = stream.clone();
+                let eos = remaining.is_empty();
                 let request = Request {
                     stream,
                     r#type: Some(Type::Message(RequestMessage {
                         has_message,
-                        eos: if !remaining.is_empty() {
-                            // stream definitely isn't done if there's more to send
-                            false
-                        } else {
-                            // if we intentionally sent an eos or the http request was inferrably
-                            // not a stream
-                            eos || !it_was_all_a_stream
-                        },
+                        eos,
                         packet_message: Some(PacketMessage {
-                            eom: next_message_length == 0 || remaining.is_empty(),
+                            eom: next_message_length == 0 || eos,
                             data: to_send.to_vec(),
                         }),
                     })),
