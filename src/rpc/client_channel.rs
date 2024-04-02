@@ -241,6 +241,11 @@ impl WebRTCClientChannel {
                     stream,
                     r#type: Some(Type::Message(RequestMessage {
                         has_message,
+                        // note(ethan): the variable name that used to exist for determining `eos` was
+                        // `it_was_all_a_stream`. Which isn't important at all, but
+                        // `it_was_all_a_stream` is the best variable name I've ever shipped into
+                        // production and it makes me sad to see it go, so I wanted to memorialize
+                        // it somehow!
                         eos,
                         packet_message: Some(PacketMessage {
                             eom: next_message_length == 0 || eos,
