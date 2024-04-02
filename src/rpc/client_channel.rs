@@ -205,13 +205,6 @@ impl WebRTCClientChannel {
         // header math in the process.
 
         let mut to_add_bytes = [0u8; 4];
-        // 1-5 because those are the length header bytes for gRPC
-        to_add_bytes.clone_from_slice(&data[1..5]);
-        let mut next_message_length = u32::from_be_bytes(to_add_bytes);
-        // if this is all streaming calls we need to tell the server when we're done with
-        // the stream, otherwise neither side will know we're done, trailers will never be
-        // sent/processed, and we'll hang on the strream.
-        let it_was_all_a_stream = usize::try_from(next_message_length).unwrap() + 5 < data.len();
 
         // always run the loop at least once, check at completion if we've sent all data and
         // break the loop accordingly
@@ -224,8 +217,16 @@ impl WebRTCClientChannel {
 
             // because we might have multiple requests contained within our data, we have
             // to do the manual work of breaking apart the body into separate requests.
+
+            // 1-5 because those are the length header bytes for gRPC
             to_add_bytes.clone_from_slice(&data[1..5]);
-            next_message_length = u32::from_be_bytes(to_add_bytes);
+            let mut next_message_length: usize =
+                u32::from_be_bytes(to_add_bytes).try_into().unwrap();
+            // if this is all streaming calls we need to tell the server when we're done with
+            // the stream, otherwise neither side will know we're done, trailers will never be
+            // sent/processed, and we'll hang on the stream.
+            let it_was_all_a_stream = next_message_length + 5 < data.len();
+
             data = data.split_off(5);
             // we need an internal loop because a single message may be longer than the
             // MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE in which case we don't want to shave off
@@ -236,9 +237,9 @@ impl WebRTCClientChannel {
             loop {
                 let split_at = MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE
                     .min(data.len())
-                    .min(usize::try_from(next_message_length).unwrap());
+                    .min(next_message_length);
                 let (to_send, remaining) = data.split_at(split_at);
-                next_message_length -= u32::try_from(split_at).unwrap();
+                next_message_length -= split_at;
                 let stream = stream.clone();
                 let request = Request {
                     stream,
@@ -249,8 +250,8 @@ impl WebRTCClientChannel {
                             false
                         } else {
                             // if we intentionally sent an eos or the http request was inferrably
-                            // a stream
-                            eos || it_was_all_a_stream
+                            // not a stream
+                            eos || !it_was_all_a_stream
                         },
                         packet_message: Some(PacketMessage {
                             eom: next_message_length == 0 || remaining.is_empty(),

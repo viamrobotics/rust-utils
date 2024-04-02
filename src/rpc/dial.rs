@@ -40,7 +40,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{mpsc, watch};
-use tonic::codegen::{http, BoxFuture};
+use tonic::codegen::BoxFuture;
 use tonic::transport::{Body, Channel, Uri};
 use tonic::{body::BoxBody, transport::ClientTlsConfig};
 use tower::{Service, ServiceBuilder};
