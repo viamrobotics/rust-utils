@@ -36,6 +36,8 @@ jobs:
 
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.REPO_READ_TOKEN }}
 
       - name: Setup rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -162,7 +164,7 @@ jobs:
       - name: Setup alpine dependencies
         if: ${{ startsWith(matrix.image, 'alpine') }}
         shell: sh
-        run: | 
+        run: |
           apk add libgcc \
             curl \
             build-base \
