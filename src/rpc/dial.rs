@@ -40,7 +40,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{mpsc, watch};
-use tonic::codegen::{http, BoxFuture};
+use tonic::codegen::BoxFuture;
 use tonic::transport::{Body, Channel, Uri};
 use tonic::{body::BoxBody, transport::ClientTlsConfig};
 use tower::{Service, ServiceBuilder};
@@ -109,7 +109,7 @@ impl ViamChannel {
         }
 
         let data = hyper::body::to_bytes(body).await.unwrap().to_vec();
-        if let Err(e) = channel.write_message(false, Some(stream), data).await {
+        if let Err(e) = channel.write_message(Some(stream), data).await {
             log::error!("error sending message: {e}");
             channel.close_stream_with_recv_error(stream_id, e);
             status_code = STATUS_CODE_UNKNOWN;

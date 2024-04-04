@@ -11,9 +11,9 @@ use viam::rpc::dial;
 async fn main() -> Result<()> {
     env_logger::init();
     let creds = dial::RPCCredentials::new(
-        None,
-        "robot-location-secret".to_string(),
-        "<your location secret here>".to_string(),
+        Some("<your api key ID here>".to_string()),
+        "api-key".to_string(),
+        "<your api key here>".to_string(),
     );
 
     let c = dial::DialOptions::builder()
