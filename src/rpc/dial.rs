@@ -603,7 +603,7 @@ impl DialBuilder<WithCredentials> {
 
         let original_uri = Uri::from_parts(original_uri_parts)?;
 
-        let domain = original_uri.authority().clone().unwrap().to_string();
+        let domain = original_uri.authority().unwrap().to_string();
         let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
@@ -621,7 +621,7 @@ impl DialBuilder<WithCredentials> {
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
         };
-        let real_channel = match channel {
+        let mut real_channel = match channel {
             Ok(c) => {
                 log::debug!("Connected via mDNS");
                 c
@@ -632,26 +632,38 @@ impl DialBuilder<WithCredentials> {
                         "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
                     );
                 }
-                Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
+                Self::create_channel(allow_downgrade, &domain, uri_for_auth.clone(), false).await?
             }
         };
 
         log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
-        let token = get_auth_token(
-            &mut real_channel.clone(),
-            self.config
-                .credentials
-                .as_ref()
-                .unwrap()
-                .credentials
-                .clone(),
-            self.config
-                .credentials
-                .unwrap()
-                .entity
-                .unwrap_or_else(|| domain.clone()),
-        )
-        .await?;
+        let creds = self
+            .config
+            .credentials
+            .as_ref()
+            .unwrap()
+            .credentials
+            .clone();
+        let entity = self
+            .config
+            .credentials
+            .unwrap()
+            .entity
+            .unwrap_or_else(|| domain.clone());
+        let token = match get_auth_token(&mut real_channel.clone(), creds.clone(), entity.clone())
+            .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                if !attempting_mdns {
+                    return Err(e);
+                }
+                log::debug!("Error getting auth token: [{e}]. This may be the result of a mismatch between mDNS uri and credentials. Attempting again with auth uri.");
+                real_channel =
+                    Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?;
+                get_auth_token(&mut real_channel.clone(), creds, entity).await?
+            }
+        };
         log::debug!("{}", log_prefixes::ACQUIRED_AUTH_TOKEN);
 
         let channel = ServiceBuilder::new()
@@ -660,7 +672,7 @@ impl DialBuilder<WithCredentials> {
                 HeaderName::from_static("rpc-host"),
                 HeaderValue::from_str(domain.as_str())?,
             ))
-            .service(real_channel.clone());
+            .service(real_channel);
 
         if disable_webrtc {
             log::debug!("Connected via gRPC");

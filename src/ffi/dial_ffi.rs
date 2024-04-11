@@ -196,10 +196,13 @@ pub unsafe extern "C" fn dial(
             false => match CStr::from_ptr(c_entity).to_str() {
                 Ok(ent) => Some(ent.to_string()),
                 Err(e) => {
-                    log::error!("Error unexpectedly received an invalid entity string {:?}", e);
+                    log::error!(
+                        "Error unexpectedly received an invalid entity string {:?}",
+                        e
+                    );
                     return ptr::null_mut();
                 }
-            }
+            },
         }
     };
     let timeout_duration = Duration::from_secs_f32(c_timeout);
@@ -207,26 +210,26 @@ pub unsafe extern "C" fn dial(
     let (server, channel) = match runtime.block_on(async move {
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
-                let res = timeout(
-                    timeout_duration, 
+                timeout(
+                    timeout_duration,
                     dial_with_cred(
-                    uri_str,
-                    entity_opt,
-                    t.to_str()?,
-                    p.to_str()?,
-                    allow_insec,
-                    disable_webrtc,
-                )?
-                .connect()
+                        uri_str,
+                        entity_opt,
+                        t.to_str()?,
+                        p.to_str()?,
+                        allow_insec,
+                        disable_webrtc,
+                    )?
+                    .connect(),
                 )
-                .await?;
-                res
+                .await?
             }
             (None, None) => {
-                let res = timeout(
-                    timeout_duration, 
-                    dial_without_cred(uri_str, allow_insec, disable_webrtc)?.connect()).await?;
-                res
+                timeout(
+                    timeout_duration,
+                    dial_without_cred(uri_str, allow_insec, disable_webrtc)?.connect(),
+                )
+                .await?
             }
             (None, Some(_)) => Err(anyhow::anyhow!("Error missing credential: type")),
             (Some(_), None) => Err(anyhow::anyhow!("Error missing credential: payload")),
