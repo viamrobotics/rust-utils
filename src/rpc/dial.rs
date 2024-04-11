@@ -658,7 +658,9 @@ impl DialBuilder<WithCredentials> {
                 if !attempting_mdns {
                     return Err(e);
                 }
-                log::debug!("Error getting auth token: [{e}]. This may be the result of a mismatch between mDNS uri and credentials. Attempting again with auth uri.");
+                log::debug!(
+                    "Error getting auth token: [{e}]. This may be the result of attempting to connect via mDNS with an incorrectly scoped API key. Attempting again without mDNS uri."
+                    );
                 real_channel =
                     Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?;
                 get_auth_token(&mut real_channel.clone(), creds, entity).await?
