@@ -66,7 +66,7 @@ pub enum ViamChannel {
     WebRTC(Arc<WebRTCClientChannel>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RPCCredentials {
     entity: Option<String>,
     credentials: Credentials,
@@ -378,13 +378,7 @@ impl<T: AuthMethod> DialBuilder<T> {
     fn duplicate_uri(&self) -> Option<Parts> {
         match &self.config.uri {
             None => None,
-            Some(parts) => {
-                let uri = Uri::builder()
-                    .authority(parts.authority.clone()?)
-                    .path_and_query(parts.path_and_query.clone()?)
-                    .scheme(parts.scheme.clone()?);
-                Some(uri.build().ok()?.into_parts())
-            }
+            Some(uri) => duplicate_uri(uri),
         }
     }
 
@@ -459,7 +453,7 @@ impl<T: AuthMethod> DialBuilder<T> {
                     let mut uri_parts = uri.clone().into_parts();
                     uri_parts.scheme = Some(Scheme::HTTP);
                     let uri = Uri::from_parts(uri_parts)?;
-                    Channel::builder(uri.clone()).connect().await?
+                    Channel::builder(uri).connect().await?
                 } else {
                     return Err(anyhow::anyhow!(e));
                 }
@@ -470,6 +464,20 @@ impl<T: AuthMethod> DialBuilder<T> {
 }
 
 impl DialBuilder<WithoutCredentials> {
+    fn clone(&self) -> Self {
+        DialBuilder {
+            state: WithoutCredentials(()),
+            config: DialOptions {
+                credentials: None,
+                webrtc_options: self.config.webrtc_options.clone(),
+                uri: self.duplicate_uri(),
+                disable_mdns: self.config.disable_mdns,
+                allow_downgrade: self.config.allow_downgrade,
+                insecure: self.config.insecure,
+            },
+        }
+    }
+
     /// attempts to establish a connection without credentials to the DialBuilder's given uri
     async fn connect_inner(
         self,
@@ -499,9 +507,7 @@ impl DialBuilder<WithoutCredentials> {
         }
 
         let channel = match mdns_uri {
-            Some(uri) => {
-                Self::create_channel(self.config.allow_downgrade, &domain, uri, true).await
-            }
+            Some(uri) => Self::create_channel(self.config.allow_downgrade, domain, uri, true).await,
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -518,7 +524,7 @@ impl DialBuilder<WithoutCredentials> {
                         "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
                     );
                 }
-                Self::create_channel(self.config.allow_downgrade, &domain, uri.clone(), false)
+                Self::create_channel(self.config.allow_downgrade, domain, uri.clone(), false)
                     .await?
             }
         };
@@ -550,21 +556,65 @@ impl DialBuilder<WithoutCredentials> {
         }
     }
 
-    pub async fn connect(self) -> Result<ViamChannel> {
-        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
-        let original_uri = match self.duplicate_uri() {
-            Some(uri) => uri,
-            None => {
-                return Err(anyhow::anyhow!(
-                    "Attempting to connect but there was no uri"
-                ))
-            }
-        };
-        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_secs(5))
+    async fn connect_mdns(self, original_uri: Parts) -> Result<ViamChannel> {
+        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_millis(15))
             .await
             .ok()
-            .flatten();
-        self.connect_inner(mdns_uri, original_uri).await
+            .flatten()
+            .ok_or(anyhow::anyhow!(
+                "Unable to establish connection via mDNS; uri not found"
+            ))?;
+
+        self.connect_inner(Some(mdns_uri), original_uri).await
+    }
+
+    pub async fn connect(self) -> Result<ViamChannel> {
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
+        let original_uri = self.duplicate_uri().ok_or(anyhow::anyhow!(
+            "Attempting to connect but there was no uri"
+        ))?;
+        let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
+            "Attempting to connect but there was no uri"
+        ))?;
+        // We want to short circuit and return the first `Ok` result from our connection
+        // attempts, whish `tokio::select!` does great. Buuuuut, we don't want to
+        // abandon the `Err` results, and we want to provide comprehensive logging for
+        // debugging purposes. Hence the loop and pinning. The pinning lets us reference
+        // the same future multiple times, while the loop lets immediately return on the
+        // first `Ok` result while still seeing and logging any error results.
+        tokio::pin! {
+            let with_mdns = self.clone().connect_mdns(original_uri);
+            let without_mdns = self.connect_inner(None, original_uri2);
+        }
+        let mut with_mdns_err: Option<anyhow::Error> = None;
+        let mut without_mdns_err: Option<anyhow::Error> = None;
+        while with_mdns_err.is_none() || without_mdns_err.is_none() {
+            tokio::select! {
+                with_mdns = &mut with_mdns => {
+                    match with_mdns {
+                        Ok(chan) => return Ok(chan),
+                        Err(e) => {
+                            log::debug!("Error connecting with mdns: {e}");
+                            with_mdns_err = Some(e);
+                        }
+                    }
+                }
+                without_mdns = &mut without_mdns => {
+                    match without_mdns {
+                        Ok(chan) => return Ok(chan),
+                        Err(e) => {
+                            log::debug!("Error connecting without mdns: {e}");
+                            without_mdns_err = Some(e);
+                        }
+                    }
+                }
+            }
+        }
+        Err(anyhow::anyhow!(
+            "Unable to connect with or without mdns.
+                    with_mdns err: {with_mdns_err:?}
+                    without_mdns err: {without_mdns_err:?}"
+        ))
     }
 }
 
@@ -584,6 +634,20 @@ async fn get_auth_token(
 }
 
 impl DialBuilder<WithCredentials> {
+    fn clone(&self) -> Self {
+        DialBuilder {
+            state: WithCredentials(()),
+            config: DialOptions {
+                credentials: self.config.credentials.clone(),
+                webrtc_options: self.config.webrtc_options.clone(),
+                uri: self.duplicate_uri(),
+                disable_mdns: self.config.disable_mdns,
+                allow_downgrade: self.config.allow_downgrade,
+                insecure: self.config.insecure,
+            },
+        }
+    }
+
     async fn connect_inner(
         self,
         mdns_uri: Option<Parts>,
@@ -621,7 +685,7 @@ impl DialBuilder<WithCredentials> {
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
         };
-        let mut real_channel = match channel {
+        let real_channel = match channel {
             Ok(c) => {
                 log::debug!("Connected via mDNS");
                 c
@@ -632,40 +696,26 @@ impl DialBuilder<WithCredentials> {
                         "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
                     );
                 }
-                Self::create_channel(allow_downgrade, &domain, uri_for_auth.clone(), false).await?
+                Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
             }
         };
 
         log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
-        let creds = self
-            .config
-            .credentials
-            .as_ref()
-            .unwrap()
-            .credentials
-            .clone();
-        let entity = self
-            .config
-            .credentials
-            .unwrap()
-            .entity
-            .unwrap_or_else(|| domain.clone());
-        let token = match get_auth_token(&mut real_channel.clone(), creds.clone(), entity.clone())
-            .await
-        {
-            Ok(t) => t,
-            Err(e) => {
-                if !attempting_mdns {
-                    return Err(e);
-                }
-                log::debug!(
-                    "Error getting auth token: [{e}]. This may be the result of attempting to connect via mDNS with an incorrectly scoped API key. Attempting again without mDNS uri."
-                    );
-                real_channel =
-                    Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?;
-                get_auth_token(&mut real_channel.clone(), creds, entity).await?
-            }
-        };
+        let token = get_auth_token(
+            &mut real_channel.clone(),
+            self.config
+                .credentials
+                .as_ref()
+                .unwrap()
+                .credentials
+                .clone(),
+            self.config
+                .credentials
+                .unwrap()
+                .entity
+                .unwrap_or_else(|| domain.clone()),
+        )
+        .await?;
         log::debug!("{}", log_prefixes::ACQUIRED_AUTH_TOKEN);
 
         let channel = ServiceBuilder::new()
@@ -693,17 +743,7 @@ impl DialBuilder<WithCredentials> {
         }
     }
 
-    /// attempts to establish a connection with credentials to the DialBuilder's given uri
-    pub async fn connect(self) -> Result<ViamChannel> {
-        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
-        let original_uri = match self.duplicate_uri() {
-            Some(uri) => uri,
-            None => {
-                return Err(anyhow::anyhow!(
-                    "Attempting to connect but there was no uri"
-                ))
-            }
-        };
+    async fn connect_mdns(self, original_uri: Parts) -> Result<ViamChannel> {
         // NOTE(benjirewis): Use a duration of 1500ms for getting the mDNS URI. I've anecdotally
         // seen times as great as 922ms to fetch a non-loopback mDNS URI. With an
         // interface_with_loopback query interval of 250ms, 1500ms here should give us time for ~6
@@ -712,8 +752,63 @@ impl DialBuilder<WithCredentials> {
             webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_millis(1500))
                 .await
                 .ok()
-                .flatten();
-        self.connect_inner(mdns_uri, original_uri).await
+                .flatten()
+                .ok_or(anyhow::anyhow!(
+                    "Unable to establish connection via mDNS; uri not found"
+                ))?;
+
+        self.connect_inner(Some(mdns_uri), original_uri).await
+    }
+
+    /// attempts to establish a connection with credentials to the DialBuilder's given uri
+    pub async fn connect(self) -> Result<ViamChannel> {
+        log::debug!("{}", log_prefixes::DIAL_ATTEMPT);
+        let original_uri = self.duplicate_uri().ok_or(anyhow::anyhow!(
+            "Attempting to connect but there was no uri"
+        ))?;
+        let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
+            "Attempting to connect but there was no uri"
+        ))?;
+
+        // We want to short circuit and return the first `Ok` result from our connection
+        // attempts, whish `tokio::select!` does great. Buuuuut, we don't want to
+        // abandon the `Err` results, and we want to provide comprehensive logging for
+        // debugging purposes. Hence the loop and pinning. The pinning lets us reference
+        // the same future multiple times, while the loop lets immediately return on the
+        // first `Ok` result while still seeing and logging any error results.
+        tokio::pin! {
+            let with_mdns = self.clone().connect_mdns(original_uri);
+            let without_mdns = self.connect_inner(None, original_uri2);
+        }
+        let mut with_mdns_err: Option<anyhow::Error> = None;
+        let mut without_mdns_err: Option<anyhow::Error> = None;
+        while with_mdns_err.is_none() || without_mdns_err.is_none() {
+            tokio::select! {
+                with_mdns = &mut with_mdns, if with_mdns_err.is_none() => {
+                    match with_mdns {
+                        Ok(chan) => return Ok(chan),
+                        Err(e) => {
+                            log::debug!("Error connecting with mdns: {e}");
+                            with_mdns_err = Some(e);
+                        }
+                    }
+                }
+                without_mdns = &mut without_mdns, if without_mdns_err.is_none() => {
+                    match without_mdns {
+                        Ok(chan) => return Ok(chan),
+                        Err(e) => {
+                            log::debug!("Error connecting without mdns: {e}");
+                            without_mdns_err = Some(e);
+                        }
+                    }
+                }
+            }
+        }
+        Err(anyhow::anyhow!(
+            "Unable to connect with or without mdns.
+                    with_mdns err: {with_mdns_err:?}
+                    without_mdns err: {without_mdns_err:?}"
+        ))
     }
 }
 
@@ -1142,6 +1237,14 @@ fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
         }
     }
     uri
+}
+
+fn duplicate_uri(parts: &Parts) -> Option<Parts> {
+    let uri = Uri::builder()
+        .authority(parts.authority.clone()?)
+        .path_and_query(parts.path_and_query.clone()?)
+        .scheme(parts.scheme.clone()?);
+    Some(uri.build().ok()?.into_parts())
 }
 
 fn uri_parts_with_defaults(uri: &str) -> Parts {
