@@ -557,13 +557,14 @@ impl DialBuilder<WithoutCredentials> {
     }
 
     async fn connect_mdns(self, original_uri: Parts) -> Result<ViamChannel> {
-        let mdns_uri = webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_millis(15))
-            .await
-            .ok()
-            .flatten()
-            .ok_or(anyhow::anyhow!(
-                "Unable to establish connection via mDNS; uri not found"
-            ))?;
+        let mdns_uri =
+            webrtc::action_with_timeout(self.get_mdns_uri(), Duration::from_millis(1500))
+                .await
+                .ok()
+                .flatten()
+                .ok_or(anyhow::anyhow!(
+                    "Unable to establish connection via mDNS; uri not found"
+                ))?;
 
         self.connect_inner(Some(mdns_uri), original_uri).await
     }
@@ -590,7 +591,7 @@ impl DialBuilder<WithoutCredentials> {
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {
-                with_mdns = &mut with_mdns => {
+                with_mdns = &mut with_mdns, if with_mdns_err.is_none() => {
                     match with_mdns {
                         Ok(chan) => return Ok(chan),
                         Err(e) => {
@@ -599,7 +600,7 @@ impl DialBuilder<WithoutCredentials> {
                         }
                     }
                 }
-                without_mdns = &mut without_mdns => {
+                without_mdns = &mut without_mdns, if without_mdns_err.is_none() => {
                     match without_mdns {
                         Ok(chan) => return Ok(chan),
                         Err(e) => {
