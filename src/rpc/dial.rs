@@ -578,10 +578,10 @@ impl DialBuilder<WithoutCredentials> {
             "Attempting to connect but there was no uri"
         ))?;
         // We want to short circuit and return the first `Ok` result from our connection
-        // attempts, whish `tokio::select!` does great. Buuuuut, we don't want to
+        // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
         // abandon the `Err` results, and we want to provide comprehensive logging for
         // debugging purposes. Hence the loop and pinning. The pinning lets us reference
-        // the same future multiple times, while the loop lets immediately return on the
+        // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
