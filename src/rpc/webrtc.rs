@@ -29,7 +29,7 @@ use webrtc::{
 const WEBRTC_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Options for connecting via webRTC.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Options {
     pub(crate) disable_webrtc: bool,
     pub(crate) disable_trickle_ice: bool,
