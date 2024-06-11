@@ -1264,13 +1264,3 @@ fn metadata_from_parts(parts: &http::request::Parts) -> Metadata {
     }
     Metadata { md }
 }
-
-fn amend_domain_if_local(domain: &str) -> &str {
-    let localhost = "127.";
-    let localhost_hum = "localhost";
-    if domain.starts_with(localhost) || domain.starts_with(localhost_hum) {
-        "localhost:8080"
-    } else {
-        domain
-    }
-}
