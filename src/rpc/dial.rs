@@ -496,7 +496,6 @@ impl DialBuilder<WithoutCredentials> {
         let uri2 = original_uri.clone();
         let uri = infer_remote_uri_from_authority(original_uri);
         let domain = uri2.authority().to_owned().unwrap().as_str();
-        let domain = amend_domain_if_local(domain);
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -1226,11 +1225,10 @@ fn encode_sdp(sdp: RTCSessionDescription) -> Result<String> {
 }
 
 fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
-    let is_local_connection = uri
-        .authority()
-        .map(Authority::as_str)
-        .unwrap_or_default()
-        .contains(".local.cloud");
+    let authority = uri.authority().map(Authority::as_str).unwrap_or_default();
+    let is_local_connection = authority.contains(".local.viam.cloud")
+        || authority.contains("localhost")
+        || authority.contains("0.0.0.0");
 
     if !is_local_connection {
         if let Some((new_uri, _)) = Options::infer_signaling_server_address(&uri) {
@@ -1265,14 +1263,4 @@ fn metadata_from_parts(parts: &http::request::Parts) -> Metadata {
         md.insert(k, v);
     }
     Metadata { md }
-}
-
-fn amend_domain_if_local(domain: &str) -> &str {
-    let localhost = "127.";
-    let localhost_hum = "localhost";
-    if domain.starts_with(localhost) || domain.starts_with(localhost_hum) {
-        "localhost:8080"
-    } else {
-        domain
-    }
 }
