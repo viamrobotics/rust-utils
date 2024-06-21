@@ -959,7 +959,7 @@ async fn maybe_connect_via_webrtc(
                 Box::pin(async move {
                     if state == RTCIceConnectionState::Completed {
                         let caller_update_stats_inner = caller_update_stats.lock().unwrap();
-                        log::info!("{}", caller_update_stats_inner);
+                        log::debug!("{}", caller_update_stats_inner);
                     }
                 })
             },
@@ -1005,7 +1005,7 @@ async fn maybe_connect_via_webrtc(
                     let mut signaling_client = SignalingServiceClient::new(channel.clone());
                     match ice_candidate {
                         Some(ice_candidate) => {
-                            log::info!("Gathered local candidate of {}", ice_candidate);
+                            log::debug!("Gathered local candidate of {}", ice_candidate);
                             if sent_done_or_error.load(Ordering::Acquire) {
                                 return;
                             }
@@ -1197,7 +1197,7 @@ async fn maybe_connect_via_webrtc(
                                     break;
                                 }
                             };
-                            log::info!("Received remote ICE candidate of {:#?}", candidate);
+                            log::debug!("Received remote ICE candidate of {:#?}", candidate);
                             if let Err(e) = client_channel
                                 .base_channel
                                 .peer_connection
