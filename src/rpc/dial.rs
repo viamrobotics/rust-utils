@@ -884,7 +884,7 @@ impl fmt::Display for CallerUpdateStats {
         let average_duration = &self.total_duration.as_millis() / &self.count;
         writeln!(
             f,
-            "Caller update statistics: num_updates {}, average_duration: {}ms, max_duration: {}ms",
+            "Caller update statistics: num_updates: {}, average_duration: {}ms, max_duration: {}ms",
             &self.count,
             average_duration,
             &self.max_duration.as_millis()
@@ -1005,7 +1005,7 @@ async fn maybe_connect_via_webrtc(
                     let mut signaling_client = SignalingServiceClient::new(channel.clone());
                     match ice_candidate {
                         Some(ice_candidate) => {
-                            log::debug!("Gathered local candidate of {}", ice_candidate);
+                            log::debug!("Gathered local candidate of {ice_candidate}");
                             if sent_done_or_error.load(Ordering::Acquire) {
                                 return;
                             }
@@ -1039,7 +1039,8 @@ async fn maybe_connect_via_webrtc(
                                         caller_update_stats_inner.max_duration =
                                             call_update_duration;
                                     }
-                                    caller_update_stats_inner.total_duration = call_update_duration;
+                                    caller_update_stats_inner.total_duration +=
+                                        call_update_duration;
                                 }
                                 Err(e) => log::error!("Error parsing ice candidate: {e}"),
                             }
@@ -1197,7 +1198,7 @@ async fn maybe_connect_via_webrtc(
                                     break;
                                 }
                             };
-                            log::debug!("Received remote ICE candidate of {:#?}", candidate);
+                            log::debug!("Received remote ICE candidate of {candidate:#?}");
                             if let Err(e) = client_channel
                                 .base_channel
                                 .peer_connection
