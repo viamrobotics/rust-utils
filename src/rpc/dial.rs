@@ -962,6 +962,25 @@ async fn maybe_connect_via_webrtc(
                     }
 
                     let uuid = uuid_lock.read().unwrap().to_string();
+                    // Note(ethan): for reasons that aren't entirely clear to me, parallel dialing
+                    // occasionally causes us to not receive a signaling client response when
+                    // trying to establish a connection. This results in noisy error messages that
+                    // fortunately are harmless (this problem seems to only ever affect one branch
+                    // of the parallel dial, so we still end up with a successful connection).
+                    // By checking if the `uuid` is empty, we can tell if we're in such a case and
+                    // exit out before it results in logging noisy error messages.
+                    //
+                    // It would be lovely to understand this problem better, but given that it's
+                    // not actually causing performance failures it's probably not worth the effort
+                    // at this time.
+                    if uuid.is_empty() {
+                        log::debug!(
+                            "UUID never updated. This is likely because we never received a response \
+                            from the signaling client. This happens occasionally with parallel dialing \
+                            and isn't concerning provided connection still occurs."
+                        );
+                        return;
+                    }
                     let mut signaling_client = SignalingServiceClient::new(channel.clone());
                     match ice_candidate {
                         Some(ice_candidate) => {
@@ -1069,7 +1088,7 @@ async fn maybe_connect_via_webrtc(
                     init_received.store(true, Ordering::Release);
                     {
                         let mut uuid_s = uuid.write().unwrap();
-                        *uuid_s = response.uuid.clone();
+                        uuid_s.clone_from(&response.uuid);
                     }
 
                     let answer = match decode_sdp(init.sdp) {
