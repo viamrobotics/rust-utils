@@ -21,19 +21,6 @@ jobs:
       version: ${{ steps.which_version.outputs.version }}
       sha: ${{ steps.commit.outputs.commit_long_sha }}
     steps:
-      - name: Check if organization member
-        id: is_organization_member
-        uses: jamessingleton/is-organization-member@1.0.1
-        with:
-          organization: viamrobotics
-          username: ${{ github.actor }}
-          token:  ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cancelling - user not part of organization
-        uses: andymckay/cancel-action@0.2
-        if: |
-          steps.is_organization_member.outputs.result == 'false'
-
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
@@ -92,7 +79,7 @@ jobs:
             platform: macosx_x86_64
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Setup rust toolchain
@@ -186,7 +173,7 @@ jobs:
             build-base \
             bash
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Setup rust toolchain
