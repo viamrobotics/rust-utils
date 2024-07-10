@@ -70,7 +70,7 @@ jobs:
     needs: [prepare]
     runs-on: [self-hosted, ARM64, macOS]
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - target: aarch64-apple-darwin
@@ -114,7 +114,7 @@ jobs:
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include:
           - target: aarch64-unknown-linux-gnu
@@ -175,7 +175,7 @@ jobs:
             build-base \
             bash
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - name: Setup rust toolchain
