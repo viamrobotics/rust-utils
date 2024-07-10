@@ -111,6 +111,8 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     container:
       image: ${{ matrix.image }}
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
     strategy:
       fail-fast: false
       matrix:
