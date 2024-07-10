@@ -138,11 +138,11 @@ jobs:
             image: ghcr.io/cross-rs/arm-unknown-linux-gnueabihf:main
             runs-on: buildjet-4vcpu-ubuntu-2204
           - target: arm-unknown-linux-musleabihf
-            platform: linux_armv6l
+            platform: musllinux_armv6l
             image: ghcr.io/cross-rs/arm-unknown-linux-musleabihf:main
             runs-on: buildjet-4vcpu-ubuntu-2204
           - target: armv7-unknown-linux-musleabihf
-            platform: linux_armv7l
+            platform: musllinux_armv7l
             image: ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:main
             runs-on: buildjet-4vcpu-ubuntu-2204
           - target: i686-unknown-linux-musl
