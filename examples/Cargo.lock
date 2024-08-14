@@ -151,45 +151,18 @@ checksum = "bddcadddf5e9015d310179a59bb28c4d4b9920ad0f11e8e14dbadf654890c9a6"
 
 [[package]]
 name = "asn1-rs"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6fd5ddaf0351dff5b8da21b2fb4ff8e08ddd02857f0bf69c47639106c0fff0"
-dependencies = [
- "asn1-rs-derive 0.4.0",
- "asn1-rs-impl 0.1.0",
- "displaydoc",
- "nom",
- "num-traits",
- "rusticata-macros",
- "thiserror",
-]
-
-[[package]]
-name = "asn1-rs"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22ad1373757efa0f70ec53939aabc7152e1591cb485208052993070ac8d2429d"
 dependencies = [
- "asn1-rs-derive 0.5.0",
- "asn1-rs-impl 0.2.0",
+ "asn1-rs-derive",
+ "asn1-rs-impl",
  "displaydoc",
  "nom",
  "num-traits",
  "rusticata-macros",
  "thiserror",
  "time 0.3.23",
-]
-
-[[package]]
-name = "asn1-rs-derive"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726535892e8eae7e70657b4c8ea93d26b8553afb1ce617caee529ef96d7dee6c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
- "synstructure 0.12.6",
 ]
 
 [[package]]
@@ -202,17 +175,6 @@ dependencies = [
  "quote",
  "syn 2.0.25",
  "synstructure 0.13.1",
-]
-
-[[package]]
-name = "asn1-rs-impl"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2777730b2039ac0f95f093556e61b6d26cebed5393ca6f152717777cec3a42ed"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -571,6 +533,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -807,18 +775,18 @@ dependencies = [
 
 [[package]]
 name = "crc"
-version = "3.0.1"
+version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86ec7a15cbe22e59248fc7eadb1907dab5ba09372595da4d73dd805ed4417dfe"
+checksum = "69e6e4d7b33a94f0991c26729976b10ebde1d34c3ee82408fb536164fa10d636"
 dependencies = [
  "crc-catalog",
 ]
 
 [[package]]
 name = "crc-catalog"
-version = "2.2.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cace84e55f07e7301bae1c519df89cdad8cc3cd868413d3fdbdeca9ff3db484"
+checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "crc32fast"
@@ -928,24 +896,11 @@ dependencies = [
 
 [[package]]
 name = "der-parser"
-version = "8.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbd676fbbab537128ef0278adb5576cf363cff6aa22a7b24effe97347cfab61e"
-dependencies = [
- "asn1-rs 0.5.2",
- "displaydoc",
- "nom",
- "num-traits",
- "rusticata-macros",
-]
-
-[[package]]
-name = "der-parser"
 version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cd0a5c643689626bec213c4d8bd4d96acc8ffdb4ad4bb6bc16abf27d5f4b553"
 dependencies = [
- "asn1-rs 0.6.1",
+ "asn1-rs",
  "displaydoc",
  "nom",
  "num-bigint",
@@ -1600,13 +1555,32 @@ dependencies = [
  "log",
  "portable-atomic",
  "rand",
- "rtcp",
- "rtp",
+ "rtcp 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rtp 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
  "tokio",
  "waitgroup",
- "webrtc-srtp",
- "webrtc-util",
+ "webrtc-srtp 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webrtc-util 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "interceptor"
+version = "0.12.0"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "log",
+ "portable-atomic",
+ "rand",
+ "rtcp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "rtp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "thiserror",
+ "tokio",
+ "waitgroup",
+ "webrtc-srtp 0.13.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -2028,7 +2002,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c958dd45046245b9c3c2547369bb634eb461670b2e7e0de552905801a648d1d"
 dependencies = [
- "asn1-rs 0.6.1",
+ "asn1-rs",
 ]
 
 [[package]]
@@ -2544,7 +2518,17 @@ checksum = "fc9f775ff89c5fe7f0cc0abafb7c57688ae25ce688f1a52dd88e277616c76ab2"
 dependencies = [
  "bytes",
  "thiserror",
- "webrtc-util",
+ "webrtc-util 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rtcp"
+version = "0.11.0"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
+dependencies = [
+ "bytes",
+ "thiserror",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -2558,7 +2542,21 @@ dependencies = [
  "rand",
  "serde",
  "thiserror",
- "webrtc-util",
+ "webrtc-util 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rtp"
+version = "0.11.0"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
+dependencies = [
+ "bytes",
+ "memchr",
+ "portable-atomic",
+ "rand",
+ "serde",
+ "thiserror",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -2757,8 +2755,7 @@ dependencies = [
 [[package]]
 name = "sdp"
 version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13254db766b17451aced321e7397ebf0a446ef0c8d2942b6e67a95815421093f"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "rand",
  "substring",
@@ -3010,10 +3007,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 [[package]]
 name = "stun"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28fad383a1cc63ae141e84e48eaef44a1063e9d9e55bcb8f51a99b886486e01b"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
- "base64 0.21.2",
+ "base64 0.22.1",
  "crc",
  "lazy_static",
  "md-5",
@@ -3023,7 +3019,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -3515,11 +3511,10 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 [[package]]
 name = "turn"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b000cebd930420ac1ed842c8128e3b3412512dfd5b82657eab035a3f5126acc"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "async-trait",
- "base64 0.21.2",
+ "base64 0.22.1",
  "futures",
  "log",
  "md-5",
@@ -3530,7 +3525,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -3686,7 +3681,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "interceptor",
+ "interceptor 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
  "local-ip-address",
  "log",
@@ -3864,15 +3859,14 @@ dependencies = [
 [[package]]
 name = "webrtc"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8b3a840e31c969844714f93b5a87e73ee49f3bc2a4094ab9132c69497eb31db"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "arc-swap",
  "async-trait",
  "bytes",
  "cfg-if 1.0.0",
  "hex",
- "interceptor",
+ "interceptor 0.12.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
  "lazy_static",
  "log",
  "portable-atomic",
@@ -3880,8 +3874,8 @@ dependencies = [
  "rcgen",
  "regex",
  "ring 0.17.8",
- "rtcp",
- "rtp",
+ "rtcp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "rtp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
  "rustls 0.23.10",
  "sdp",
  "serde",
@@ -3901,15 +3895,14 @@ dependencies = [
  "webrtc-mdns",
  "webrtc-media",
  "webrtc-sctp",
- "webrtc-srtp",
- "webrtc-util",
+ "webrtc-srtp 0.13.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
 name = "webrtc-data"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8b7c550f8d35867b72d511640adf5159729b9692899826fe00ba7fa74f0bf70"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "bytes",
  "log",
@@ -3917,14 +3910,13 @@ dependencies = [
  "thiserror",
  "tokio",
  "webrtc-sctp",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
 name = "webrtc-dtls"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86e5eedbb0375aa04da93fc3a189b49ed3ed9ee844b6997d5aade14fc3e2c26e"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3933,7 +3925,7 @@ dependencies = [
  "byteorder",
  "cbc",
  "ccm",
- "der-parser 8.2.0",
+ "der-parser",
  "hkdf",
  "hmac",
  "log",
@@ -3952,7 +3944,7 @@ dependencies = [
  "subtle",
  "thiserror",
  "tokio",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
  "x25519-dalek",
  "x509-parser",
 ]
@@ -3960,8 +3952,7 @@ dependencies = [
 [[package]]
 name = "webrtc-ice"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d4f0ca6d4df8d1bdd34eece61b51b62540840b7a000397bcfb53a7bfcf347c8"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -3979,40 +3970,37 @@ dependencies = [
  "uuid",
  "waitgroup",
  "webrtc-mdns",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
 name = "webrtc-mdns"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0804694f3b2acfdff48f6df217979b13cb0a00377c63b5effd111daaee7e8c4"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "log",
  "socket2 0.5.6",
  "thiserror",
  "tokio",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
 name = "webrtc-media"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c15b20e98167b22949abc1c20eca7c6d814307d187068fe7a48f0b87a4f6d46"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "byteorder",
  "bytes",
  "rand",
- "rtp",
+ "rtp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
  "thiserror",
 ]
 
 [[package]]
 name = "webrtc-sctp"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d850daa68639b9d7bb16400676e97525d1e52b15b4928240ae2ba0e849817a5"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -4023,7 +4011,7 @@ dependencies = [
  "rand",
  "thiserror",
  "tokio",
- "webrtc-util",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -4040,13 +4028,35 @@ dependencies = [
  "ctr",
  "hmac",
  "log",
- "rtcp",
- "rtp",
+ "rtcp 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rtp 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "sha1",
  "subtle",
  "thiserror",
  "tokio",
- "webrtc-util",
+ "webrtc-util 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "webrtc-srtp"
+version = "0.13.0"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
+dependencies = [
+ "aead",
+ "aes",
+ "aes-gcm",
+ "byteorder",
+ "bytes",
+ "ctr",
+ "hmac",
+ "log",
+ "rtcp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "rtp 0.11.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
+ "sha1",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "webrtc-util 0.9.0 (git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support)",
 ]
 
 [[package]]
@@ -4054,6 +4064,26 @@ name = "webrtc-util"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc8d9bc631768958ed97b8d68b5d301e63054ae90b09083d43e2fefb939fd77e"
+dependencies = [
+ "async-trait",
+ "bitflags 1.3.2",
+ "bytes",
+ "ipnet",
+ "lazy_static",
+ "libc",
+ "log",
+ "nix",
+ "portable-atomic",
+ "rand",
+ "thiserror",
+ "tokio",
+ "winapi",
+]
+
+[[package]]
+name = "webrtc-util"
+version = "0.9.0"
+source = "git+https://github.com/stuqdog/webrtc.git?branch=426-add-loopback-support#d15f47341ecbc8965edbf32912593ccb0b8c37fc"
 dependencies = [
  "async-trait",
  "bitflags 1.3.2",
@@ -4281,9 +4311,9 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcbc162f30700d6f3f82a24bf7cc62ffe7caea42c0b2cba8bf7f3ae50cf51f69"
 dependencies = [
- "asn1-rs 0.6.1",
+ "asn1-rs",
  "data-encoding",
- "der-parser 9.0.0",
+ "der-parser",
  "lazy_static",
  "nom",
  "oid-registry",

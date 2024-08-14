@@ -827,7 +827,7 @@ async fn send_done_or_error_update(
         .map_err(anyhow::Error::from)
         .map(|_| ())
     {
-        log::error!("Error sending done or error update: {e}");
+        log::error!("Error sending done or error update: {e}")
     }
 }
 

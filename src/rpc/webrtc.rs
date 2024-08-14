@@ -15,6 +15,7 @@ use webrtc::{
         data_channel_init::RTCDataChannelInit, data_channel_message::DataChannelMessage,
         RTCDataChannel,
     },
+    dtls::extension::extension_use_srtp::SrtpProtectionProfile,
     ice::mdns::MulticastDnsMode,
     ice_transport::ice_server::RTCIceServer,
     interceptor::registry::Registry,
@@ -112,7 +113,6 @@ fn ice_server_from_proto(ice_server: IceServer) -> RTCIceServer {
         urls: ice_server.urls,
         username: ice_server.username,
         credential: ice_server.credential,
-        credential_type: webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
     }
 }
 
@@ -145,7 +145,20 @@ fn new_webrtc_api() -> Result<API> {
         interceptor_registry::register_default_interceptors(registry, &mut media_engine)?;
 
     let mut setting_engine = SettingEngine::default();
+
+    // A recent commit to the upstream webrtc library added `Srtp_Aead_Aes_256_Gcm` to the
+    // list of default `SrtpProtectionProfile`s. This caused assertion failures upstream in
+    // the `GenericArray` crate, which prevented us from connecting properly. Removing this
+    // default (which is consistent with how `rust-utils` has operated for the past several
+    // years) prevents the upstream conflicts and lets us avoid navigating potential conflicts
+    // in reworking the upstream defaults.
+    let srtp_protection_profiles = vec![
+        SrtpProtectionProfile::Srtp_Aead_Aes_128_Gcm,
+        SrtpProtectionProfile::Srtp_Aes128_Cm_Hmac_Sha1_80,
+    ];
+    setting_engine.set_srtp_protection_profiles(srtp_protection_profiles);
     setting_engine.set_ice_multicast_dns_mode(MulticastDnsMode::QueryAndGather);
+    setting_engine.set_include_loopback_candidate(true);
 
     Ok(APIBuilder::new()
         .with_media_engine(media_engine)

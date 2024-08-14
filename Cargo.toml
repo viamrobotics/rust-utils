@@ -59,7 +59,7 @@ tracing = {version = "0.1.34"}
 tracing-subscriber = {version = "0.3.11", features = ["env-filter"]}
 viam-mdns = "3.0.1"
 webpki-roots = "0.21.1"
-webrtc = "0.11.0"
+webrtc = { git = "https://github.com/stuqdog/webrtc.git", branch = "426-add-loopback-support" }
 
 [dev-dependencies]
 async-stream = "0.3.3"
