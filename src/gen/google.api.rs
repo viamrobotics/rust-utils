@@ -602,6 +602,25 @@ pub struct PythonSettings {
     /// Some settings.
     #[prost(message, optional, tag="1")]
     pub common: ::core::option::Option<CommonLanguageSettings>,
+    /// Experimental features to be included during client library generation.
+    #[prost(message, optional, tag="2")]
+    pub experimental_features: ::core::option::Option<python_settings::ExperimentalFeatures>,
+}
+/// Nested message and enum types in `PythonSettings`.
+pub mod python_settings {
+    /// Experimental features to be included during client library generation.
+    /// These fields will be deprecated once the feature graduates and is enabled
+    /// by default.
+    #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct ExperimentalFeatures {
+        /// Enables generation of asynchronous REST clients if `rest` transport is
+        /// enabled. By default, asynchronous REST clients will not be generated.
+        /// This feature will be enabled by default 1 month after launching the
+        /// feature in preview packages.
+        #[prost(bool, tag="1")]
+        pub rest_async_io_enabled: bool,
+    }
 }
 /// Settings for Node client libraries.
 #[allow(clippy::derive_partial_eq_without_eq)]
