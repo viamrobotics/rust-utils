@@ -85,14 +85,12 @@ pub mod file_upload_service_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /** Due to an issue described by https://github.com/improbable-eng/ts-protoc-gen/pull/264
- we use a streaming response but only expect one response.
-*/
+        ///
         pub async fn upload_file(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = super::UploadFileRequest>,
         ) -> std::result::Result<
-            tonic::Response<tonic::codec::Streaming<super::UploadFileResponse>>,
+            tonic::Response<super::UploadFileResponse>,
             tonic::Status,
         > {
             self.inner
@@ -116,7 +114,7 @@ pub mod file_upload_service_client {
                         "UploadFile",
                     ),
                 );
-            self.inner.streaming(req, path, codec).await
+            self.inner.client_streaming(req, path, codec).await
         }
     }
 }
@@ -127,19 +125,14 @@ pub mod file_upload_service_server {
     /// Generated trait containing gRPC methods that should be implemented for use with FileUploadServiceServer.
     #[async_trait]
     pub trait FileUploadService: Send + Sync + 'static {
-        /// Server streaming response type for the UploadFile method.
-        type UploadFileStream: futures_core::Stream<
-                Item = std::result::Result<super::UploadFileResponse, tonic::Status>,
-            >
-            + Send
-            + 'static;
-        /** Due to an issue described by https://github.com/improbable-eng/ts-protoc-gen/pull/264
- we use a streaming response but only expect one response.
-*/
+        ///
         async fn upload_file(
             &self,
             request: tonic::Request<tonic::Streaming<super::UploadFileRequest>>,
-        ) -> std::result::Result<tonic::Response<Self::UploadFileStream>, tonic::Status>;
+        ) -> std::result::Result<
+            tonic::Response<super::UploadFileResponse>,
+            tonic::Status,
+        >;
     }
     ///
     #[derive(Debug)]
@@ -226,12 +219,11 @@ pub mod file_upload_service_server {
                     struct UploadFileSvc<T: FileUploadService>(pub Arc<T>);
                     impl<
                         T: FileUploadService,
-                    > tonic::server::StreamingService<super::UploadFileRequest>
+                    > tonic::server::ClientStreamingService<super::UploadFileRequest>
                     for UploadFileSvc<T> {
                         type Response = super::UploadFileResponse;
-                        type ResponseStream = T::UploadFileStream;
                         type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
+                            tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
@@ -263,7 +255,7 @@ pub mod file_upload_service_server {
                                 max_decoding_message_size,
                                 max_encoding_message_size,
                             );
-                        let res = grpc.streaming(method, req).await;
+                        let res = grpc.client_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
