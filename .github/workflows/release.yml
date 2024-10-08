@@ -100,10 +100,10 @@ jobs:
         run: |
           install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: builds
-          path: builds
+          name: builds-${{ matrix.platform }}
+          path: builds/*
 
   build_linux:
     if: github.repository_owner == 'viamrobotics'
