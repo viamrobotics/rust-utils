@@ -198,8 +198,18 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: builds
+          name: builds-${{ matrix.platform }}
           path: builds/*
+
+  merge:
+    needs: [build_macos, build_linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: builds
+          pattern: builds-*
 
   release:
     needs: [prepare, build_macos, build_linux]
