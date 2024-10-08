@@ -212,7 +212,7 @@ jobs:
           pattern: builds-*
 
   release:
-    needs: [prepare, build_macos, build_linux]
+    needs: [prepare, merge]
     if: github.repository_owner == 'viamrobotics'
     runs-on: ubuntu-latest
 
