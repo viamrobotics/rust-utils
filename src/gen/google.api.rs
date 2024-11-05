@@ -449,6 +449,9 @@ pub struct CommonLanguageSettings {
     /// The destination where API teams want this client library to be published.
     #[prost(enumeration="ClientLibraryDestination", repeated, tag="2")]
     pub destinations: ::prost::alloc::vec::Vec<i32>,
+    /// Configuration for which RPCs should be generated in the GAPIC client.
+    #[prost(message, optional, tag="3")]
+    pub selective_gapic_generation: ::core::option::Option<SelectiveGapicGeneration>,
 }
 /// Details about how and where to publish client libraries.
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -757,6 +760,16 @@ pub mod method_settings {
         #[prost(message, optional, tag="4")]
         pub total_poll_timeout: ::core::option::Option<::prost_types::Duration>,
     }
+}
+/// This message is used to configure the generation of a subset of the RPCs in
+/// a service for client libraries.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SelectiveGapicGeneration {
+    /// An allowlist of the fully qualified names of RPCs that should be included
+    /// on public client surfaces.
+    #[prost(string, repeated, tag="1")]
+    pub methods: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// The organization for which the client libraries are being published.
 /// Affects the url where generated docs are published, etc.
