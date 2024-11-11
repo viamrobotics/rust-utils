@@ -623,6 +623,12 @@ pub mod python_settings {
         /// feature in preview packages.
         #[prost(bool, tag="1")]
         pub rest_async_io_enabled: bool,
+        /// Enables generation of protobuf code using new types that are more
+        /// Pythonic which are included in `protobuf>=5.29.x`. This feature will be
+        /// enabled by default 1 month after launching the feature in preview
+        /// packages.
+        #[prost(bool, tag="2")]
+        pub protobuf_pythonic_types_enabled: bool,
     }
 }
 /// Settings for Node client libraries.
