@@ -15,7 +15,7 @@ on:
         - nobump
 jobs:
   prepare:
-    if: github.repository_owner == 'viamrobotics'
+    #if: github.repository_owner == 'viamrobotics'
     runs-on: buildjet-8vcpu-ubuntu-2204-arm
     outputs:
       version: ${{ steps.which_version.outputs.version }}
