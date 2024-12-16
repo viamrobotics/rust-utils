@@ -36,7 +36,8 @@ jobs:
         if: inputs.version != 'nobump'
         run: |
           cargo install cargo-release
-          cargo release version ${{ inputs.version }} --execute --no-confirm
+        # CR erodkin: commented out execute to have dry run for testing, revert before release
+          cargo release version ${{ inputs.version }} --no-confirm #--execute --no-confirm
 
       - name: Which Version
         id: which_version
@@ -92,6 +93,9 @@ jobs:
       - name: Build
         run: |
           cargo build --release --target=${{ matrix.target }}
+      - name: Test
+        run: |
+          echo "test" > builds/test.txt
       - name: Copy
         run: |
           cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
@@ -100,7 +104,7 @@ jobs:
         run: |
           install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: builds
           path: builds
@@ -196,7 +200,7 @@ jobs:
           cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
           cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: builds
           path: builds
@@ -207,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
 
       - name: Release
         uses: softprops/action-gh-release@v1
