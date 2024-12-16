@@ -36,7 +36,7 @@ jobs:
         if: inputs.version != 'nobump'
         run: |
           cargo install cargo-release
-        # CR erodkin: commented out execute to have dry run for testing, revert before release
+          # CR erodkin: commented out execute to have dry run for testing, revert before release
           cargo release version ${{ inputs.version }} --no-confirm #--execute --no-confirm
 
       - name: Which Version
