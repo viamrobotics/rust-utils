@@ -318,13 +318,16 @@ pub(crate) fn trailers_from_proto(proto: ResponseTrailers) -> HeaderMap {
         None => "0".to_string(),
     };
 
-    match proto.status {
-        Some(ref status) => {
-            let key = HeaderName::from_str("Grpc-Message").unwrap();
-            let val = HeaderValue::from_str(&status.message).unwrap();
-            trailers.insert(key, val);
+    if let Some(ref status) = proto.status {
+        let key = HeaderName::from_str("Grpc-Message");
+        let val = HeaderValue::from_str(status.message.trim());
+        match (key, val) {
+            (Ok(k), Ok(v)) => {
+                trailers.insert(k, v);
+            }
+            (Err(e), _) => log::error!("Error parsing HeaderName: {e}"),
+            (_, Err(e)) => log::error!("Error parsing HeaderValue: {e}"),
         }
-        None => (),
     }
 
     let k = match HeaderName::from_str(status_name) {
