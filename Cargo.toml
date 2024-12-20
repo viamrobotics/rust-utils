@@ -59,7 +59,7 @@ tracing = {version = "0.1.34"}
 tracing-subscriber = {version = "0.3.11", features = ["env-filter"]}
 viam-mdns = "3.0.1"
 webpki-roots = "0.21.1"
-webrtc = { git = "https://github.com/webrtc-rs/webrtc.git", rev = "88dff7b1dd6880aaa3d3f60894f1be51169a2f9d" }
+webrtc = "0.12.0"
 
 [dev-dependencies]
 async-stream = "0.3.3"
