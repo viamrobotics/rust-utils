@@ -692,6 +692,16 @@ pub struct GoSettings {
     /// Some settings.
     #[prost(message, optional, tag="1")]
     pub common: ::core::option::Option<CommonLanguageSettings>,
+    /// Map of service names to renamed services. Keys are the package relative
+    /// service names and values are the name to be used for the service client
+    /// and call options.
+    ///
+    /// publishing:
+    ///    go_settings:
+    ///      renamed_services:
+    ///        Publisher: TopicAdmin
+    #[prost(map="string, string", tag="2")]
+    pub renamed_services: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// Describes the generator configuration for a method.
 #[allow(clippy::derive_partial_eq_without_eq)]
