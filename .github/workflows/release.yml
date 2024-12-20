@@ -100,10 +100,10 @@ jobs:
         run: |
           install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: builds
-          path: builds
+          name: builds-${{ matrix.platform }}
+          path: builds/*
 
   build_linux:
     if: github.repository_owner == 'viamrobotics'
@@ -123,7 +123,7 @@ jobs:
             runs-on: buildjet-8vcpu-ubuntu-2204-arm
           - target: x86_64-unknown-linux-gnu
             platform: linux_x86_64
-            image: ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos
+            image: ubuntu:20.04
             runs-on: buildjet-4vcpu-ubuntu-2204
           - target: x86_64-unknown-linux-musl
             platform: musllinux_x86_64
@@ -196,18 +196,28 @@ jobs:
           cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
           cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
+        with:
+          name: builds-${{ matrix.platform }}
+          path: builds/*
+
+  merge:
+    needs: [build_macos, build_linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge artifacts
+        uses: actions/upload-artifact/merge@v4
         with:
           name: builds
-          path: builds
+          pattern: builds-*
 
   release:
-    needs: [prepare, build_macos, build_linux]
+    needs: [prepare, merge]
     if: github.repository_owner == 'viamrobotics'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
 
       - name: Release
         uses: softprops/action-gh-release@v1
