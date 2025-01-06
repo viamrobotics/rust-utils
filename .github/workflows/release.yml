@@ -68,7 +68,7 @@ jobs:
   build_macos:
     if: github.repository_owner == 'viamrobotics'
     needs: [prepare]
-    runs-on: [self-hosted, ARM64, macOS]
+    runs-on: macos-latest
     strategy:
       fail-fast: true
       matrix:
