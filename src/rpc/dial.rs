@@ -329,13 +329,8 @@ impl<T: AuthMethod> DialBuilder<T> {
         let mut resp: Option<Response> = None;
         for ipv4 in addresses {
             for candidate in candidates {
-                let mut addr_to_send = "".to_string();
-                addr_to_send.push_str(candidate.as_str());
-                addr_to_send.push('.');
-                addr_to_send.push_str(VIAM_MDNS_SERVICE_NAME);
-
                 let discovery = discover::interface_with_loopback(
-                    addr_to_send,
+                    VIAM_MDNS_SERVICE_NAME,
                     Duration::from_millis(250),
                     ipv4,
                 )
@@ -344,7 +339,15 @@ impl<T: AuthMethod> DialBuilder<T> {
                 pin_mut!(stream);
                 while let Some(Ok(response)) = stream.next().await {
                     if let Some(hostname) = response.hostname() {
-                        if hostname.contains(candidate.as_str()) {
+                        // Machine uris come in local ("my-cool-robot.abcdefg.local.viam.cloud")
+                        // and non-local ("my-cool-robot.abcdefg.viam.cloud") forms. Sometimes
+                        // (namely with micro-rdk), our mdns query can only see one (the local) version.
+                        // However, users are typically passing the non-local version. By splitting at
+                        // "viam" and taking the only the first value, we can still search for
+                        // candidates based on the actual "my-cool-robot" name without being opinionated
+                        // on whether the candidate is locally named or not.
+                        let local_agnostic_candidate = candidate.as_str().split("viam").next()?;
+                        if hostname.contains(local_agnostic_candidate) {
                             resp = Some(response);
                             break;
                         }
@@ -400,7 +403,7 @@ impl<T: AuthMethod> DialBuilder<T> {
 
         let ifaces: HashMap<&str, Vec<&IpAddr>> =
             ifaces.iter().fold(HashMap::new(), |mut map, (k, v)| {
-                map.entry(k).or_insert(vec![]).push(v);
+                map.entry(k).or_default().push(v);
                 map
             });
 
