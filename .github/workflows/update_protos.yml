@@ -32,3 +32,16 @@ jobs:
           body: This is an auto-generated PR to update proto definitions. Check the commits to see which repos and commits are responsible for the changes
           assignees: njooma,stuqdog
           reviewers: njooma,stuqdog
+
+      - name: Notify slack of failure
+        uses: slackapi/slack-github-action@v1.24.0
+        if: ${{ failure() }}
+        with:
+          payload: |
+            {
+              "text": "Rust-utils update protos job has failed",
+              "username": "Rust-utils",
+              "icon_url": "https://media.tenor.com/bZMubztJxGkAAAAe/charlie-brown-walking-charlie-brown.png"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_TEAM_SDK_WEBHOOK_URL }}
