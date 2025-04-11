@@ -154,6 +154,17 @@ pub unsafe extern "C" fn dial(
             return ptr::null_mut();
         }
     };
+
+    #[cfg(target_os = "windows")]
+    let conn = match runtime.block_on(async { proxy::tcp::TCPConnector::new() }) {
+        Ok(conn) => conn,
+        Err(e) => {
+            log::error!("Error creating the UDS proxy {e:?}");
+            return ptr::null_mut();
+        }
+    };
+
+    #[cfg(not(target_os = "windows"))]
     let conn = match runtime.block_on(async { proxy::uds::UDSConnector::new_random() }) {
         Ok(conn) => conn,
         Err(e) => {
@@ -161,6 +172,7 @@ pub unsafe extern "C" fn dial(
             return ptr::null_mut();
         }
     };
+
     let path = match CString::new(conn.get_path()) {
         Ok(s) => s,
         Err(e) => {
@@ -248,6 +260,7 @@ pub unsafe extern "C" fn dial(
                     ),
             )
             .service(g);
+
         let server = Server::builder(conn)
             .http2_only(true)
             .serve(Shared::new(service));
