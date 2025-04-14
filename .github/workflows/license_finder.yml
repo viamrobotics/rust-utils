@@ -28,4 +28,6 @@ jobs:
           toolchain: stable
 
       - name: Run license finder
-        run: license_finder
+        run: |
+          license_finder permitted_licenses add Unicode-3.0
+          license_finder
