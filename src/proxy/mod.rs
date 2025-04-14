@@ -1,7 +1,5 @@
 pub mod grpc_proxy;
 
-#[cfg(not(target_os = "windows"))]
-pub mod uds;
-
-#[cfg(target_os = "windows")]
-pub mod tcp;
+#[cfg_attr(not(target_os = "windows"), path = "uds.rs")]
+#[cfg_attr(target_os = "windows", path = "tcp.rs")]
+pub mod connector;

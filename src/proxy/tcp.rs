@@ -6,16 +6,16 @@ use std::task::{Context, Poll};
 
 use tokio::net::{TcpListener, TcpStream};
 
-pub struct TCPConnector {
+pub struct Connector {
     inner: TcpListener,
     addr: String,
 }
 
-impl TCPConnector {
+impl Connector {
     pub fn new() -> Result<Self, Error> {
         let tcp = std::net::TcpListener::bind("127.0.0.1:0")?;
         tcp.set_nonblocking(true)?;
-        Ok(TCPConnector {
+        Ok(Connector {
             addr: tcp.local_addr()?.to_string(),
             inner: TcpListener::from_std(tcp)?,
         })
@@ -25,7 +25,7 @@ impl TCPConnector {
     }
 }
 
-impl Accept for TCPConnector {
+impl Accept for Connector {
     type Conn = TcpStream;
     type Error = Error;
 

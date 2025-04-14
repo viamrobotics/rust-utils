@@ -1,7 +1,7 @@
 //! # Viam C API
 //!
 //! This module exposes a C API allowing a user to communicate with a Robot using any language able to call C functions without having
-//! to implement webRTC or authentication. The module creates a UDS socket that a gRPC client can connect to
+//! to implement webRTC or authentication. The module creates a UDS (or TCP, if on Windows) socket that a gRPC client can connect to
 //!
 
 use http::uri::Uri;
@@ -105,11 +105,11 @@ fn dial_with_cred(
     Ok(c)
 }
 
-/// Returns a path to a UDS proxy to a robot
+/// Returns a path to a proxy to a robot
 /// # Safety
 ///
 /// This function must be called from another language. See [`dial`](mod@crate::rpc::dial) for dial from rust
-/// The function returns a path to a UDS as a [`c_char`], the string should be freed with free_string when not needed anymore.
+/// The function returns a path to a proxy as a [`c_char`], the string should be freed with free_string when not needed anymore.
 /// When falling to dial it will return a NULL pointer
 /// # Arguments
 /// * `c_uri` a C-style string representing the address of robot you want to connect to
@@ -155,20 +155,10 @@ pub unsafe extern "C" fn dial(
         }
     };
 
-    #[cfg(target_os = "windows")]
-    let conn = match runtime.block_on(async { proxy::tcp::TCPConnector::new() }) {
+    let conn = match runtime.block_on(async { proxy::connector::Connector::new() }) {
         Ok(conn) => conn,
         Err(e) => {
-            log::error!("Error creating the UDS proxy {e:?}");
-            return ptr::null_mut();
-        }
-    };
-
-    #[cfg(not(target_os = "windows"))]
-    let conn = match runtime.block_on(async { proxy::uds::UDSConnector::new_random() }) {
-        Ok(conn) => conn,
-        Err(e) => {
-            log::error!("Error creating the UDS proxy {e:?}");
+            log::error!("Error creating the proxy {e:?}");
             return ptr::null_mut();
         }
     };
@@ -299,7 +289,7 @@ pub unsafe extern "C" fn free_string(s: *mut c_char) {
 }
 
 /// This function must be used the free a rust runtime returned by [`init_rust_runtime`] the function will signal any
-/// opened server to shutdown. Further transaction on any UDS will not work anymore.
+/// opened server to shutdown. Further transaction on any proxy will not work anymore.
 /// # Safety
 ///
 /// The function must not be called more than once with the same pointer
