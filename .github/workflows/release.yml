@@ -230,8 +230,8 @@ jobs:
           cargo build --release --target=${{ matrix.target }}
       - name: Copy
         run: |
-          cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dll
-          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.lib
+          cp target/${{ matrix.target }}/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
+          cp target/${{ matrix.target }}/release/viam_rust_utils.lib builds/libviam_rust_utils-${{ matrix.platform }}.lib
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
