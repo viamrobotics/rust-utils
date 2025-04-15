@@ -1,5 +1,4 @@
 use hyper::server::accept::Accept;
-use rand::distributions::{Alphanumeric, DistString};
 use std::io::Error;
 use std::pin::Pin;
 use std::task::{Context, Poll};
