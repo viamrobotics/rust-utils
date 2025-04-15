@@ -1,7 +1,6 @@
 name: Build + draft release
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -16,7 +15,7 @@ on:
         - nobump
 jobs:
   prepare:
-    #if: github.repository_owner == 'viamrobotics'
+    if: github.repository_owner == 'viamrobotics'
     runs-on: buildjet-8vcpu-ubuntu-2204-arm
     outputs:
       version: ${{ steps.which_version.outputs.version }}
@@ -203,7 +202,7 @@ jobs:
           path: builds/*
 
   build_windows:
-    #if: github.repository_owner == 'viamrobotics'
+    if: github.repository_owner == 'viamrobotics'
     needs: [prepare]
     runs-on: windows-latest
     strategy:
@@ -239,29 +238,29 @@ jobs:
           name: builds-${{ matrix.platform }}
           path: builds/*
 
-  #merge:
-    #needs: [build_macos, build_linux, build_windows]
-    #runs-on: ubuntu-latest
-    #steps:
-      #- name: Merge artifacts
-        #uses: actions/upload-artifact/merge@v4
-        #with:
-          #name: builds
-          #pattern: builds-*
+  merge:
+    needs: [build_macos, build_linux, build_windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: builds
+          pattern: builds-*
 
-  #release:
-    #needs: [prepare, merge]
-    #if: github.repository_owner == 'viamrobotics'
-    #runs-on: ubuntu-latest
+  release:
+    needs: [prepare, merge]
+    if: github.repository_owner == 'viamrobotics'
+    runs-on: ubuntu-latest
 
-    #steps:
-      #- uses: actions/download-artifact@v4
+    steps:
+      - uses: actions/download-artifact@v4
 
-      #- name: Release
-        #uses: softprops/action-gh-release@v1
-        #with:
-          #tag_name: v${{ needs.prepare.outputs.version }}
-          #files: builds/*
-          #draft: true
-          #prerelease: false
-          #fail_on_unmatched_files: true
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          files: builds/*
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
