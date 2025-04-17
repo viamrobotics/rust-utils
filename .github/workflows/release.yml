@@ -201,8 +201,45 @@ jobs:
           name: builds-${{ matrix.platform }}
           path: builds/*
 
+  build_windows:
+    if: github.repository_owner == 'viamrobotics'
+    needs: [prepare]
+    runs-on: windows-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: aarch64-pc-windows-gnullvm
+            platform: windows_arm64
+          - target: x86_64-pc-windows-gnu
+            platform: windows_x86_64
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - name: Setup build directory
+        run: mkdir builds
+      - name: Build
+        run: |
+          cargo build --release --target=${{ matrix.target }}
+      - name: Copy
+        run: |
+          cp target/${{ matrix.target }}/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
+          cp target/${{ matrix.target }}/release/viam_rust_utils.lib builds/libviam_rust_utils-${{ matrix.platform }}.lib
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: builds-${{ matrix.platform }}
+          path: builds/*
+
   merge:
-    needs: [build_macos, build_linux]
+    needs: [build_macos, build_linux, build_windows]
     runs-on: ubuntu-latest
     steps:
       - name: Merge artifacts

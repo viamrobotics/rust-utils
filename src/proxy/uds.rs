@@ -5,27 +5,27 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::net::{UnixListener, UnixStream};
 
-pub struct UDSConnector {
+pub struct Connector {
     inner: UnixListener,
     path: String,
 }
 
-impl UDSConnector {
-    pub fn new(path: String) -> Result<Self, Error> {
+impl Connector {
+    pub fn new_with_path(path: String) -> Result<Self, Error> {
         let uds = UnixListener::bind(&path)?;
-        Ok(UDSConnector { inner: uds, path })
+        Ok(Connector { inner: uds, path })
     }
-    pub fn new_random() -> Result<Self, Error> {
+    pub fn new() -> Result<Self, Error> {
         let mut rname = Alphanumeric.sample_string(&mut rand::thread_rng(), 8);
         rname = format!("/tmp/proxy-{}.sock", rname);
-        Self::new(rname)
+        Self::new_with_path(rname)
     }
     pub fn get_path(&self) -> &str {
         &self.path
     }
 }
 
-impl Accept for UDSConnector {
+impl Accept for Connector {
     type Conn = UnixStream;
     type Error = Error;
 
@@ -41,7 +41,7 @@ impl Accept for UDSConnector {
     }
 }
 
-impl Drop for UDSConnector {
+impl Drop for Connector {
     fn drop(&mut self) {
         std::fs::remove_file(&self.path).unwrap();
     }
