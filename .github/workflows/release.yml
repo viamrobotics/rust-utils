@@ -234,6 +234,8 @@ jobs:
           ls
           ls target
           ls target/x86_64-pc-windows-gnu
+          ls target/x86_64-pc-windows-gnu/release
+          ls target/release
       - name: Copy
         run: |
           cp target/${{ matrix.target }}/release/libviam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
