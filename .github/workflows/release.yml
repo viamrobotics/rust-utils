@@ -1,6 +1,7 @@
 name: Build + draft release
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -209,8 +210,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - target: aarch64-pc-windows-gnullvm
-            platform: windows_arm64
+          # - target: aarch64-pc-windows-gnullvm
+           #  platform: windows_arm64
           - target: x86_64-pc-windows-gnu
             platform: windows_x86_64
     steps:
