@@ -58,12 +58,12 @@ jobs:
         uses: andymckay/cancel-action@0.2
         if: steps.release_exists.outputs.id != ''
 
-      #- name: Commit + Push
-        #id: commit
-        #uses: EndBug/add-and-commit@v9.0.0
-        #with:
-          #default_author: github_actions
-          #message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
+      - name: Commit + Push
+        id: commit
+        uses: EndBug/add-and-commit@v9.0.0
+        with:
+          default_author: github_actions
+          message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
 
   build_macos:
     if: github.repository_owner == 'viamrobotics'
@@ -209,8 +209,6 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          # - target: aarch64-pc-windows-gnullvm
-           #  platform: windows_arm64
           - target: x86_64-pc-windows-gnu
             platform: windows_x86_64
     steps:
@@ -228,13 +226,6 @@ jobs:
       - name: Build
         run: |
           cargo build --release --target=${{ matrix.target }}
-      - name: list
-        run: |
-          ls
-          ls target
-          ls target/x86_64-pc-windows-gnu
-          ls target/x86_64-pc-windows-gnu/release
-          ls target/release
       - name: Copy
         run: |
           cp target/${{ matrix.target }}/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
