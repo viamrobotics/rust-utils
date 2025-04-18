@@ -58,12 +58,12 @@ jobs:
         uses: andymckay/cancel-action@0.2
         if: steps.release_exists.outputs.id != ''
 
-      - name: Commit + Push
-        id: commit
-        uses: EndBug/add-and-commit@v9.0.0
-        with:
-          default_author: github_actions
-          message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
+      #- name: Commit + Push
+        #id: commit
+        #uses: EndBug/add-and-commit@v9.0.0
+        #with:
+          #default_author: github_actions
+          #message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
 
   build_macos:
     if: github.repository_owner == 'viamrobotics'
@@ -236,8 +236,43 @@ jobs:
           name: builds-${{ matrix.platform }}
           path: builds/*
 
+  build_windows_arm:
+    if: github.repository_owner == 'viamrobotics'
+    needs: [prepare]
+    runs-on: windows-latest-arm
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: aarch64-pc-windows-gnullvm
+            platform: windows_arm64
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - name: Setup build directory
+        run: mkdir builds
+      - name: Build
+        run: |
+          cargo build --release --target=${{ matrix.target }}
+      - name: Copy
+        run: |
+          cp target/${{ matrix.target }}/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.lib
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: builds-${{ matrix.platform }}
+          path: builds/*
+
   merge:
-    needs: [build_macos, build_linux, build_windows]
+    needs: [build_macos, build_linux, build_windows, build_windows_arm]
     runs-on: ubuntu-latest
     steps:
       - name: Merge artifacts
