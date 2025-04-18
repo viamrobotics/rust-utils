@@ -209,8 +209,6 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - target: aarch64-pc-windows-gnullvm
-            platform: windows_arm64
           - target: x86_64-pc-windows-gnu
             platform: windows_x86_64
     steps:
@@ -231,7 +229,7 @@ jobs:
       - name: Copy
         run: |
           cp target/${{ matrix.target }}/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
-          cp target/${{ matrix.target }}/release/viam_rust_utils.lib builds/libviam_rust_utils-${{ matrix.platform }}.lib
+          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.lib
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
