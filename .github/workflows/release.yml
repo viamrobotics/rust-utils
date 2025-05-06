@@ -231,7 +231,7 @@ jobs:
       - name: Copy
         run: |
           cp target/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
-          cp target/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.lib
+          cp target/release/viam_rust_utils.lib builds/viam_rust_utils-${{ matrix.platform }}.lib
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
