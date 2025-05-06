@@ -1,14 +1,13 @@
 name: Build + draft release
 
 on:
-  pull_request:
   workflow_dispatch:
     inputs:
       version:
         description: 'The type of version bump. Use "nobump" for no change.'
         type: choice
-        #required: true
-        default: patch
+        required: true
+        default: nobump
         options:
         - major
         - minor
@@ -16,7 +15,7 @@ on:
         - nobump
 jobs:
   prepare:
-    #if: github.repository_owner == 'viamrobotics'
+    if: github.repository_owner == 'viamrobotics'
     runs-on: buildjet-8vcpu-ubuntu-2204-arm
     outputs:
       version: ${{ steps.which_version.outputs.version }}
@@ -59,12 +58,12 @@ jobs:
         uses: andymckay/cancel-action@0.2
         if: steps.release_exists.outputs.id != ''
 
-      #- name: Commit + Push
-        #id: commit
-        #uses: EndBug/add-and-commit@v9.0.0
-        #with:
-          #default_author: github_actions
-          #message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
+      - name: Commit + Push
+        id: commit
+        uses: EndBug/add-and-commit@v9.0.0
+        with:
+          default_author: github_actions
+          message: Bumping version to v${{ steps.which_version.outputs.version }} [skip ci]
 
   build_macos:
     if: github.repository_owner == 'viamrobotics'
@@ -210,8 +209,7 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
-            platform: windows_x86_64
+          - platform: windows_x86_64
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -221,7 +219,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          #targets: ${{ matrix.target }}
       - name: Setup build directory
         run: mkdir builds
       - name: Build
@@ -230,7 +227,7 @@ jobs:
       - name: Copy
         run: |
           cp target/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
-          cp target/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.lib
+          cp target/release/viam_rust_utils.lib builds/viam_rust_utils-${{ matrix.platform }}.lib
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
