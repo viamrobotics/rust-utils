@@ -1,13 +1,14 @@
 name: Build + draft release
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
         description: 'The type of version bump. Use "nobump" for no change.'
         type: choice
-        required: true
-        default: nobump
+        #required: true
+        default: patch
         options:
         - major
         - minor
