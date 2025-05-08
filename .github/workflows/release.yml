@@ -209,8 +209,7 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
-            platform: windows_x86_64
+          - platform: windows_x86_64
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -220,16 +219,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: ${{ matrix.target }}
       - name: Setup build directory
         run: mkdir builds
       - name: Build
         run: |
-          cargo build --release --target=${{ matrix.target }}
+          cargo build --release
       - name: Copy
         run: |
-          cp target/${{ matrix.target }}/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
-          cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.lib
+          cp target/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
+          cp target/release/viam_rust_utils.lib builds/viam_rust_utils-${{ matrix.platform }}.lib
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
