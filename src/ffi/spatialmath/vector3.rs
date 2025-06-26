@@ -219,3 +219,19 @@ pub unsafe extern "C" fn vector_cross_product(
     let vec = (*vec_ptr_1).cross(&*vec_ptr_2);
     to_raw_pointer(vec)
 }
+
+/// Free memory of an array of vector components at the given address.
+///
+/// # Safety
+///
+/// Outer processes that request the components of a vector should call this function 
+/// to free the memory allocated to the array once finished
+#[no_mangle]
+pub unsafe extern "C" fn free_vector_components(ptr: *mut c_double) {
+    if ptr.is_null() {
+        return;
+    }
+    let slice = std::slice::from_raw_parts_mut(ptr, 3);
+    let arr: [c_double; 3] = slice.try_into().unwrap();
+    let _ = arr; // technically not necessary but helps to be explicit
+}
