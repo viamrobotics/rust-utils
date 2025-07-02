@@ -93,3 +93,19 @@ pub unsafe extern "C" fn orientation_vector_from_quaternion(
     let o_vec: OrientationVector = (*quat_ptr).into();
     to_raw_pointer(&o_vec)
 }
+
+/// Free memory of an array of orientation vector components at the given address.
+///
+/// # Safety
+///
+/// Outer processes that request the components of a orientation vector should call this function 
+/// to free the memory allocated to the array once finished
+#[no_mangle]
+pub unsafe extern "C" fn free_orientation_vector_components(ptr: *mut c_double) {
+    if ptr.is_null() {
+        return;
+    }
+
+    let ptr = ptr as *mut [c_double; 4];
+    let _: Box<[c_double; 4]> = Box::from_raw(ptr);
+}

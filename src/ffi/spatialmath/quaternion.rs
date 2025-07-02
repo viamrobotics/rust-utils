@@ -448,3 +448,18 @@ pub unsafe extern "C" fn quaternion_hamiltonian_product(
     null_pointer_check!(quat_ptr_2);
     to_raw_pointer(&((*quat_ptr_1) * (*quat_ptr_2)))
 }
+
+/// Free memory of an array of quaternion components at the given address.
+///
+/// # Safety
+///
+/// Outer processes that request the components of a quaternion should call this function 
+/// to free the memory allocated to the array once finished
+#[no_mangle]
+pub unsafe extern "C" fn free_quaternion_components(ptr: *mut c_double) {
+    if ptr.is_null() {
+        return;
+    }
+    let ptr = ptr as *mut [c_double; 4];
+    let _: Box<[c_double; 4]> = Box::from_raw(ptr);
+}
