@@ -231,7 +231,6 @@ pub unsafe extern "C" fn free_vector_components(ptr: *mut c_double) {
     if ptr.is_null() {
         return;
     }
-    let slice = std::slice::from_raw_parts_mut(ptr, 3);
-    let arr: [c_double; 3] = slice.try_into().unwrap();
-    let _ = arr; // technically not necessary but helps to be explicit
+    let ptr = ptr as *mut [c_double; 3];
+    let _: Box<[c_double; 3]> = Box::from_raw(ptr);
 }
