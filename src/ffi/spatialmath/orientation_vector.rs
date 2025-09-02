@@ -69,10 +69,10 @@ pub unsafe extern "C" fn orientation_vector_get_components(
 ) -> *const c_double {
     null_pointer_check!(ov_ptr);
     let components: [c_double; 4] = [
-        (*ov_ptr).o_vector.x,
-        (*ov_ptr).o_vector.y,
-        (*ov_ptr).o_vector.z,
-        (*ov_ptr).theta,
+        (&(*ov_ptr)).o_vector.x,
+        (&(*ov_ptr)).o_vector.y,
+        (&(*ov_ptr)).o_vector.z,
+        (&(*ov_ptr)).theta,
     ];
     Box::into_raw(Box::new(components)) as *const _
 }
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn orientation_vector_from_quaternion(
 ///
 /// # Safety
 ///
-/// Outer processes that request the components of a orientation vector should call this function 
+/// Outer processes that request the components of a orientation vector should call this function
 /// to free the memory allocated to the array once finished
 #[no_mangle]
 pub unsafe extern "C" fn free_orientation_vector_components(ptr: *mut c_double) {
