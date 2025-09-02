@@ -50,7 +50,7 @@ pub unsafe extern "C" fn free_vector_memory(ptr: *mut Vector3<f64>) {
 #[no_mangle]
 pub unsafe extern "C" fn vector_get_components(vec_ptr: *const Vector3<f64>) -> *const c_double {
     null_pointer_check!(vec_ptr);
-    let components: [c_double; 3] = [(*vec_ptr)[0], (*vec_ptr)[1], (*vec_ptr)[2]];
+    let components: [c_double; 3] = [(&(*vec_ptr))[0], (&(*vec_ptr))[1], (&(*vec_ptr))[2]];
     Box::into_raw(Box::new(components)) as *const _
 }
 
@@ -64,7 +64,7 @@ pub unsafe extern "C" fn vector_get_components(vec_ptr: *const Vector3<f64>) -> 
 #[no_mangle]
 pub unsafe extern "C" fn vector_set_x(vec_ptr: *mut Vector3<f64>, x_val: f64) {
     null_pointer_check!(vec_ptr);
-    (*vec_ptr)[0] = x_val;
+    (&mut (*vec_ptr))[0] = x_val;
 }
 
 /// Set the y component of an existing vector stored at the address
@@ -77,7 +77,7 @@ pub unsafe extern "C" fn vector_set_x(vec_ptr: *mut Vector3<f64>, x_val: f64) {
 #[no_mangle]
 pub unsafe extern "C" fn vector_set_y(vec_ptr: *mut Vector3<f64>, y_val: f64) {
     null_pointer_check!(vec_ptr);
-    (*vec_ptr)[1] = y_val;
+    (&mut (*vec_ptr))[1] = y_val;
 }
 
 /// Set the z component of an existing vector stored at the address
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn vector_set_y(vec_ptr: *mut Vector3<f64>, y_val: f64) {
 #[no_mangle]
 pub unsafe extern "C" fn vector_set_z(vec_ptr: *mut Vector3<f64>, z_val: f64) {
     null_pointer_check!(vec_ptr);
-    (*vec_ptr)[2] = z_val;
+    (&mut (*vec_ptr))[2] = z_val;
 }
 
 /// Normalizes an existing vector stored at the address of
@@ -224,7 +224,7 @@ pub unsafe extern "C" fn vector_cross_product(
 ///
 /// # Safety
 ///
-/// Outer processes that request the components of a vector should call this function 
+/// Outer processes that request the components of a vector should call this function
 /// to free the memory allocated to the array once finished
 #[no_mangle]
 pub unsafe extern "C" fn free_vector_components(ptr: *mut c_double) {

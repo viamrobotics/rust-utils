@@ -49,9 +49,9 @@ pub unsafe extern "C" fn new_quaternion_from_vector(
     null_pointer_check!(imag_ptr);
     to_raw_pointer(&Quaternion::new(
         real,
-        (*imag_ptr).x,
-        (*imag_ptr).y,
-        (*imag_ptr).z,
+        (&(*imag_ptr)).x,
+        (&(*imag_ptr)).y,
+        (&(*imag_ptr)).z,
     ))
 }
 
@@ -82,7 +82,12 @@ pub unsafe extern "C" fn quaternion_get_components(
     quat_ptr: *const Quaternion<f64>,
 ) -> *const c_double {
     null_pointer_check!(quat_ptr);
-    let components: [c_double; 4] = [(*quat_ptr).w, (*quat_ptr).i, (*quat_ptr).j, (*quat_ptr).k];
+    let components: [c_double; 4] = [
+        (&(*quat_ptr)).w,
+        (&(*quat_ptr)).i,
+        (&(*quat_ptr)).j,
+        (&(*quat_ptr)).k,
+    ];
     Box::into_raw(Box::new(components)) as *const _
 }
 
@@ -97,7 +102,7 @@ pub unsafe extern "C" fn quaternion_get_components(
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_set_real(quat_ptr: *mut Quaternion<f64>, real: f64) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).w = real;
+    (&mut (*quat_ptr)).w = real;
 }
 
 /// Set the i component of an existing quaternion stored at the address
@@ -111,7 +116,7 @@ pub unsafe extern "C" fn quaternion_set_real(quat_ptr: *mut Quaternion<f64>, rea
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_set_i(quat_ptr: *mut Quaternion<f64>, i: f64) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).i = i;
+    (&mut (*quat_ptr)).i = i;
 }
 
 /// Set the j component of an existing quaternion stored at the address
@@ -125,7 +130,7 @@ pub unsafe extern "C" fn quaternion_set_i(quat_ptr: *mut Quaternion<f64>, i: f64
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_set_j(quat_ptr: *mut Quaternion<f64>, j: f64) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).j = j;
+    (&mut (*quat_ptr)).j = j;
 }
 
 /// Set the k component of an existing quaternion stored at the address
@@ -139,7 +144,7 @@ pub unsafe extern "C" fn quaternion_set_j(quat_ptr: *mut Quaternion<f64>, j: f64
 #[no_mangle]
 pub unsafe extern "C" fn quaternion_set_k(quat_ptr: *mut Quaternion<f64>, k: f64) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).k = k;
+    (&mut (*quat_ptr)).k = k;
 }
 
 /// Set all of the components of an existing quaternion stored at the address
@@ -159,10 +164,10 @@ pub unsafe extern "C" fn quaternion_set_components(
     k: f64,
 ) {
     null_pointer_check!(quat_ptr);
-    (*quat_ptr).w = real;
-    (*quat_ptr).i = i;
-    (*quat_ptr).j = j;
-    (*quat_ptr).k = k;
+    (&mut (*quat_ptr)).w = real;
+    (&mut (*quat_ptr)).i = i;
+    (&mut (*quat_ptr)).j = j;
+    (&mut (*quat_ptr)).k = k;
 }
 
 /// Set the imaginary components of an existing quaternion stored at
@@ -182,9 +187,9 @@ pub unsafe extern "C" fn quaternion_set_imag_from_vector(
 ) {
     null_pointer_check!(quat_ptr);
     null_pointer_check!(vec_ptr);
-    (*quat_ptr).i = (*vec_ptr).x;
-    (*quat_ptr).j = (*vec_ptr).y;
-    (*quat_ptr).k = (*vec_ptr).z;
+    (&mut (*quat_ptr)).i = (&(*vec_ptr)).x;
+    (&mut (*quat_ptr)).j = (&(*vec_ptr)).y;
+    (&mut (*quat_ptr)).k = (&(*vec_ptr)).z;
 }
 
 /// Copies the imaginary components to a 3-vector (using x -> i, y -> j
@@ -272,7 +277,7 @@ pub unsafe extern "C" fn quaternion_from_euler_angles(
 ) -> *mut Quaternion<f64> {
     let unit_quat = UnitQuaternion::from_euler_angles(roll, pitch, yaw);
     let quat = unit_quat.quaternion();
-    to_raw_pointer(&quat)
+    to_raw_pointer(quat)
 }
 
 /// Converts from an axis angle given by a vector's x, y, z components
@@ -453,7 +458,7 @@ pub unsafe extern "C" fn quaternion_hamiltonian_product(
 ///
 /// # Safety
 ///
-/// Outer processes that request the components of a quaternion should call this function 
+/// Outer processes that request the components of a quaternion should call this function
 /// to free the memory allocated to the array once finished
 #[no_mangle]
 pub unsafe extern "C" fn free_quaternion_components(ptr: *mut c_double) {
