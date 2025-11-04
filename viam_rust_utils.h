@@ -516,6 +516,10 @@ typedef struct Rotation_f64__3 {
  */
 typedef struct Rotation_f64__3 Rotation3_f64;
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 /**
  * Initialize a tokio runtime to run a gRPC client/sever, user should call this function before trying to dial to a Robot
  * Returns a pointer to a [`DialFfi`]
@@ -1212,3 +1216,7 @@ Vector3_f64 *vector_cross_product(Vector3_f64 *vec_ptr_1, Vector3_f64 *vec_ptr_2
  * to free the memory allocated to the array once finished
  */
 void free_vector_components(double *ptr);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
