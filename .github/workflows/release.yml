@@ -96,7 +96,7 @@ jobs:
         run: |
           cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
           cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
-          cp viam_rust_utils.h builds/viam_rust_utils.h
+          cp viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Correct install path
         run: |
           install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
@@ -196,7 +196,7 @@ jobs:
         run: |
           cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
           cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
-          cp viam_rust_utils.h builds/viam_rust_utils.h
+          cp viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -230,7 +230,7 @@ jobs:
         run: |
           cp target/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
           cp target/release/viam_rust_utils.lib builds/viam_rust_utils-${{ matrix.platform }}.lib
-          cp viam_rust_utils.h builds/viam_rust_utils.h
+          cp viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
