@@ -238,7 +238,7 @@ jobs:
           path: builds/*
 
   create_canonical_header:
-    needs: [builds_macos, build_linux, build_windows]
+    needs: [build_macos, build_linux, build_windows]
     runs-on: ubuntu-latest
     steps:
       # pick one arbitrarily as the canonical header file
