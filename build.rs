@@ -11,35 +11,35 @@ fn main() {
     let nalgebra_types = vec![
         ("ArrayStorage_f64__3__1", "nalgebra_array_storage_f64__3__1"),
         (
-            "Matrix_f64__u3__u1__array_storage_f64_3_1",
+            "Matrix_f64__U3__U1__ArrayStorage_f64__3__1",
             "nalgebra_matrix_f64_3_1",
         ),
         ("Vector3_f64", "nalgebra_vector3_f64"),
         ("ArrayStorage_f64__4__1", "nalgebra_array_storage_f64__4__1"),
         (
-            "Matrix_f64__u4__u1__array_storage_f64_4_1",
+            "Matrix_f64__U4__U1__ArrayStorage_f64__4__1",
             "nalgebra_matrix_f64_4_1",
         ),
         ("Vector4_f64", "nalgebra_vector4_f64"),
         ("Quaternion_f64", "nalgebra_quaternion_f64"),
         (
-            "Unit_matrix_f64_u3_u1_array_storage_f64_3_1",
+            "Unit_Matrix_f64__U3__U1__ArrayStorage_f64__3__1",
             "nalgebra_unit_matrix_f64_3_1",
         ),
         ("UnitVector3_f64", "nalgebra_unit_vector3_f64"),
         ("Rotation_f64__3", "nalgebra_rotation_f64_3"),
-    ];
-
-    // mangled viam type outputs, mapped to a prefixed snake case variant
-    let viam_types = vec![
         (
-            "Matrix_f64__const_3__const_3__array_storage_f64_3_3",
+            "Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3",
             "nalgebra_matrix_f64_3_3",
         ),
         ("ArrayStorage_f64__3__3", "nalgebra_array_storage_f64__3__3"),
         ("SMatrix_f64__3__3", "nalgebra_smatrix_f64_3_3"),
         ("Rotation_f64__3", "nalgebra_rotation_f64_3"),
         ("Rotation3_f64", "nalgebra_rotation3_f64"),
+    ];
+
+    // mangled viam type outputs, mapped to a prefixed snake case variant
+    let viam_types = vec![
         ("DialFfi", "viam_dial_ffi"),
         ("AxisAngle", "viam_axis_angle"),
         ("EulerAngles", "viam_euler_angles"),

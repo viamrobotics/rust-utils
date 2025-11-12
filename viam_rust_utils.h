@@ -114,7 +114,7 @@ typedef double nalgebra_array_storage_f64__3__1[1][3];
  * dynamically-sized column vector should be represented as a `Matrix<T, Dynamic, U1, S>` (given
  * some concrete types for `T` and a compatible data storage type `S`).
  */
-typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 {
+typedef struct nalgebra_matrix_f64_3_1 {
   /**
    * The data storage that contains all the matrix components. Disappointed?
    *
@@ -141,12 +141,12 @@ typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 {
    * starts at 0 as you would expect.
    */
   nalgebra_array_storage_f64__3__1 data;
-} Matrix_f64__U3__U1__ArrayStorage_f64__3__1;
+} nalgebra_matrix_f64_3_1;
 
 /**
  * A stack-allocated, 3-dimensional column vector.
  */
-typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 nalgebra_vector3_f64;
+typedef struct nalgebra_matrix_f64_3_1 nalgebra_vector3_f64;
 
 typedef struct viam_axis_angle {
   nalgebra_vector3_f64 axis;
@@ -257,7 +257,7 @@ typedef double nalgebra_array_storage_f64__4__1[1][4];
  * dynamically-sized column vector should be represented as a `Matrix<T, Dynamic, U1, S>` (given
  * some concrete types for `T` and a compatible data storage type `S`).
  */
-typedef struct Matrix_f64__U4__U1__ArrayStorage_f64__4__1 {
+typedef struct nalgebra_matrix_f64_4_1 {
   /**
    * The data storage that contains all the matrix components. Disappointed?
    *
@@ -284,12 +284,12 @@ typedef struct Matrix_f64__U4__U1__ArrayStorage_f64__4__1 {
    * starts at 0 as you would expect.
    */
   nalgebra_array_storage_f64__4__1 data;
-} Matrix_f64__U4__U1__ArrayStorage_f64__4__1;
+} nalgebra_matrix_f64_4_1;
 
 /**
  * A stack-allocated, 4-dimensional column vector.
  */
-typedef struct Matrix_f64__U4__U1__ArrayStorage_f64__4__1 nalgebra_vector4_f64;
+typedef struct nalgebra_matrix_f64_4_1 nalgebra_vector4_f64;
 
 /**
  * A quaternion. See the type alias `UnitQuaternion = Unit<Quaternion>` for a quaternion
@@ -320,12 +320,12 @@ typedef struct viam_euler_angles {
  * and [`UnitQuaternion`](crate::UnitQuaternion); both built on top of `Unit`.  If you are interested
  * in their documentation, read their dedicated pages directly.
  */
-typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 Unit_Matrix_f64__U3__U1__ArrayStorage_f64__3__1;
+typedef struct nalgebra_matrix_f64_3_1 nalgebra_unit_matrix_f64_3_1;
 
 /**
  * A stack-allocated, 3-dimensional unit vector.
  */
-typedef Unit_Matrix_f64__U3__U1__ArrayStorage_f64__3__1 nalgebra_unit_vector3_f64;
+typedef nalgebra_unit_matrix_f64_3_1 nalgebra_unit_vector3_f64;
 
 typedef struct viam_orientation_vector {
   nalgebra_unit_vector3_f64 o_vector;
@@ -436,7 +436,7 @@ typedef double nalgebra_array_storage_f64__3__3[3][3];
  * dynamically-sized column vector should be represented as a `Matrix<T, Dynamic, U1, S>` (given
  * some concrete types for `T` and a compatible data storage type `S`).
  */
-typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 {
+typedef struct nalgebra_matrix_f64_3_3 {
   /**
    * The data storage that contains all the matrix components. Disappointed?
    *
@@ -463,14 +463,14 @@ typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 {
    * starts at 0 as you would expect.
    */
   nalgebra_array_storage_f64__3__3 data;
-} Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3;
+} nalgebra_matrix_f64_3_3;
 
 /**
  * A statically sized column-major matrix with `R` rows and `C` columns.
  *
  * **Because this is an alias, not all its methods are listed here. See the [`Matrix`](crate::base::Matrix) type too.**
  */
-typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 nalgebra_smatrix_f64_3_3;
+typedef struct nalgebra_matrix_f64_3_3 nalgebra_smatrix_f64_3_3;
 
 /**
  * A rotation matrix.
