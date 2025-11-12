@@ -65,7 +65,7 @@ impl DialFfi {
 }
 /// Initialize a tokio runtime to run a gRPC client/sever, user should call this function before trying to dial to a Robot
 /// Returns a pointer to a [`DialFfi`]
-#[no_mangle]
+#[export_name = "viam_init_rust_runtime"]
 pub extern "C" fn init_rust_runtime() -> Box<DialFfi> {
     let _ = tracing_subscriber::fmt::try_init();
     Box::new(DialFfi::new())
@@ -118,7 +118,7 @@ fn dial_with_cred(
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
 /// * `c_timeout` a float, set how many seconds we should try to dial before timing out
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
-#[no_mangle]
+#[export_name = "viam_dial"]
 pub unsafe extern "C" fn dial(
     c_uri: *const c_char,
     c_entity: *const c_char,
@@ -279,7 +279,7 @@ pub unsafe extern "C" fn dial(
 /// The function must not be called more than once with the same pointer
 /// # Arguments
 /// * `c_char` a pointer to the string returned by [`dial`]
-#[no_mangle]
+#[export_name = "viam_free_string"]
 pub unsafe extern "C" fn free_string(s: *mut c_char) {
     if s.is_null() {
         return;
@@ -295,7 +295,7 @@ pub unsafe extern "C" fn free_string(s: *mut c_char) {
 /// The function must not be called more than once with the same pointer
 /// # Arguments
 /// * `rt_prt` a pointer to the string returned by [`init_rust_runtime`]
-#[no_mangle]
+#[export_name = "viam_free_rust_runtime"]
 pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
     let mut ctx = match rt_ptr {
         Some(ctx) => ctx,

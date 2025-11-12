@@ -8,12 +8,12 @@
 /**
  * The DialFfi interface, returned as a pointer by init_rust_runtime. User should keep this pointer until freeing the runtime.
  */
-typedef struct DialFfi DialFfi;
+typedef struct viam_dial_ffi viam_dial_ffi;
 
 /**
  * A array-based statically sized matrix data storage.
  */
-typedef double ArrayStorage_f64__3__1[1][3];
+typedef double nalgebra_array_storage_f64__3__1[1][3];
 
 /**
  * The most generic column-major matrix (and vector) type.
@@ -140,23 +140,23 @@ typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 {
    * be accessed and modified using indexing: `vec[20]`, `mat[(20, 19)]`. Here the indexing
    * starts at 0 as you would expect.
    */
-  ArrayStorage_f64__3__1 data;
+  nalgebra_array_storage_f64__3__1 data;
 } Matrix_f64__U3__U1__ArrayStorage_f64__3__1;
 
 /**
  * A stack-allocated, 3-dimensional column vector.
  */
-typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 Vector3_f64;
+typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 nalgebra_vector3_f64;
 
-typedef struct AxisAngle {
-  Vector3_f64 axis;
+typedef struct viam_axis_angle {
+  nalgebra_vector3_f64 axis;
   double theta;
-} AxisAngle;
+} viam_axis_angle;
 
 /**
  * A array-based statically sized matrix data storage.
  */
-typedef double ArrayStorage_f64__4__1[1][4];
+typedef double nalgebra_array_storage_f64__4__1[1][4];
 
 /**
  * The most generic column-major matrix (and vector) type.
@@ -283,30 +283,30 @@ typedef struct Matrix_f64__U4__U1__ArrayStorage_f64__4__1 {
    * be accessed and modified using indexing: `vec[20]`, `mat[(20, 19)]`. Here the indexing
    * starts at 0 as you would expect.
    */
-  ArrayStorage_f64__4__1 data;
+  nalgebra_array_storage_f64__4__1 data;
 } Matrix_f64__U4__U1__ArrayStorage_f64__4__1;
 
 /**
  * A stack-allocated, 4-dimensional column vector.
  */
-typedef struct Matrix_f64__U4__U1__ArrayStorage_f64__4__1 Vector4_f64;
+typedef struct Matrix_f64__U4__U1__ArrayStorage_f64__4__1 nalgebra_vector4_f64;
 
 /**
  * A quaternion. See the type alias `UnitQuaternion = Unit<Quaternion>` for a quaternion
  * that may be used as a rotation.
  */
-typedef struct Quaternion_f64 {
+typedef struct nalgebra_quaternion_f64 {
   /**
    * This quaternion as a 4D vector of coordinates in the `[ x, y, z, w ]` storage order.
    */
-  Vector4_f64 coords;
-} Quaternion_f64;
+  nalgebra_vector4_f64 coords;
+} nalgebra_quaternion_f64;
 
-typedef struct EulerAngles {
+typedef struct viam_euler_angles {
   double roll;
   double pitch;
   double yaw;
-} EulerAngles;
+} viam_euler_angles;
 
 /**
  * A wrapper that ensures the underlying algebraic entity has a unit norm.
@@ -325,17 +325,17 @@ typedef struct Matrix_f64__U3__U1__ArrayStorage_f64__3__1 Unit_Matrix_f64__U3__U
 /**
  * A stack-allocated, 3-dimensional unit vector.
  */
-typedef Unit_Matrix_f64__U3__U1__ArrayStorage_f64__3__1 UnitVector3_f64;
+typedef Unit_Matrix_f64__U3__U1__ArrayStorage_f64__3__1 nalgebra_unit_vector3_f64;
 
-typedef struct OrientationVector {
-  UnitVector3_f64 o_vector;
+typedef struct viam_orientation_vector {
+  nalgebra_unit_vector3_f64 o_vector;
   double theta;
-} OrientationVector;
+} viam_orientation_vector;
 
 /**
  * A array-based statically sized matrix data storage.
  */
-typedef double ArrayStorage_f64__3__3[3][3];
+typedef double nalgebra_array_storage_f64__3__3[3][3];
 
 /**
  * The most generic column-major matrix (and vector) type.
@@ -462,7 +462,7 @@ typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 {
    * be accessed and modified using indexing: `vec[20]`, `mat[(20, 19)]`. Here the indexing
    * starts at 0 as you would expect.
    */
-  ArrayStorage_f64__3__3 data;
+  nalgebra_array_storage_f64__3__3 data;
 } Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3;
 
 /**
@@ -470,7 +470,7 @@ typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 {
  *
  * **Because this is an alias, not all its methods are listed here. See the [`Matrix`](crate::base::Matrix) type too.**
  */
-typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 SMatrix_f64__3__3;
+typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 nalgebra_smatrix_f64_3_3;
 
 /**
  * A rotation matrix.
@@ -505,16 +505,16 @@ typedef struct Matrix_f64__Const_3_____Const_3_____ArrayStorage_f64__3__3 SMatri
  * * [Conversion to a matrix <span style="float:right;">`matrix`, `to_homogeneous`…</span>](#conversion-to-a-matrix)
  *
  */
-typedef struct Rotation_f64__3 {
-  SMatrix_f64__3__3 matrix;
-} Rotation_f64__3;
+typedef struct nalgebra_rotation_f64_3 {
+  nalgebra_smatrix_f64_3_3 matrix;
+} nalgebra_rotation_f64_3;
 
 /**
  * A 3-dimensional rotation matrix.
  *
  * **Because this is an alias, not all its methods are listed here. See the [`Rotation`](crate::Rotation) type too.**
  */
-typedef struct Rotation_f64__3 Rotation3_f64;
+typedef struct nalgebra_rotation_f64_3 nalgebra_rotation3_f64;
 
 #ifdef __cplusplus
 extern "C" {
@@ -524,7 +524,7 @@ extern "C" {
  * Initialize a tokio runtime to run a gRPC client/sever, user should call this function before trying to dial to a Robot
  * Returns a pointer to a [`DialFfi`]
  */
-struct DialFfi *init_rust_runtime(void);
+struct viam_dial_ffi *viam_init_rust_runtime(void);
 
 /**
  * Returns a path to a proxy to a robot
@@ -541,13 +541,13 @@ struct DialFfi *init_rust_runtime(void);
  * * `c_timeout` a float, set how many seconds we should try to dial before timing out
  * * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
  */
-char *dial(const char *c_uri,
-           const char *c_entity,
-           const char *c_type,
-           const char *c_payload,
-           bool c_allow_insec,
-           float c_timeout,
-           struct DialFfi *rt_ptr);
+char *viam_dial(const char *c_uri,
+                const char *c_entity,
+                const char *c_type,
+                const char *c_payload,
+                bool c_allow_insec,
+                float c_timeout,
+                struct viam_dial_ffi *rt_ptr);
 
 /**
  * This function must be used to free the path returned by the [`dial`] function
@@ -557,7 +557,7 @@ char *dial(const char *c_uri,
  * # Arguments
  * * `c_char` a pointer to the string returned by [`dial`]
  */
-void free_string(char *s);
+void viam_free_string(char *s);
 
 /**
  * This function must be used the free a rust runtime returned by [`init_rust_runtime`] the function will signal any
@@ -568,7 +568,7 @@ void free_string(char *s);
  * # Arguments
  * * `rt_prt` a pointer to the string returned by [`init_rust_runtime`]
  */
-int32_t free_rust_runtime(struct DialFfi *rt_ptr);
+int32_t viam_free_rust_runtime(struct viam_dial_ffi *rt_ptr);
 
 /**
  * Free memory at the address of the axis angle pointer.
@@ -578,7 +578,10 @@ int32_t free_rust_runtime(struct DialFfi *rt_ptr);
  * Outer processes that work with axis angles via the FFI interface MUST remember
  * to call this function when finished with an axis angle instance
  */
-void free_axis_angles_memory(struct AxisAngle *ptr);
+void viam_free_axis_angles_memory(struct viam_axis_angle *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void free_axis_angles_memory(struct viam_axis_angle *ptr);
 
 /**
  * Initialize axis angle from raw components and retrieve the C pointer
@@ -590,7 +593,13 @@ void free_axis_angles_memory(struct AxisAngle *ptr);
  * the caller must remember to free the axis angle memory using the
  * free_axis_angles_memory FFI function
  */
-struct AxisAngle *new_axis_angle(double x, double y, double z, double theta);
+struct viam_axis_angle *viam_new_axis_angle(double x, double y, double z, double theta);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_axis_angle *new_axis_angle(double x,
+                                       double y,
+                                       double z,
+                                       double theta);
 
 /**
  * Converts a quaternion into an R4 axis angle. The return value is a pointer
@@ -606,7 +615,10 @@ struct AxisAngle *new_axis_angle(double x, double y, double z, double theta);
  * free_quaternion_memory FFI function and the axis angle memory using
  * the free_array_memory function
  */
-struct AxisAngle *axis_angle_from_quaternion(const struct Quaternion_f64 *quat);
+struct viam_axis_angle *viam_axis_angle_from_quaternion(const struct nalgebra_quaternion_f64 *quat);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_axis_angle *axis_angle_from_quaternion(const struct nalgebra_quaternion_f64 *quat);
 
 /**
  * Free memory at the address of the euler angles pointer.
@@ -616,7 +628,10 @@ struct AxisAngle *axis_angle_from_quaternion(const struct Quaternion_f64 *quat);
  * Outer processes that work with EulerAngles via the FFI interface MUST remember
  * to call this function when finished with a euler angles instance
  */
-void free_euler_angles_memory(struct EulerAngles *ptr);
+void viam_free_euler_angles_memory(struct viam_euler_angles *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void free_euler_angles_memory(struct viam_euler_angles *ptr);
 
 /**
  * Initialize euler angles from raw components and retrieve the C pointer
@@ -628,7 +643,12 @@ void free_euler_angles_memory(struct EulerAngles *ptr);
  * the caller must remember to free the euler angles memory using the
  * free_euler_angles_memory FFI function
  */
-struct EulerAngles *new_euler_angles(double roll, double pitch, double yaw);
+struct viam_euler_angles *viam_new_euler_angles(double roll, double pitch, double yaw);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_euler_angles *new_euler_angles(double roll,
+                                           double pitch,
+                                           double yaw);
 
 /**
  * Converts a quaternion into euler angles (in radians). The euler angles are
@@ -642,7 +662,10 @@ struct EulerAngles *new_euler_angles(double roll, double pitch, double yaw);
  * free_quaternion_memory FFI function and the euler angles memory using
  * the free_euler_angles_memory function
  */
-struct EulerAngles *euler_angles_from_quaternion(const struct Quaternion_f64 *quat_ptr);
+struct viam_euler_angles *viam_euler_angles_from_quaternion(const struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_euler_angles *euler_angles_from_quaternion(const struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Free memory at the address of the orientation vector pointer. Outer processes
@@ -651,7 +674,10 @@ struct EulerAngles *euler_angles_from_quaternion(const struct Quaternion_f64 *qu
  *
  * # Safety
  */
-void free_orientation_vector_memory(struct OrientationVector *ptr);
+void viam_free_orientation_vector_memory(struct viam_orientation_vector *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void free_orientation_vector_memory(struct viam_orientation_vector *ptr);
 
 /**
  * Initialize an orientation vector from raw components and retrieve the C pointer
@@ -663,7 +689,16 @@ void free_orientation_vector_memory(struct OrientationVector *ptr);
  * the caller must remember to free the orientation vector memory using the
  * free_orientation_vector_memory FFI function
  */
-struct OrientationVector *new_orientation_vector(double o_x, double o_y, double o_z, double theta);
+struct viam_orientation_vector *viam_new_orientation_vector(double o_x,
+                                                            double o_y,
+                                                            double o_z,
+                                                            double theta);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_orientation_vector *new_orientation_vector(double o_x,
+                                                       double o_y,
+                                                       double o_z,
+                                                       double theta);
 
 /**
  * Get the components of an orientation vector as a list of C doubles, the order of the
@@ -675,7 +710,10 @@ struct OrientationVector *new_orientation_vector(double o_x, double o_y, double 
  * the caller must remember to free the orientation_vector memory using the
  * free_orientation_vector_memory FFI function
  */
-const double *orientation_vector_get_components(const struct OrientationVector *ov_ptr);
+const double *viam_orientation_vector_get_components(const struct viam_orientation_vector *ov_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+const double *orientation_vector_get_components(const struct viam_orientation_vector *ov_ptr);
 
 /**
  * Converts a quaternion into an orientation vector.
@@ -687,7 +725,10 @@ const double *orientation_vector_get_components(const struct OrientationVector *
  * free_quaternion_memory FFI function and the orientation-vector memory using
  * the free_orientation_vector_memory function
  */
-struct OrientationVector *orientation_vector_from_quaternion(const struct Quaternion_f64 *quat_ptr);
+struct viam_orientation_vector *viam_orientation_vector_from_quaternion(const struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_orientation_vector *orientation_vector_from_quaternion(const struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Free memory of an array of orientation vector components at the given address.
@@ -697,6 +738,9 @@ struct OrientationVector *orientation_vector_from_quaternion(const struct Quater
  * Outer processes that request the components of a orientation vector should call this function
  * to free the memory allocated to the array once finished
  */
+void viam_free_orientation_vector_components(double *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
 void free_orientation_vector_components(double *ptr);
 
 /**
@@ -709,7 +753,13 @@ void free_orientation_vector_components(double *ptr);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *new_quaternion(double real, double i, double j, double k);
+struct nalgebra_quaternion_f64 *viam_new_quaternion(double real, double i, double j, double k);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *new_quaternion(double real,
+                                               double i,
+                                               double j,
+                                               double k);
 
 /**
  * Initialize a quaternion from a real part and a C pointer to a Vector3
@@ -721,7 +771,12 @@ struct Quaternion_f64 *new_quaternion(double real, double i, double j, double k)
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *new_quaternion_from_vector(double real, const Vector3_f64 *imag_ptr);
+struct nalgebra_quaternion_f64 *viam_new_quaternion_from_vector(double real,
+                                                                const nalgebra_vector3_f64 *imag_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *new_quaternion_from_vector(double real,
+                                                           const nalgebra_vector3_f64 *imag_ptr);
 
 /**
  * Free memory at the address of the quaternion pointer.
@@ -731,7 +786,10 @@ struct Quaternion_f64 *new_quaternion_from_vector(double real, const Vector3_f64
  * Outer processes that work with Quaternions via the FFI interface MUST remember
  * to call this function when finished with a quaternion
  */
-void free_quaternion_memory(struct Quaternion_f64 *ptr);
+void viam_free_quaternion_memory(struct nalgebra_quaternion_f64 *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void free_quaternion_memory(struct nalgebra_quaternion_f64 *ptr);
 
 /**
  * Get the components of a quaternion as a list of C doubles, the order of the
@@ -743,7 +801,10 @@ void free_quaternion_memory(struct Quaternion_f64 *ptr);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-const double *quaternion_get_components(const struct Quaternion_f64 *quat_ptr);
+const double *viam_quaternion_get_components(const struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+const double *quaternion_get_components(const struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Set the real component of an existing quaternion stored at the address
@@ -755,7 +816,11 @@ const double *quaternion_get_components(const struct Quaternion_f64 *quat_ptr);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void quaternion_set_real(struct Quaternion_f64 *quat_ptr, double real);
+void viam_quaternion_set_real(struct nalgebra_quaternion_f64 *quat_ptr, double real);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void quaternion_set_real(struct nalgebra_quaternion_f64 *quat_ptr,
+                         double real);
 
 /**
  * Set the i component of an existing quaternion stored at the address
@@ -767,7 +832,11 @@ void quaternion_set_real(struct Quaternion_f64 *quat_ptr, double real);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void quaternion_set_i(struct Quaternion_f64 *quat_ptr, double i);
+void viam_quaternion_set_i(struct nalgebra_quaternion_f64 *quat_ptr, double i);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void quaternion_set_i(struct nalgebra_quaternion_f64 *quat_ptr,
+                      double i);
 
 /**
  * Set the j component of an existing quaternion stored at the address
@@ -779,7 +848,11 @@ void quaternion_set_i(struct Quaternion_f64 *quat_ptr, double i);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void quaternion_set_j(struct Quaternion_f64 *quat_ptr, double j);
+void viam_quaternion_set_j(struct nalgebra_quaternion_f64 *quat_ptr, double j);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void quaternion_set_j(struct nalgebra_quaternion_f64 *quat_ptr,
+                      double j);
 
 /**
  * Set the k component of an existing quaternion stored at the address
@@ -791,7 +864,11 @@ void quaternion_set_j(struct Quaternion_f64 *quat_ptr, double j);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void quaternion_set_k(struct Quaternion_f64 *quat_ptr, double k);
+void viam_quaternion_set_k(struct nalgebra_quaternion_f64 *quat_ptr, double k);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void quaternion_set_k(struct nalgebra_quaternion_f64 *quat_ptr,
+                      double k);
 
 /**
  * Set all of the components of an existing quaternion stored at the address
@@ -803,7 +880,14 @@ void quaternion_set_k(struct Quaternion_f64 *quat_ptr, double k);
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void quaternion_set_components(struct Quaternion_f64 *quat_ptr,
+void viam_quaternion_set_components(struct nalgebra_quaternion_f64 *quat_ptr,
+                                    double real,
+                                    double i,
+                                    double j,
+                                    double k);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void quaternion_set_components(struct nalgebra_quaternion_f64 *quat_ptr,
                                double real,
                                double i,
                                double j,
@@ -821,7 +905,12 @@ void quaternion_set_components(struct Quaternion_f64 *quat_ptr,
  * free_quaternion_memory FFI function (the same applies for the vector
  * stored at vec_ptr)
  */
-void quaternion_set_imag_from_vector(struct Quaternion_f64 *quat_ptr, const Vector3_f64 *vec_ptr);
+void viam_quaternion_set_imag_from_vector(struct nalgebra_quaternion_f64 *quat_ptr,
+                                          const nalgebra_vector3_f64 *vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void quaternion_set_imag_from_vector(struct nalgebra_quaternion_f64 *quat_ptr,
+                                     const nalgebra_vector3_f64 *vec_ptr);
 
 /**
  * Copies the imaginary components to a 3-vector (using x -> i, y -> j
@@ -834,7 +923,10 @@ void quaternion_set_imag_from_vector(struct Quaternion_f64 *quat_ptr, const Vect
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-Vector3_f64 *quaternion_get_imaginary_vector(const struct Quaternion_f64 *quat_ptr);
+nalgebra_vector3_f64 *viam_quaternion_get_imaginary_vector(const struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *quaternion_get_imaginary_vector(const struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Normalizes an existing quaternion stored at the address of
@@ -846,7 +938,10 @@ Vector3_f64 *quaternion_get_imaginary_vector(const struct Quaternion_f64 *quat_p
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void normalize_quaternion(struct Quaternion_f64 *quat_ptr);
+void viam_normalize_quaternion(struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void normalize_quaternion(struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Initializes a normalized copy of a quaternion stored at the
@@ -859,7 +954,10 @@ void normalize_quaternion(struct Quaternion_f64 *quat_ptr);
  * *both* the input and output quaternions when finished with them
  * using the free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_get_normalized(const struct Quaternion_f64 *quat_ptr);
+struct nalgebra_quaternion_f64 *viam_quaternion_get_normalized(const struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_get_normalized(const struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Returns the result of rotating a vector by a quaternion
@@ -870,8 +968,12 @@ struct Quaternion_f64 *quaternion_get_normalized(const struct Quaternion_f64 *qu
  * the memory of both vectors when finished with them using the
  * free_quaternion_memory and free_vector_memory FFI functions
  */
-Vector3_f64 *quaternion_rotate_vector(const struct Quaternion_f64 *quat_ptr,
-                                      const Vector3_f64 *vec_ptr);
+nalgebra_vector3_f64 *viam_quaternion_rotate_vector(const struct nalgebra_quaternion_f64 *quat_ptr,
+                                                    const nalgebra_vector3_f64 *vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *quaternion_rotate_vector(const struct nalgebra_quaternion_f64 *quat_ptr,
+                                               const nalgebra_vector3_f64 *vec_ptr);
 
 /**
  * Converts from euler angles (in radians) to a quaternion. The euler angles are expected to
@@ -884,7 +986,14 @@ Vector3_f64 *quaternion_rotate_vector(const struct Quaternion_f64 *quat_ptr,
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_from_euler_angles(double roll, double pitch, double yaw);
+struct nalgebra_quaternion_f64 *viam_quaternion_from_euler_angles(double roll,
+                                                                  double pitch,
+                                                                  double yaw);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_from_euler_angles(double roll,
+                                                             double pitch,
+                                                             double yaw);
 
 /**
  * Converts from an axis angle given by a vector's x, y, z components
@@ -896,7 +1005,16 @@ struct Quaternion_f64 *quaternion_from_euler_angles(double roll, double pitch, d
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_from_axis_angle(double x, double y, double z, double theta);
+struct nalgebra_quaternion_f64 *viam_quaternion_from_axis_angle(double x,
+                                                                double y,
+                                                                double z,
+                                                                double theta);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_from_axis_angle(double x,
+                                                           double y,
+                                                           double z,
+                                                           double theta);
 
 /**
  * Converts from an axis angle whose vector is given by a pointer
@@ -910,8 +1028,12 @@ struct Quaternion_f64 *quaternion_from_axis_angle(double x, double y, double z, 
  * free_quaternion_memory FFI function. Similarly the free_vector_memory should
  * be called when finished with the axis angle vector
  */
-struct Quaternion_f64 *quaternion_from_axis_angle_vector(double theta,
-                                                         const Vector3_f64 *axis_angle_vec_ptr);
+struct nalgebra_quaternion_f64 *viam_quaternion_from_axis_angle_vector(double theta,
+                                                                       const nalgebra_vector3_f64 *axis_angle_vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_from_axis_angle_vector(double theta,
+                                                                  const nalgebra_vector3_f64 *axis_angle_vec_ptr);
 
 /**
  * Converts from a pointer to a Rotation3<f64> to a quaternion
@@ -922,7 +1044,10 @@ struct Quaternion_f64 *quaternion_from_axis_angle_vector(double theta,
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_from_rotation_matrix(const Rotation3_f64 *rot_ptr);
+struct nalgebra_quaternion_f64 *viam_quaternion_from_rotation_matrix(const nalgebra_rotation3_f64 *rot_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_from_rotation_matrix(const nalgebra_rotation3_f64 *rot_ptr);
 
 /**
  * Converts from a pointer to an OrientationVector to a quaternion
@@ -933,7 +1058,10 @@ struct Quaternion_f64 *quaternion_from_rotation_matrix(const Rotation3_f64 *rot_
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_from_orientation_vector(const struct OrientationVector *o_vec_ptr);
+struct nalgebra_quaternion_f64 *viam_quaternion_from_orientation_vector(const struct viam_orientation_vector *o_vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_from_orientation_vector(const struct viam_orientation_vector *o_vec_ptr);
 
 /**
  * Scales an existing quaternion stored at the address of
@@ -945,7 +1073,11 @@ struct Quaternion_f64 *quaternion_from_orientation_vector(const struct Orientati
  * the caller must remember to free the quaternion memory using the
  * free_quaternion_memory FFI function
  */
-void scale_quaternion(struct Quaternion_f64 *quat_ptr, double factor);
+void viam_scale_quaternion(struct nalgebra_quaternion_f64 *quat_ptr, double factor);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void scale_quaternion(struct nalgebra_quaternion_f64 *quat_ptr,
+                      double factor);
 
 /**
  * Initializes a copy of the quaternion stored at the address of a pointer (quat_ptr)
@@ -957,7 +1089,12 @@ void scale_quaternion(struct Quaternion_f64 *quat_ptr, double factor);
  * *both* the input and output quaternions when finished with them
  * using the free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_get_scaled(const struct Quaternion_f64 *quat_ptr, double factor);
+struct nalgebra_quaternion_f64 *viam_quaternion_get_scaled(const struct nalgebra_quaternion_f64 *quat_ptr,
+                                                           double factor);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_get_scaled(const struct nalgebra_quaternion_f64 *quat_ptr,
+                                                      double factor);
 
 /**
  * Initializes a quaternion that is the conjugate of one stored
@@ -970,7 +1107,10 @@ struct Quaternion_f64 *quaternion_get_scaled(const struct Quaternion_f64 *quat_p
  * *both* the input and output quaternions when finished with them
  * using the free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_get_conjugate(const struct Quaternion_f64 *quat_ptr);
+struct nalgebra_quaternion_f64 *viam_quaternion_get_conjugate(const struct nalgebra_quaternion_f64 *quat_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_get_conjugate(const struct nalgebra_quaternion_f64 *quat_ptr);
 
 /**
  * Adds two quaternions and returns a pointer to the
@@ -981,8 +1121,12 @@ struct Quaternion_f64 *quaternion_get_conjugate(const struct Quaternion_f64 *qua
  * The caller must remember to free the quaternion memory of *both* the input and
  * output quaternions when finished with them using the free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_add(const struct Quaternion_f64 *quat_ptr_1,
-                                      const struct Quaternion_f64 *quat_ptr_2);
+struct nalgebra_quaternion_f64 *viam_quaternion_add(const struct nalgebra_quaternion_f64 *quat_ptr_1,
+                                                    const struct nalgebra_quaternion_f64 *quat_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_add(const struct nalgebra_quaternion_f64 *quat_ptr_1,
+                                               const struct nalgebra_quaternion_f64 *quat_ptr_2);
 
 /**
  * Subtracts two quaternions and returns a pointer to the
@@ -993,8 +1137,12 @@ struct Quaternion_f64 *quaternion_add(const struct Quaternion_f64 *quat_ptr_1,
  * The caller must remember to free the quaternion memory of *both* the input and
  * output quaternions when finished with them using the free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_subtract(const struct Quaternion_f64 *quat_ptr_1,
-                                           const struct Quaternion_f64 *quat_ptr_2);
+struct nalgebra_quaternion_f64 *viam_quaternion_subtract(const struct nalgebra_quaternion_f64 *quat_ptr_1,
+                                                         const struct nalgebra_quaternion_f64 *quat_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_subtract(const struct nalgebra_quaternion_f64 *quat_ptr_1,
+                                                    const struct nalgebra_quaternion_f64 *quat_ptr_2);
 
 /**
  * Computes the Hamiltonian product of two quaternions and
@@ -1005,8 +1153,12 @@ struct Quaternion_f64 *quaternion_subtract(const struct Quaternion_f64 *quat_ptr
  * The caller must remember to free the quaternion memory of *both* the input and
  * output quaternions when finished with them using the free_quaternion_memory FFI function
  */
-struct Quaternion_f64 *quaternion_hamiltonian_product(const struct Quaternion_f64 *quat_ptr_1,
-                                                      const struct Quaternion_f64 *quat_ptr_2);
+struct nalgebra_quaternion_f64 *viam_quaternion_hamiltonian_product(const struct nalgebra_quaternion_f64 *quat_ptr_1,
+                                                                    const struct nalgebra_quaternion_f64 *quat_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+struct nalgebra_quaternion_f64 *quaternion_hamiltonian_product(const struct nalgebra_quaternion_f64 *quat_ptr_1,
+                                                               const struct nalgebra_quaternion_f64 *quat_ptr_2);
 
 /**
  * Free memory of an array of quaternion components at the given address.
@@ -1016,6 +1168,9 @@ struct Quaternion_f64 *quaternion_hamiltonian_product(const struct Quaternion_f6
  * Outer processes that request the components of a quaternion should call this function
  * to free the memory allocated to the array once finished
  */
+void viam_free_quaternion_components(double *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
 void free_quaternion_components(double *ptr);
 
 /**
@@ -1025,7 +1180,10 @@ void free_quaternion_components(double *ptr);
  *
  * # Safety
  */
-void free_rotation_matrix_memory(Rotation3_f64 *ptr);
+void viam_free_rotation_matrix_memory(nalgebra_rotation3_f64 *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void free_rotation_matrix_memory(nalgebra_rotation3_f64 *ptr);
 
 /**
  * Initialize a 3D rotation matrix from raw components and retrieve the C pointer
@@ -1038,7 +1196,10 @@ void free_rotation_matrix_memory(Rotation3_f64 *ptr);
  * the caller must remember to free the rotation matrix memory using the
  * free_rotation_matrix_memory FFI function
  */
-Rotation3_f64 *new_rotation_matrix(const double (*elements)[9]);
+nalgebra_rotation3_f64 *viam_new_rotation_matrix(const double (*elements)[9]);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_rotation3_f64 *new_rotation_matrix(const double (*elements)[9]);
 
 /**
  * Converts a quaternion into a 3D rotation matrix (a Rotation<f64, 3>
@@ -1051,7 +1212,10 @@ Rotation3_f64 *new_rotation_matrix(const double (*elements)[9]);
  * free_quaternion_memory FFI function and the rotation matrix memory using
  * the free_rotation_matrix_memory function
  */
-Rotation3_f64 *rotation_matrix_from_quaternion(const struct Quaternion_f64 *quat);
+nalgebra_rotation3_f64 *viam_rotation_matrix_from_quaternion(const struct nalgebra_quaternion_f64 *quat);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_rotation3_f64 *rotation_matrix_from_quaternion(const struct nalgebra_quaternion_f64 *quat);
 
 /**
  * Initialize a 3-vector from raw components and retrieve the C pointer
@@ -1063,7 +1227,12 @@ Rotation3_f64 *rotation_matrix_from_quaternion(const struct Quaternion_f64 *quat
  * the caller must remember to free the vector memory using the
  * free_vector_memory FFI function
  */
-Vector3_f64 *new_vector3(double x, double y, double z);
+nalgebra_vector3_f64 *viam_new_vector3(double x, double y, double z);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *new_vector3(double x,
+                                  double y,
+                                  double z);
 
 /**
  * Free memory at the address of the vector pointer.
@@ -1072,7 +1241,10 @@ Vector3_f64 *new_vector3(double x, double y, double z);
  * Outer processes that work with Vectors via the FFI interface MUST remember
  * to call this function when finished with a vector
  */
-void free_vector_memory(Vector3_f64 *ptr);
+void viam_free_vector_memory(nalgebra_vector3_f64 *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void free_vector_memory(nalgebra_vector3_f64 *ptr);
 
 /**
  * Get the components of a vector as a list of C doubles, the order of the
@@ -1083,7 +1255,10 @@ void free_vector_memory(Vector3_f64 *ptr);
  * When finished with the underlying vector, the caller must remember to
  * free the vector memory using the free_vector_memory FFI function
  */
-const double *vector_get_components(const Vector3_f64 *vec_ptr);
+const double *viam_vector_get_components(const nalgebra_vector3_f64 *vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+const double *vector_get_components(const nalgebra_vector3_f64 *vec_ptr);
 
 /**
  * Set the x component of an existing vector stored at the address
@@ -1094,7 +1269,11 @@ const double *vector_get_components(const Vector3_f64 *vec_ptr);
  * When finished with the underlying vector, the caller must remember to
  * free the vector memory using the free_vector_memory FFI function
  */
-void vector_set_x(Vector3_f64 *vec_ptr, double x_val);
+void viam_vector_set_x(nalgebra_vector3_f64 *vec_ptr, double x_val);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void vector_set_x(nalgebra_vector3_f64 *vec_ptr,
+                  double x_val);
 
 /**
  * Set the y component of an existing vector stored at the address
@@ -1105,7 +1284,11 @@ void vector_set_x(Vector3_f64 *vec_ptr, double x_val);
  * When finished with the underlying vector, the caller must remember to
  * free the vector memory using the free_vector_memory FFI function
  */
-void vector_set_y(Vector3_f64 *vec_ptr, double y_val);
+void viam_vector_set_y(nalgebra_vector3_f64 *vec_ptr, double y_val);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void vector_set_y(nalgebra_vector3_f64 *vec_ptr,
+                  double y_val);
 
 /**
  * Set the z component of an existing vector stored at the address
@@ -1116,7 +1299,11 @@ void vector_set_y(Vector3_f64 *vec_ptr, double y_val);
  * When finished with the underlying vector, the caller must remember to
  * free the vector memory using the free_vector_memory FFI function
  */
-void vector_set_z(Vector3_f64 *vec_ptr, double z_val);
+void viam_vector_set_z(nalgebra_vector3_f64 *vec_ptr, double z_val);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void vector_set_z(nalgebra_vector3_f64 *vec_ptr,
+                  double z_val);
 
 /**
  * Normalizes an existing vector stored at the address of
@@ -1127,7 +1314,10 @@ void vector_set_z(Vector3_f64 *vec_ptr, double z_val);
  * When finished with the underlying vector, the caller must remember to
  * free the vector memory using the free_vector_memory FFI function
  */
-void normalize_vector(Vector3_f64 *vec_ptr);
+void viam_normalize_vector(nalgebra_vector3_f64 *vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void normalize_vector(nalgebra_vector3_f64 *vec_ptr);
 
 /**
  * Initializes a normalized copy of a vector stored at the
@@ -1139,7 +1329,10 @@ void normalize_vector(Vector3_f64 *vec_ptr);
  * The caller must remember to free the vector memory of *both* the input and
  * output vectors when finished with them using the free_vector_memory FFI function
  */
-Vector3_f64 *vector_get_normalized(const Vector3_f64 *vec_ptr);
+nalgebra_vector3_f64 *viam_vector_get_normalized(const nalgebra_vector3_f64 *vec_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *vector_get_normalized(const nalgebra_vector3_f64 *vec_ptr);
 
 /**
  * Scales an existing vector stored at the address of
@@ -1150,7 +1343,11 @@ Vector3_f64 *vector_get_normalized(const Vector3_f64 *vec_ptr);
  * When finished with the underlying vector, the caller must remember to
  * free the vector memory using the free_vector_memory FFI function
  */
-void scale_vector(Vector3_f64 *vec_ptr, double factor);
+void viam_scale_vector(nalgebra_vector3_f64 *vec_ptr, double factor);
+
+/// @deprecated please use `viam_`-prefixed function instead
+void scale_vector(nalgebra_vector3_f64 *vec_ptr,
+                  double factor);
 
 /**
  * Initializes a scaled copy of a vector stored at the
@@ -1162,7 +1359,11 @@ void scale_vector(Vector3_f64 *vec_ptr, double factor);
  * The caller must remember to free the vector memory of *both* the input and
  * output vectors when finished with them using the free_vector_memory FFI function
  */
-Vector3_f64 *vector_get_scaled(const Vector3_f64 *vec_ptr, double factor);
+nalgebra_vector3_f64 *viam_vector_get_scaled(const nalgebra_vector3_f64 *vec_ptr, double factor);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *vector_get_scaled(const nalgebra_vector3_f64 *vec_ptr,
+                                        double factor);
 
 /**
  * Adds two vectors and returns a pointer to the
@@ -1173,7 +1374,12 @@ Vector3_f64 *vector_get_scaled(const Vector3_f64 *vec_ptr, double factor);
  * The caller must remember to free the vector memory of *both* the input and
  * output vectors when finished with them using the free_vector_memory FFI function
  */
-Vector3_f64 *vector_add(const Vector3_f64 *vec_ptr_1, const Vector3_f64 *vec_ptr_2);
+nalgebra_vector3_f64 *viam_vector_add(const nalgebra_vector3_f64 *vec_ptr_1,
+                                      const nalgebra_vector3_f64 *vec_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *vector_add(const nalgebra_vector3_f64 *vec_ptr_1,
+                                 const nalgebra_vector3_f64 *vec_ptr_2);
 
 /**
  * Subtracts two vectors and returns a pointer to the
@@ -1184,7 +1390,12 @@ Vector3_f64 *vector_add(const Vector3_f64 *vec_ptr_1, const Vector3_f64 *vec_ptr
  * The caller must remember to free the vector memory of *both* the input and
  * output vectors when finished with them using the free_vector_memory FFI function
  */
-Vector3_f64 *vector_subtract(const Vector3_f64 *vec_ptr_1, const Vector3_f64 *vec_ptr_2);
+nalgebra_vector3_f64 *viam_vector_subtract(const nalgebra_vector3_f64 *vec_ptr_1,
+                                           const nalgebra_vector3_f64 *vec_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *vector_subtract(const nalgebra_vector3_f64 *vec_ptr_1,
+                                      const nalgebra_vector3_f64 *vec_ptr_2);
 
 /**
  * Computes the dot product of two vectors
@@ -1194,7 +1405,12 @@ Vector3_f64 *vector_subtract(const Vector3_f64 *vec_ptr_1, const Vector3_f64 *ve
  * The caller must remember to free the vector memory of the input vectors
  * when finished with them using the free_vector_memory FFI function
  */
-double vector_dot_product(const Vector3_f64 *vec_ptr_1, const Vector3_f64 *vec_ptr_2);
+double viam_vector_dot_product(const nalgebra_vector3_f64 *vec_ptr_1,
+                               const nalgebra_vector3_f64 *vec_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+double vector_dot_product(const nalgebra_vector3_f64 *vec_ptr_1,
+                          const nalgebra_vector3_f64 *vec_ptr_2);
 
 /**
  * Computes the cross product of two vectors and returns
@@ -1205,7 +1421,12 @@ double vector_dot_product(const Vector3_f64 *vec_ptr_1, const Vector3_f64 *vec_p
  * The caller must remember to free the vector memory of *both* the input and
  * output vectors when finished with them using the free_vector_memory FFI function
  */
-Vector3_f64 *vector_cross_product(Vector3_f64 *vec_ptr_1, Vector3_f64 *vec_ptr_2);
+nalgebra_vector3_f64 *viam_vector_cross_product(nalgebra_vector3_f64 *vec_ptr_1,
+                                                nalgebra_vector3_f64 *vec_ptr_2);
+
+/// @deprecated please use `viam_`-prefixed function instead
+nalgebra_vector3_f64 *vector_cross_product(nalgebra_vector3_f64 *vec_ptr_1,
+                                           nalgebra_vector3_f64 *vec_ptr_2);
 
 /**
  * Free memory of an array of vector components at the given address.
@@ -1215,6 +1436,9 @@ Vector3_f64 *vector_cross_product(Vector3_f64 *vec_ptr_1, Vector3_f64 *vec_ptr_2
  * Outer processes that request the components of a vector should call this function
  * to free the memory allocated to the array once finished
  */
+void viam_free_vector_components(double *ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
 void free_vector_components(double *ptr);
 
 #ifdef __cplusplus

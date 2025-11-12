@@ -22,9 +22,15 @@ pub(crate) fn to_raw_pointer(vec: Vector3<f64>) -> *mut Vector3<f64> {
 /// the caller must remember to free the vector memory using the
 /// free_vector_memory FFI function
 #[no_mangle]
-pub extern "C" fn new_vector3(x: f64, y: f64, z: f64) -> *mut Vector3<f64> {
+pub extern "C" fn viam_new_vector3(x: f64, y: f64, z: f64) -> *mut Vector3<f64> {
     let new_vec = Vector3::new(x, y, z);
     to_raw_pointer(new_vec)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn new_vector3(x: f64, y: f64, z: f64) -> *mut Vector3<f64> {
+    viam_new_vector3(x, y, z)
 }
 
 /// Free memory at the address of the vector pointer.
@@ -33,11 +39,17 @@ pub extern "C" fn new_vector3(x: f64, y: f64, z: f64) -> *mut Vector3<f64> {
 /// Outer processes that work with Vectors via the FFI interface MUST remember
 /// to call this function when finished with a vector
 #[no_mangle]
-pub unsafe extern "C" fn free_vector_memory(ptr: *mut Vector3<f64>) {
+pub unsafe extern "C" fn viam_free_vector_memory(ptr: *mut Vector3<f64>) {
     if ptr.is_null() {
         return;
     }
     let _ = Box::from_raw(ptr);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_vector_memory(ptr: *mut Vector3<f64>) {
+    viam_free_vector_memory(ptr)
 }
 
 /// Get the components of a vector as a list of C doubles, the order of the
@@ -48,10 +60,18 @@ pub unsafe extern "C" fn free_vector_memory(ptr: *mut Vector3<f64>) {
 /// When finished with the underlying vector, the caller must remember to
 /// free the vector memory using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_get_components(vec_ptr: *const Vector3<f64>) -> *const c_double {
+pub unsafe extern "C" fn viam_vector_get_components(
+    vec_ptr: *const Vector3<f64>,
+) -> *const c_double {
     null_pointer_check!(vec_ptr);
     let components: [c_double; 3] = [(&(*vec_ptr))[0], (&(*vec_ptr))[1], (&(*vec_ptr))[2]];
     Box::into_raw(Box::new(components)) as *const _
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_get_components(vec_ptr: *const Vector3<f64>) -> *const c_double {
+    viam_vector_get_components(vec_ptr)
 }
 
 /// Set the x component of an existing vector stored at the address
@@ -62,9 +82,15 @@ pub unsafe extern "C" fn vector_get_components(vec_ptr: *const Vector3<f64>) -> 
 /// When finished with the underlying vector, the caller must remember to
 /// free the vector memory using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_set_x(vec_ptr: *mut Vector3<f64>, x_val: f64) {
+pub unsafe extern "C" fn viam_vector_set_x(vec_ptr: *mut Vector3<f64>, x_val: f64) {
     null_pointer_check!(vec_ptr);
     (&mut (*vec_ptr))[0] = x_val;
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_set_x(vec_ptr: *mut Vector3<f64>, x_val: f64) {
+    viam_vector_set_x(vec_ptr, x_val)
 }
 
 /// Set the y component of an existing vector stored at the address
@@ -75,9 +101,15 @@ pub unsafe extern "C" fn vector_set_x(vec_ptr: *mut Vector3<f64>, x_val: f64) {
 /// When finished with the underlying vector, the caller must remember to
 /// free the vector memory using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_set_y(vec_ptr: *mut Vector3<f64>, y_val: f64) {
+pub unsafe extern "C" fn viam_vector_set_y(vec_ptr: *mut Vector3<f64>, y_val: f64) {
     null_pointer_check!(vec_ptr);
     (&mut (*vec_ptr))[1] = y_val;
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_set_y(vec_ptr: *mut Vector3<f64>, y_val: f64) {
+    viam_vector_set_y(vec_ptr, y_val)
 }
 
 /// Set the z component of an existing vector stored at the address
@@ -88,9 +120,15 @@ pub unsafe extern "C" fn vector_set_y(vec_ptr: *mut Vector3<f64>, y_val: f64) {
 /// When finished with the underlying vector, the caller must remember to
 /// free the vector memory using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_set_z(vec_ptr: *mut Vector3<f64>, z_val: f64) {
+pub unsafe extern "C" fn viam_vector_set_z(vec_ptr: *mut Vector3<f64>, z_val: f64) {
     null_pointer_check!(vec_ptr);
     (&mut (*vec_ptr))[2] = z_val;
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_set_z(vec_ptr: *mut Vector3<f64>, z_val: f64) {
+    viam_vector_set_z(vec_ptr, z_val)
 }
 
 /// Normalizes an existing vector stored at the address of
@@ -101,9 +139,15 @@ pub unsafe extern "C" fn vector_set_z(vec_ptr: *mut Vector3<f64>, z_val: f64) {
 /// When finished with the underlying vector, the caller must remember to
 /// free the vector memory using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn normalize_vector(vec_ptr: *mut Vector3<f64>) {
+pub unsafe extern "C" fn viam_normalize_vector(vec_ptr: *mut Vector3<f64>) {
     null_pointer_check!(vec_ptr);
     (*vec_ptr).normalize_mut();
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn normalize_vector(vec_ptr: *mut Vector3<f64>) {
+    viam_normalize_vector(vec_ptr)
 }
 
 /// Initializes a normalized copy of a vector stored at the
@@ -115,10 +159,18 @@ pub unsafe extern "C" fn normalize_vector(vec_ptr: *mut Vector3<f64>) {
 /// The caller must remember to free the vector memory of *both* the input and
 /// output vectors when finished with them using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_get_normalized(vec_ptr: *const Vector3<f64>) -> *mut Vector3<f64> {
+pub unsafe extern "C" fn viam_vector_get_normalized(
+    vec_ptr: *const Vector3<f64>,
+) -> *mut Vector3<f64> {
     null_pointer_check!(vec_ptr);
     let vec = (*vec_ptr).normalize();
     to_raw_pointer(vec)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_get_normalized(vec_ptr: *const Vector3<f64>) -> *mut Vector3<f64> {
+    viam_vector_get_normalized(vec_ptr)
 }
 
 /// Scales an existing vector stored at the address of
@@ -129,9 +181,15 @@ pub unsafe extern "C" fn vector_get_normalized(vec_ptr: *const Vector3<f64>) -> 
 /// When finished with the underlying vector, the caller must remember to
 /// free the vector memory using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn scale_vector(vec_ptr: *mut Vector3<f64>, factor: f64) {
+pub unsafe extern "C" fn viam_scale_vector(vec_ptr: *mut Vector3<f64>, factor: f64) {
     null_pointer_check!(vec_ptr);
     (*vec_ptr).scale_mut(factor);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn scale_vector(vec_ptr: *mut Vector3<f64>, factor: f64) {
+    viam_scale_vector(vec_ptr, factor)
 }
 
 /// Initializes a scaled copy of a vector stored at the
@@ -143,13 +201,22 @@ pub unsafe extern "C" fn scale_vector(vec_ptr: *mut Vector3<f64>, factor: f64) {
 /// The caller must remember to free the vector memory of *both* the input and
 /// output vectors when finished with them using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_get_scaled(
+pub unsafe extern "C" fn viam_vector_get_scaled(
     vec_ptr: *const Vector3<f64>,
     factor: f64,
 ) -> *mut Vector3<f64> {
     null_pointer_check!(vec_ptr);
     let vec = (*vec_ptr).scale(factor);
     to_raw_pointer(vec)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_get_scaled(
+    vec_ptr: *const Vector3<f64>,
+    factor: f64,
+) -> *mut Vector3<f64> {
+    viam_vector_get_scaled(vec_ptr, factor)
 }
 
 /// Adds two vectors and returns a pointer to the
@@ -160,13 +227,22 @@ pub unsafe extern "C" fn vector_get_scaled(
 /// The caller must remember to free the vector memory of *both* the input and
 /// output vectors when finished with them using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_add(
+pub unsafe extern "C" fn viam_vector_add(
     vec_ptr_1: *const Vector3<f64>,
     vec_ptr_2: *const Vector3<f64>,
 ) -> *mut Vector3<f64> {
     null_pointer_check!(vec_ptr_1);
     null_pointer_check!(vec_ptr_2);
     to_raw_pointer((*vec_ptr_1) + (*vec_ptr_2))
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_add(
+    vec_ptr_1: *const Vector3<f64>,
+    vec_ptr_2: *const Vector3<f64>,
+) -> *mut Vector3<f64> {
+    viam_vector_add(vec_ptr_1, vec_ptr_2)
 }
 
 /// Subtracts two vectors and returns a pointer to the
@@ -177,13 +253,22 @@ pub unsafe extern "C" fn vector_add(
 /// The caller must remember to free the vector memory of *both* the input and
 /// output vectors when finished with them using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_subtract(
+pub unsafe extern "C" fn viam_vector_subtract(
     vec_ptr_1: *const Vector3<f64>,
     vec_ptr_2: *const Vector3<f64>,
 ) -> *mut Vector3<f64> {
     null_pointer_check!(vec_ptr_1);
     null_pointer_check!(vec_ptr_2);
     to_raw_pointer((*vec_ptr_1) - (*vec_ptr_2))
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_subtract(
+    vec_ptr_1: *const Vector3<f64>,
+    vec_ptr_2: *const Vector3<f64>,
+) -> *mut Vector3<f64> {
+    viam_vector_subtract(vec_ptr_1, vec_ptr_2)
 }
 
 /// Computes the dot product of two vectors
@@ -193,13 +278,22 @@ pub unsafe extern "C" fn vector_subtract(
 /// The caller must remember to free the vector memory of the input vectors
 /// when finished with them using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_dot_product(
+pub unsafe extern "C" fn viam_vector_dot_product(
     vec_ptr_1: *const Vector3<f64>,
     vec_ptr_2: *const Vector3<f64>,
 ) -> f64 {
     null_pointer_check!(vec_ptr_1, f64::NAN);
     null_pointer_check!(vec_ptr_2, f64::NAN);
     (*vec_ptr_1).dot(&*vec_ptr_2)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_dot_product(
+    vec_ptr_1: *const Vector3<f64>,
+    vec_ptr_2: *const Vector3<f64>,
+) -> f64 {
+    viam_vector_dot_product(vec_ptr_1, vec_ptr_2)
 }
 
 /// Computes the cross product of two vectors and returns
@@ -210,7 +304,7 @@ pub unsafe extern "C" fn vector_dot_product(
 /// The caller must remember to free the vector memory of *both* the input and
 /// output vectors when finished with them using the free_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn vector_cross_product(
+pub unsafe extern "C" fn viam_vector_cross_product(
     vec_ptr_1: *mut Vector3<f64>,
     vec_ptr_2: *mut Vector3<f64>,
 ) -> *mut Vector3<f64> {
@@ -220,6 +314,15 @@ pub unsafe extern "C" fn vector_cross_product(
     to_raw_pointer(vec)
 }
 
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn vector_cross_product(
+    vec_ptr_1: *mut Vector3<f64>,
+    vec_ptr_2: *mut Vector3<f64>,
+) -> *mut Vector3<f64> {
+    viam_vector_cross_product(vec_ptr_1, vec_ptr_2)
+}
+
 /// Free memory of an array of vector components at the given address.
 ///
 /// # Safety
@@ -227,10 +330,16 @@ pub unsafe extern "C" fn vector_cross_product(
 /// Outer processes that request the components of a vector should call this function
 /// to free the memory allocated to the array once finished
 #[no_mangle]
-pub unsafe extern "C" fn free_vector_components(ptr: *mut c_double) {
+pub unsafe extern "C" fn viam_free_vector_components(ptr: *mut c_double) {
     if ptr.is_null() {
         return;
     }
     let ptr = ptr as *mut [c_double; 3];
     let _: Box<[c_double; 3]> = Box::from_raw(ptr);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_vector_components(ptr: *mut c_double) {
+    viam_free_vector_components(ptr)
 }
