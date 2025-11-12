@@ -240,8 +240,10 @@ jobs:
   create_canonical_header:
     needs: [builds_macos, build_linux, build_windows]
     runs-on: ubuntu-latest
-    # pick one arbitrarily as the canonical header file
-    run: mv builds/viam_rust_utils-macosx_arm64.h builds/viam_rust_utils.h
+    steps:
+      # pick one arbitrarily as the canonical header file
+      - name: create canonical header
+        run: mv builds/viam_rust_utils-macosx_arm64.h builds/viam_rust_utils.h
 
   compare_headers:
     needs: [create_canonical_header]
