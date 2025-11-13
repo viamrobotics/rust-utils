@@ -65,10 +65,16 @@ impl DialFfi {
 }
 /// Initialize a tokio runtime to run a gRPC client/sever, user should call this function before trying to dial to a Robot
 /// Returns a pointer to a [`DialFfi`]
-#[export_name = "viam_init_rust_runtime"]
-pub extern "C" fn init_rust_runtime() -> Box<DialFfi> {
+#[no_mangle]
+pub extern "C" fn viam_init_rust_runtime() -> Box<DialFfi> {
     let _ = tracing_subscriber::fmt::try_init();
     Box::new(DialFfi::new())
+}
+
+#[no_mangle]
+#[deprecated]
+pub extern "C" fn init_rust_runtime() -> Box<DialFfi> {
+    viam_init_rust_runtime()
 }
 
 fn dial_without_cred(
@@ -118,8 +124,8 @@ fn dial_with_cred(
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
 /// * `c_timeout` a float, set how many seconds we should try to dial before timing out
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
-#[export_name = "viam_dial"]
-pub unsafe extern "C" fn dial(
+#[no_mangle]
+pub unsafe extern "C" fn viam_dial(
     c_uri: *const c_char,
     c_entity: *const c_char,
     c_type: *const c_char,
@@ -273,19 +279,47 @@ pub unsafe extern "C" fn dial(
     path.into_raw()
 }
 
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn dial(
+    c_uri: *const c_char,
+    c_entity: *const c_char,
+    c_type: *const c_char,
+    c_payload: *const c_char,
+    c_allow_insec: bool,
+    c_timeout: f32,
+    rt_ptr: Option<&mut DialFfi>,
+) -> *mut c_char {
+    viam_dial(
+        c_uri,
+        c_entity,
+        c_type,
+        c_payload,
+        c_allow_insec,
+        c_timeout,
+        rt_ptr,
+    )
+}
+
 /// This function must be used to free the path returned by the [`dial`] function
 /// # Safety
 ///
 /// The function must not be called more than once with the same pointer
 /// # Arguments
 /// * `c_char` a pointer to the string returned by [`dial`]
-#[export_name = "viam_free_string"]
-pub unsafe extern "C" fn free_string(s: *mut c_char) {
+#[no_mangle]
+pub unsafe extern "C" fn viam_free_string(s: *mut c_char) {
     if s.is_null() {
         return;
     }
     log::debug!("freeing string: {s:?}");
     let _ = CString::from_raw(s);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_string(s: *mut c_char) {
+    viam_free_string(s)
 }
 
 /// This function must be used the free a rust runtime returned by [`init_rust_runtime`] the function will signal any
@@ -295,8 +329,8 @@ pub unsafe extern "C" fn free_string(s: *mut c_char) {
 /// The function must not be called more than once with the same pointer
 /// # Arguments
 /// * `rt_prt` a pointer to the string returned by [`init_rust_runtime`]
-#[export_name = "viam_free_rust_runtime"]
-pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
+#[no_mangle]
+pub extern "C" fn viam_free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
     let mut ctx = match rt_ptr {
         Some(ctx) => ctx,
         None => {
@@ -322,4 +356,10 @@ pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
     }
     log::debug!("Freeing rust runtime");
     0
+}
+
+#[no_mangle]
+#[deprecated]
+pub extern "C" fn free_rust_runtime(rt_ptr: Option<Box<DialFfi>>) -> i32 {
+    viam_free_rust_runtime(rt_ptr)
 }

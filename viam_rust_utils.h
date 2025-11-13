@@ -526,6 +526,9 @@ extern "C" {
  */
 struct viam_dial_ffi *viam_init_rust_runtime(void);
 
+/// @deprecated please use `viam_`-prefixed function instead
+struct viam_dial_ffi *init_rust_runtime(void);
+
 /**
  * Returns a path to a proxy to a robot
  * # Safety
@@ -549,6 +552,15 @@ char *viam_dial(const char *c_uri,
                 float c_timeout,
                 struct viam_dial_ffi *rt_ptr);
 
+/// @deprecated please use `viam_`-prefixed function instead
+char *dial(const char *c_uri,
+           const char *c_entity,
+           const char *c_type,
+           const char *c_payload,
+           bool c_allow_insec,
+           float c_timeout,
+           struct viam_dial_ffi *rt_ptr);
+
 /**
  * This function must be used to free the path returned by the [`dial`] function
  * # Safety
@@ -558,6 +570,8 @@ char *viam_dial(const char *c_uri,
  * * `c_char` a pointer to the string returned by [`dial`]
  */
 void viam_free_string(char *s);
+
+/// @deprecated please use `viam_`-prefixed function instead void free_string(char *s);
 
 /**
  * This function must be used the free a rust runtime returned by [`init_rust_runtime`] the function will signal any
@@ -569,6 +583,9 @@ void viam_free_string(char *s);
  * * `rt_prt` a pointer to the string returned by [`init_rust_runtime`]
  */
 int32_t viam_free_rust_runtime(struct viam_dial_ffi *rt_ptr);
+
+/// @deprecated please use `viam_`-prefixed function instead
+int32_t free_rust_runtime(struct viam_dial_ffi *rt_ptr);
 
 /**
  * Free memory at the address of the axis angle pointer.
