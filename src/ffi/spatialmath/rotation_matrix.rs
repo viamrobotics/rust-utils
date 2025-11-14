@@ -17,11 +17,17 @@ fn to_raw_pointer(rot: &Rotation3<f64>) -> *mut Rotation3<f64> {
 ///
 /// # Safety
 #[no_mangle]
-pub unsafe extern "C" fn free_rotation_matrix_memory(ptr: *mut Rotation3<f64>) {
+pub unsafe extern "C" fn viam_free_rotation_matrix_memory(ptr: *mut Rotation3<f64>) {
     if ptr.is_null() {
         return;
     }
     let _ = Box::from_raw(ptr);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_rotation_matrix_memory(ptr: *mut Rotation3<f64>) {
+    viam_free_rotation_matrix_memory(ptr)
 }
 
 /// Initialize a 3D rotation matrix from raw components and retrieve the C pointer
@@ -34,11 +40,19 @@ pub unsafe extern "C" fn free_rotation_matrix_memory(ptr: *mut Rotation3<f64>) {
 /// the caller must remember to free the rotation matrix memory using the
 /// free_rotation_matrix_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn new_rotation_matrix(elements: *const [f64; 9]) -> *mut Rotation3<f64> {
+pub unsafe extern "C" fn viam_new_rotation_matrix(
+    elements: *const [f64; 9],
+) -> *mut Rotation3<f64> {
     null_pointer_check!(elements);
     let matrix = Matrix3::from_vec(Vec::from(*elements));
     let rot = Rotation3::from_matrix_unchecked(matrix);
     to_raw_pointer(&rot)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn new_rotation_matrix(elements: *const [f64; 9]) -> *mut Rotation3<f64> {
+    viam_new_rotation_matrix(elements)
 }
 
 /// Converts a quaternion into a 3D rotation matrix (a Rotation<f64, 3>
@@ -51,11 +65,19 @@ pub unsafe extern "C" fn new_rotation_matrix(elements: *const [f64; 9]) -> *mut 
 /// free_quaternion_memory FFI function and the rotation matrix memory using
 /// the free_rotation_matrix_memory function
 #[no_mangle]
-pub unsafe extern "C" fn rotation_matrix_from_quaternion(
+pub unsafe extern "C" fn viam_rotation_matrix_from_quaternion(
     quat: *const Quaternion<f64>,
 ) -> *mut Rotation3<f64> {
     null_pointer_check!(quat);
     let unit_quat = UnitQuaternion::new_normalize(*quat);
     let rot = unit_quat.to_rotation_matrix();
     to_raw_pointer(&rot)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn rotation_matrix_from_quaternion(
+    quat: *const Quaternion<f64>,
+) -> *mut Rotation3<f64> {
+    viam_rotation_matrix_from_quaternion(quat)
 }

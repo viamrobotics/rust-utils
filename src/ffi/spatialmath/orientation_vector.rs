@@ -29,11 +29,17 @@ fn to_raw_pointer(o_vec: &OrientationVector) -> *mut OrientationVector {
 ///
 /// # Safety
 #[no_mangle]
-pub unsafe extern "C" fn free_orientation_vector_memory(ptr: *mut OrientationVector) {
+pub unsafe extern "C" fn viam_free_orientation_vector_memory(ptr: *mut OrientationVector) {
     if ptr.is_null() {
         return;
     }
     let _ = Box::from_raw(ptr);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_orientation_vector_memory(ptr: *mut OrientationVector) {
+    viam_free_orientation_vector_memory(ptr)
 }
 
 /// Initialize an orientation vector from raw components and retrieve the C pointer
@@ -45,7 +51,7 @@ pub unsafe extern "C" fn free_orientation_vector_memory(ptr: *mut OrientationVec
 /// the caller must remember to free the orientation vector memory using the
 /// free_orientation_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn new_orientation_vector(
+pub unsafe extern "C" fn viam_new_orientation_vector(
     o_x: f64,
     o_y: f64,
     o_z: f64,
@@ -53,6 +59,17 @@ pub unsafe extern "C" fn new_orientation_vector(
 ) -> *mut OrientationVector {
     let o_vec = OrientationVector::new(o_x, o_y, o_z, theta);
     to_raw_pointer(&o_vec)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn new_orientation_vector(
+    o_x: f64,
+    o_y: f64,
+    o_z: f64,
+    theta: f64,
+) -> *mut OrientationVector {
+    viam_new_orientation_vector(o_x, o_y, o_z, theta)
 }
 
 /// Get the components of an orientation vector as a list of C doubles, the order of the
@@ -64,7 +81,7 @@ pub unsafe extern "C" fn new_orientation_vector(
 /// the caller must remember to free the orientation_vector memory using the
 /// free_orientation_vector_memory FFI function
 #[no_mangle]
-pub unsafe extern "C" fn orientation_vector_get_components(
+pub unsafe extern "C" fn viam_orientation_vector_get_components(
     ov_ptr: *const OrientationVector,
 ) -> *const c_double {
     null_pointer_check!(ov_ptr);
@@ -77,6 +94,14 @@ pub unsafe extern "C" fn orientation_vector_get_components(
     Box::into_raw(Box::new(components)) as *const _
 }
 
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn orientation_vector_get_components(
+    ov_ptr: *const OrientationVector,
+) -> *const c_double {
+    viam_orientation_vector_get_components(ov_ptr)
+}
+
 /// Converts a quaternion into an orientation vector.
 ///
 /// # Safety
@@ -86,12 +111,20 @@ pub unsafe extern "C" fn orientation_vector_get_components(
 /// free_quaternion_memory FFI function and the orientation-vector memory using
 /// the free_orientation_vector_memory function
 #[no_mangle]
-pub unsafe extern "C" fn orientation_vector_from_quaternion(
+pub unsafe extern "C" fn viam_orientation_vector_from_quaternion(
     quat_ptr: *const Quaternion<f64>,
 ) -> *mut OrientationVector {
     null_pointer_check!(quat_ptr);
     let o_vec: OrientationVector = (*quat_ptr).into();
     to_raw_pointer(&o_vec)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn orientation_vector_from_quaternion(
+    quat_ptr: *const Quaternion<f64>,
+) -> *mut OrientationVector {
+    viam_orientation_vector_from_quaternion(quat_ptr)
 }
 
 /// Free memory of an array of orientation vector components at the given address.
@@ -101,11 +134,17 @@ pub unsafe extern "C" fn orientation_vector_from_quaternion(
 /// Outer processes that request the components of a orientation vector should call this function
 /// to free the memory allocated to the array once finished
 #[no_mangle]
-pub unsafe extern "C" fn free_orientation_vector_components(ptr: *mut c_double) {
+pub unsafe extern "C" fn viam_free_orientation_vector_components(ptr: *mut c_double) {
     if ptr.is_null() {
         return;
     }
 
     let ptr = ptr as *mut [c_double; 4];
     let _: Box<[c_double; 4]> = Box::from_raw(ptr);
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_orientation_vector_components(ptr: *mut c_double) {
+    viam_free_orientation_vector_components(ptr)
 }

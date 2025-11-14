@@ -21,13 +21,18 @@ fn to_raw_pointer(aa: &AxisAngle) -> *mut AxisAngle {
 /// Outer processes that work with axis angles via the FFI interface MUST remember
 /// to call this function when finished with an axis angle instance
 #[no_mangle]
-pub unsafe extern "C" fn free_axis_angles_memory(ptr: *mut AxisAngle) {
+pub unsafe extern "C" fn viam_free_axis_angles_memory(ptr: *mut AxisAngle) {
     if ptr.is_null() {
         return;
     }
     let _ = Box::from_raw(ptr);
 }
 
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn free_axis_angles_memory(ptr: *mut AxisAngle) {
+    viam_free_axis_angles_memory(ptr)
+}
 /// Initialize axis angle from raw components and retrieve the C pointer
 /// to its address.
 ///
@@ -37,8 +42,14 @@ pub unsafe extern "C" fn free_axis_angles_memory(ptr: *mut AxisAngle) {
 /// the caller must remember to free the axis angle memory using the
 /// free_axis_angles_memory FFI function
 #[no_mangle]
-pub extern "C" fn new_axis_angle(x: f64, y: f64, z: f64, theta: f64) -> *mut AxisAngle {
+pub extern "C" fn viam_new_axis_angle(x: f64, y: f64, z: f64, theta: f64) -> *mut AxisAngle {
     to_raw_pointer(&AxisAngle::new(x, y, z, theta))
+}
+
+#[no_mangle]
+#[deprecated]
+pub extern "C" fn new_axis_angle(x: f64, y: f64, z: f64, theta: f64) -> *mut AxisAngle {
+    viam_new_axis_angle(x, y, z, theta)
 }
 
 /// Converts a quaternion into an R4 axis angle. The return value is a pointer
@@ -54,7 +65,7 @@ pub extern "C" fn new_axis_angle(x: f64, y: f64, z: f64, theta: f64) -> *mut Axi
 /// free_quaternion_memory FFI function and the axis angle memory using
 /// the free_array_memory function
 #[no_mangle]
-pub unsafe extern "C" fn axis_angle_from_quaternion(
+pub unsafe extern "C" fn viam_axis_angle_from_quaternion(
     quat: *const Quaternion<f64>,
 ) -> *mut AxisAngle {
     null_pointer_check!(quat);
@@ -63,4 +74,12 @@ pub unsafe extern "C" fn axis_angle_from_quaternion(
         Err(_err) => AxisAngle::new(0.0, 0.0, 0.0, 0.0),
     };
     to_raw_pointer(&axis_angle)
+}
+
+#[no_mangle]
+#[deprecated]
+pub unsafe extern "C" fn axis_angle_from_quaternion(
+    quat: *const Quaternion<f64>,
+) -> *mut AxisAngle {
+    viam_axis_angle_from_quaternion(quat)
 }
