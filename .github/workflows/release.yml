@@ -247,45 +247,43 @@ jobs:
           name: builds
           pattern: builds-*
 
-  create_canonical_header:
-    needs: [build_macos, build_linux, build_windows, merge]
-    runs-on: ubuntu-latest
-    steps:
-      # pick one arbitrarily as the canonical header file
-      - name: create canonical header
-        run: mv builds/viam_rust_utils-macosx_arm64.h builds/viam_rust_utils.h
-
-  compare_headers:
-    needs: [create_canonical_header]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - platform: macosx_x86_64
-          - platform: linux_aarch64
-          - platform: linux_x86_64
-          - platform: musllinux_x86_64
-          - platform: musllinux_aarch64
-          - platform: linux_armv6l
-          - platform: musllinux_armv6l
-          - platform: musllinux_armv7l
-          - platform: musllinux_x86
-          - platform: windows_x86_64
-    steps:
-      - name: compare files
-        run: cmp builds/viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
-      - name: remove duplicate header
-        run: rm builds/viam_rust_utils-${{ matrix.platform }}.h
-
   release:
-    needs: [prepare, merge, compare_headers]
+    needs: [prepare, merge]
     if: github.repository_owner == 'viamrobotics'
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/download-artifact@v4
 
+      - name: Create canonical header
+        # pick one arbitrarily as the canonical header file
+        run: mv builds/viam_rust_utils-macosx_arm64.h builds/viam_rust_utils.h
+
+      - name: compare headers
+        # TODO(ethan) it's really annoying that we are listing all these out instead of using
+        # a matrix, but if we use a matrix then the download and release steps will get duplicated,
+        # and if we put those in a different job then they'll be lost when we do this cmp and rm
+        run: |
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-macosx_x86_64.h
+          rm builds/viam_rust_utils-macosx_x86_64.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-linux_aarch64.h
+          rm builds/viam_rust_utils-linux_aarch64.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-linux_x86_64.h
+          rm builds/viam_rust_utils-linux_x86_64.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-musllinux_x86_64.h
+          rm builds/viam_rust_utils-musllinux_x86_64.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-musllinux_aarch64.h
+          rm builds/viam_rust_utils-musllinux_aarch64.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-linux_armv6l.h
+          rm builds/viam_rust_utils-linux_armv6l.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-musllinux_armv6l.h
+          rm builds/viam_rust_utils-musllinux_armv6l.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-musllinux_armv7l.h
+          rm builds/viam_rust_utils-musllinux_armv7l.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-musllinux_x86.h
+          rm builds/viam_rust_utils-musllinux_x86.h
+          cmp builds/viam_rust_utils.h builds/viam_rust_utils-windows_x86_64.h
+          rm builds/viam_rust_utils-windows_x86_64.h
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
