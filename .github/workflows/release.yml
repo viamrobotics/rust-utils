@@ -237,8 +237,18 @@ jobs:
           name: builds-${{ matrix.platform }}
           path: builds/*
 
-  create_canonical_header:
+  merge:
     needs: [build_macos, build_linux, build_windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: builds
+          pattern: builds-*
+
+  create_canonical_header:
+    needs: [build_macos, build_linux, build_windows, merge]
     runs-on: ubuntu-latest
     steps:
       # pick one arbitrarily as the canonical header file
@@ -267,16 +277,6 @@ jobs:
         run: cmp builds/viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: remove duplicate header
         run: rm builds/viam_rust_utils-${{ matrix.platform }}.h
-
-  merge:
-    needs: [build_macos, build_linux, build_windows, compare_headers]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Merge artifacts
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: builds
-          pattern: builds-*
 
   release:
     needs: [prepare, merge]
