@@ -279,7 +279,7 @@ jobs:
         run: rm builds/viam_rust_utils-${{ matrix.platform }}.h
 
   release:
-    needs: [prepare, merge]
+    needs: [prepare, merge, compare_headers]
     if: github.repository_owner == 'viamrobotics'
     runs-on: ubuntu-latest
 
