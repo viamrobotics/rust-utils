@@ -92,11 +92,14 @@ jobs:
       - name: Build
         run: |
           cargo build --release --target=${{ matrix.target }}
+      - name: build header file
+        run: |
+          cargo install --force cbindgen
+          cbindgen --config cbindgen.toml --output builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Copy
         run: |
           cp target/${{ matrix.target }}/release/libviam_rust_utils.dylib builds/libviam_rust_utils-${{ matrix.platform }}.dylib
           cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
-          cp viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Correct install path
         run: |
           install_name_tool -id "@rpath/libviam_rust_utils.dylib" builds/libviam_rust_utils-${{ matrix.platform }}.dylib
@@ -192,11 +195,14 @@ jobs:
         run: |
           source "$HOME/.cargo/env"
           cargo build --release --locked --target=${{ matrix.target }}
+      - name: build header file
+        run: |
+          cargo install --force cbindgen
+          cbindgen --config cbindgen.toml --output builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Copy
         run: |
           cp target/${{ matrix.target }}/release/libviam_rust_utils.so builds/libviam_rust_utils-${{ matrix.platform }}.so
           cp target/${{ matrix.target }}/release/libviam_rust_utils.a builds/libviam_rust_utils-${{ matrix.platform }}.a
-          cp viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -226,11 +232,14 @@ jobs:
       - name: Build
         run: |
           cargo build --release
+      - name: build header file
+        run: |
+          cargo install --force cbindgen
+          cbindgen --config cbindgen.toml --output builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Copy
         run: |
           cp target/release/viam_rust_utils.dll builds/libviam_rust_utils-${{ matrix.platform }}.dll
           cp target/release/viam_rust_utils.lib builds/viam_rust_utils-${{ matrix.platform }}.lib
-          cp viam_rust_utils.h builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
