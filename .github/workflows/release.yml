@@ -197,6 +197,7 @@ jobs:
           cargo build --release --locked --target=${{ matrix.target }}
       - name: build header file
         run: |
+          source "$HOME/.cargo/env"
           cargo install --force cbindgen
           cbindgen --config cbindgen.toml --output builds/viam_rust_utils-${{ matrix.platform }}.h
       - name: Copy
