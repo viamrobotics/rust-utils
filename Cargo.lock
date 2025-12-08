@@ -3827,7 +3827,7 @@ dependencies = [
 
 [[package]]
 name = "viam-rust-utils"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "async-stream 0.3.6",
