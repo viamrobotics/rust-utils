@@ -196,6 +196,7 @@ jobs:
           source "$HOME/.cargo/env"
           cargo build --release --locked --target=${{ matrix.target }}
       - name: build header file
+        shell: bash
         run: |
           source "$HOME/.cargo/env"
           cargo install --force cbindgen
