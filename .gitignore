@@ -10,3 +10,7 @@ bin/
 tests/goutils/
 
 viam_rust_utils.h
+
+# Claude Code
+.claude/worktrees
+.claude/settings.local.json
