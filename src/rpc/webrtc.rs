@@ -21,6 +21,7 @@ use webrtc::{
     interceptor::registry::Registry,
     peer_connection::{
         configuration::RTCConfiguration, peer_connection_state::RTCPeerConnectionState,
+        policy::ice_transport_policy::RTCIceTransportPolicy,
         sdp::session_description::RTCSessionDescription, signaling_state::RTCSignalingState,
         RTCPeerConnection,
     },
@@ -37,6 +38,16 @@ pub(crate) struct Options {
     pub(crate) config: RTCConfiguration,
     pub(crate) signaling_insecure: bool,
     pub(crate) signaling_server_address: String,
+    /// Forces ICE transport policy to relay-only, so only TURN candidates are used.
+    /// Useful for testing relay connectivity through a TURN server.
+    pub(crate) force_relay: bool,
+    /// Strips TURN servers from the ICE configuration so only host and server-reflexive
+    /// candidates are used. Useful for testing direct connectivity without relay fallback.
+    pub(crate) force_p2p: bool,
+    /// When set, retains only ICE servers whose URLs contain this host string.
+    /// Applied after the full ICE server list is assembled. Useful for isolating
+    /// a specific TURN server (e.g. coturn) when multiple are provided.
+    pub(crate) relay_host_filter: Option<String>,
 }
 
 impl fmt::Debug for Options {
@@ -66,7 +77,8 @@ impl Options {
         // TODO(RSDK-235): remove hard coding of signaling server address and prefer SRV lookup instead
         let path = uri.to_string();
         if path.contains(".viam.cloud") {
-            Some(("app.viam.com:443".to_string(), true))
+            // Hard-code localhost:8081 into here so that we use the local version of app.
+            Some(("localhost:8081".to_string(), false))
         } else if path.contains(".robot.viaminternal") {
             Some(("app.viaminternal:8089".to_string(), false))
         } else {
@@ -94,6 +106,58 @@ impl Options {
         self.disable_webrtc = true;
         self
     }
+
+    /// Forces ICE transport policy to relay-only (only TURN candidates considered).
+    pub(crate) fn force_relay(mut self) -> Self {
+        self.force_relay = true;
+        self
+    }
+
+    /// Strips TURN servers from the ICE config so only host/srflx candidates are used.
+    pub(crate) fn force_p2p(mut self) -> Self {
+        self.force_p2p = true;
+        self
+    }
+
+    /// Retains only ICE servers whose URLs contain the given host string, applied after
+    /// the full ICE server list is assembled. Useful for isolating a specific TURN server.
+    pub(crate) fn relay_host_filter(mut self, host: String) -> Self {
+        self.relay_host_filter = Some(host);
+        self
+    }
+}
+
+/// Returns true if any of the ICE server's URLs use a TURN scheme.
+pub(crate) fn ice_server_has_turn(s: &RTCIceServer) -> bool {
+    s.urls
+        .iter()
+        .any(|url| url.starts_with("turn:") || url.starts_with("turns:"))
+}
+
+/// Retains only ICE servers whose URLs contain the given host string.
+pub(crate) fn filter_ice_servers_by_host(
+    mut config: RTCConfiguration,
+    host: &str,
+) -> RTCConfiguration {
+    config.ice_servers.retain(|s| s.urls.iter().any(|url| url.contains(host)));
+    config
+}
+
+/// Applies force_relay or force_p2p options to a config and optional server config.
+pub(crate) fn apply_ice_policy(
+    mut config: RTCConfiguration,
+    mut optional: Option<WebRtcConfig>,
+    force_relay: bool,
+    force_p2p: bool,
+) -> (RTCConfiguration, Option<WebRtcConfig>) {
+    if force_p2p {
+        optional = None;
+        config.ice_servers.retain(|s| !ice_server_has_turn(s));
+    }
+    if force_relay {
+        config.ice_transport_policy = RTCIceTransportPolicy::Relay;
+    }
+    (config, optional)
 }
 
 fn default_configuration() -> RTCConfiguration {

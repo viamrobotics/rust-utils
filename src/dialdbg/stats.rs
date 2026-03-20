@@ -25,7 +25,7 @@ impl fmt::Display for StatsReport {
                     writeln!(
                         f,
                         "\t\tnominated {:#?} ago",
-                        now.duration_since(cand.timestamp)
+                        now.checked_duration_since(cand.timestamp).unwrap_or_default()
                     )?;
                     writeln!(f, "\t\trelay protocol: {}", cand.relay_protocol)?;
                     writeln!(f, "\t\tnetwork type: {}", cand.network_type)?;

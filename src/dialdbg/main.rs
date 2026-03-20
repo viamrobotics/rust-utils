@@ -61,6 +61,30 @@ pub(crate) struct Args {
     /// URI to dial. Must be provided.
     #[arg(short, long, required(true), display_order(0))]
     uri: Option<String>,
+
+    /// Force ICE transport policy to relay-only (only TURN candidates). Implies WebRTC.
+    #[arg(long, action, conflicts_with("nowebrtc"), conflicts_with("force_p2p"))]
+    force_relay: bool,
+
+    /// Strip TURN servers so only host/srflx candidates are used. Implies WebRTC.
+    #[arg(long, action, conflicts_with("nowebrtc"), conflicts_with("force_relay"))]
+    force_p2p: bool,
+
+    /// Override the signaling server address used for WebRTC negotiation. Useful for
+    /// testing against a specific app deployment (e.g. a Cloud Run PR deploy).
+    #[arg(long, conflicts_with("nowebrtc"))]
+    signaling_server: Option<String>,
+
+    /// Disable mDNS discovery. Useful when the robot is on the same local network and
+    /// you want to test cloud relay without mDNS bypassing it.
+    #[arg(long, action)]
+    disable_mdns: bool,
+
+    /// Retain only ICE servers whose URLs contain this host string. Applied after the full
+    /// ICE server list is assembled. Useful for isolating a specific TURN server, e.g.
+    /// "--force-relay --relay-host 34.9.65.195" to route only through coturn.
+    #[arg(long, conflicts_with("nowebrtc"))]
+    relay_host: Option<String>,
 }
 
 async fn dial_grpc(
@@ -111,15 +135,34 @@ async fn dial_webrtc(
     credential: &str,
     credential_type: &str,
     entity: Option<String>,
+    force_relay: bool,
+    force_p2p: bool,
+    relay_host: Option<String>,
+    signaling_server: Option<String>,
+    disable_mdns: bool,
 ) -> Option<ViamChannel> {
     let dial_result = match credential {
         "" => {
-            dial::DialOptions::builder()
+            let mut b = dial::DialOptions::builder()
                 .uri(uri)
                 .without_credentials()
-                .allow_downgrade()
-                .connect()
-                .await
+                .allow_downgrade();
+            if force_relay {
+                b = b.force_relay();
+            }
+            if force_p2p {
+                b = b.force_p2p();
+            }
+            if let Some(host) = relay_host {
+                b = b.relay_host_filter(host);
+            }
+            if let Some(server) = signaling_server {
+                b = b.signaling_server(server);
+            }
+            if disable_mdns {
+                b = b.disable_mdns();
+            }
+            b.connect().await
         }
         _ => {
             let creds = dial::RPCCredentials::new(
@@ -127,12 +170,26 @@ async fn dial_webrtc(
                 credential_type.to_string(),
                 credential.to_string(),
             );
-            dial::DialOptions::builder()
+            let mut b = dial::DialOptions::builder()
                 .uri(uri)
                 .with_credentials(creds)
-                .allow_downgrade()
-                .connect()
-                .await
+                .allow_downgrade();
+            if force_relay {
+                b = b.force_relay();
+            }
+            if force_p2p {
+                b = b.force_p2p();
+            }
+            if let Some(host) = relay_host {
+                b = b.relay_host_filter(host);
+            }
+            if let Some(server) = signaling_server {
+                b = b.signaling_server(server);
+            }
+            if disable_mdns {
+                b = b.disable_mdns();
+            }
+            b.connect().await
         }
     };
 
@@ -287,6 +344,11 @@ pub(crate) async fn main_inner(args: Args) -> Result<()> {
             credential.as_str(),
             credential_type.as_str(),
             args.entity.clone(),
+            args.force_relay,
+            args.force_p2p,
+            args.relay_host.clone(),
+            args.signaling_server.clone(),
+            args.disable_mdns,
         )
         .await;
         let wrtc_res = parse::parse_webrtc_logs(log_path.clone(), &mut out)?;

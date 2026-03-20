@@ -193,6 +193,7 @@ pub struct DialOptions {
     disable_mdns: bool,
     allow_downgrade: bool,
     insecure: bool,
+    signaling_server_override: Option<String>,
 }
 #[derive(Clone)]
 pub struct WantsCredentials(());
@@ -234,6 +235,7 @@ impl DialOptions {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -252,6 +254,7 @@ impl DialBuilder<WantsUri> {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -268,6 +271,7 @@ impl DialBuilder<WantsCredentials> {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -282,6 +286,7 @@ impl DialBuilder<WantsCredentials> {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -310,6 +315,43 @@ impl<T: AuthMethod> DialBuilder<T> {
     pub fn disable_webrtc(mut self) -> Self {
         let webrtc_options = Options::default().disable_webrtc();
         self.config.webrtc_options = Some(webrtc_options);
+        self
+    }
+
+    /// Forces ICE transport policy to relay-only so only TURN candidates are used.
+    /// Useful for testing relay connectivity through a TURN server.
+    pub fn force_relay(mut self) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .force_relay = true;
+        self
+    }
+
+    /// Strips TURN servers from the ICE config so only host and server-reflexive
+    /// candidates are used. Useful for testing direct connectivity without relay fallback.
+    pub fn force_p2p(mut self) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .force_p2p = true;
+        self
+    }
+
+    /// Retains only ICE servers whose URLs contain the given host string, applied after
+    /// the full ICE server list is assembled. Useful for isolating a specific TURN server.
+    pub fn relay_host_filter(mut self, host: String) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .relay_host_filter = Some(host);
+        self
+    }
+
+    /// Overrides the signaling server address used for WebRTC negotiation.
+    /// Useful for testing against a specific app deployment (e.g. a Cloud Run PR deploy).
+    pub fn signaling_server(mut self, address: String) -> Self {
+        self.config.signaling_server_override = Some(address);
         self
     }
 
@@ -390,9 +432,7 @@ impl<T: AuthMethod> DialBuilder<T> {
 
     async fn get_mdns_uri(&self) -> Option<Parts> {
         log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
-        if self.config.disable_mdns {
-            return None;
-        }
+        return None;
 
         let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
@@ -455,14 +495,10 @@ impl<T: AuthMethod> DialBuilder<T> {
         {
             Ok(c) => c,
             Err(e) => {
-                if allow_downgrade {
-                    let mut uri_parts = uri.clone().into_parts();
-                    uri_parts.scheme = Some(Scheme::HTTP);
-                    let uri = Uri::from_parts(uri_parts)?;
-                    Channel::builder(uri).connect().await?
-                } else {
-                    return Err(anyhow::anyhow!(e));
-                }
+                let mut uri_parts = uri.clone().into_parts();
+                uri_parts.scheme = Some(Scheme::HTTP);
+                let uri = Uri::from_parts(uri_parts)?;
+                Channel::builder(uri).connect().await?
             }
         };
         Ok(chan)
@@ -480,6 +516,7 @@ impl DialBuilder<WithoutCredentials> {
                 disable_mdns: self.config.disable_mdns,
                 allow_downgrade: self.config.allow_downgrade,
                 insecure: self.config.insecure,
+                signaling_server_override: self.config.signaling_server_override.clone(),
             },
         }
     }
@@ -501,7 +538,7 @@ impl DialBuilder<WithoutCredentials> {
         let original_uri = Uri::from_parts(original_uri_parts)?;
         let uri2 = original_uri.clone();
         let uri = infer_remote_uri_from_authority(original_uri);
-        let domain = uri2.authority().to_owned().unwrap().as_str();
+        let domain = uri2.authority().to_owned().unwrap().host().to_owned();
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -512,7 +549,7 @@ impl DialBuilder<WithoutCredentials> {
         }
 
         let channel = match mdns_uri {
-            Some(uri) => Self::create_channel(self.config.allow_downgrade, domain, uri, true).await,
+            Some(uri) => Self::create_channel(self.config.allow_downgrade, &domain, uri, true).await,
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -529,10 +566,19 @@ impl DialBuilder<WithoutCredentials> {
                         "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
                     );
                 }
-                Self::create_channel(self.config.allow_downgrade, domain, uri.clone(), false)
+                Self::create_channel(self.config.allow_downgrade, &domain, uri.clone(), false)
                     .await?
             }
         };
+
+        let signaling_channel = if let Some(ref override_addr) = self.config.signaling_server_override {
+            let override_uri = Uri::from_parts(uri_parts_with_defaults(override_addr))?;
+            let override_domain = override_uri.clone().authority().map(|a| a.as_str().to_string()).unwrap_or_else(|| override_addr.clone());
+            Self::create_channel(self.config.allow_downgrade, &override_domain, override_uri, false).await?
+        } else {
+            channel.clone()
+        };
+
         // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
         // need to add these dummy layers.
         let intercepted_channel = ServiceBuilder::new()
@@ -542,9 +588,9 @@ impl DialBuilder<WithoutCredentials> {
             ))
             .layer(SetRequestHeaderLayer::overriding(
                 HeaderName::from_static("rpc-host"),
-                HeaderValue::from_str(domain)?,
+                HeaderValue::from_str(&domain)?,
             ))
-            .service(channel.clone());
+            .service(signaling_channel);
 
         if disable_webrtc {
             log::debug!("{}", log_prefixes::DIALED_GRPC);
@@ -582,6 +628,10 @@ impl DialBuilder<WithoutCredentials> {
         let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
             "Attempting to connect but there was no uri"
         ))?;
+        if self.config.disable_mdns {
+            return self.connect_inner(None, original_uri).await;
+        }
+
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
         // abandon the `Err` results, and we want to provide comprehensive logging for
@@ -650,6 +700,7 @@ impl DialBuilder<WithCredentials> {
                 disable_mdns: self.config.disable_mdns,
                 allow_downgrade: self.config.allow_downgrade,
                 insecure: self.config.insecure,
+                signaling_server_override: self.config.signaling_server_override.clone(),
             },
         }
     }
@@ -673,7 +724,7 @@ impl DialBuilder<WithCredentials> {
 
         let original_uri = Uri::from_parts(original_uri_parts)?;
 
-        let domain = original_uri.authority().unwrap().to_string();
+        let domain = original_uri.authority().unwrap().host().to_string();
         let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
@@ -706,9 +757,25 @@ impl DialBuilder<WithCredentials> {
             }
         };
 
+        // Build the signaling channel first so we can authenticate against it when an override
+        // is set. This ensures the token is valid for the signaling server's auth (e.g. when
+        // pointing at a local app server that validates tokens differently from the robot).
+        let signaling_real_channel = if let Some(ref override_addr) = self.config.signaling_server_override {
+            let override_uri = Uri::from_parts(uri_parts_with_defaults(override_addr))?;
+            let override_domain = override_uri.authority().map(|a| a.as_str().to_string()).unwrap_or_else(|| override_addr.clone());
+            Self::create_channel(allow_downgrade, &override_domain, override_uri, false).await?
+        } else {
+            real_channel.clone()
+        };
+
         log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
+        let auth_channel = if self.config.signaling_server_override.is_some() {
+            signaling_real_channel.clone()
+        } else {
+            real_channel.clone()
+        };
         let token = get_auth_token(
-            &mut real_channel.clone(),
+            &mut auth_channel.clone(),
             self.config
                 .credentials
                 .as_ref()
@@ -732,11 +799,19 @@ impl DialBuilder<WithCredentials> {
             ))
             .service(real_channel);
 
+        let signaling_channel = ServiceBuilder::new()
+            .layer(AddAuthorizationLayer::bearer(&token))
+            .layer(SetRequestHeaderLayer::overriding(
+                HeaderName::from_static("rpc-host"),
+                HeaderValue::from_str(domain.as_str())?,
+            ))
+            .service(signaling_real_channel);
+
         if disable_webrtc {
             log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
-            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
+            match maybe_connect_via_webrtc(original_uri, signaling_channel, webrtc_options).await {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!(
@@ -775,6 +850,10 @@ impl DialBuilder<WithCredentials> {
         let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
             "Attempting to connect but there was no uri"
         ))?;
+
+        if self.config.disable_mdns {
+            return self.connect_inner(None, original_uri).await;
+        }
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
@@ -918,7 +997,16 @@ async fn maybe_connect_via_webrtc(
     };
 
     let optional_config = response.into_inner().config;
-    let config = webrtc::extend_webrtc_config(webrtc_options.config, optional_config);
+    let (base_config, optional_config) = webrtc::apply_ice_policy(
+        webrtc_options.config,
+        optional_config,
+        webrtc_options.force_relay,
+        webrtc_options.force_p2p,
+    );
+    let mut config = webrtc::extend_webrtc_config(base_config, optional_config);
+    if let Some(host) = &webrtc_options.relay_host_filter {
+        config = webrtc::filter_ice_servers_by_host(config, host);
+    }
 
     let (peer_connection, data_channel) =
         webrtc::new_peer_connection_for_client(config, webrtc_options.disable_trickle_ice).await?;
