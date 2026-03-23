@@ -785,21 +785,13 @@ impl DialBuilder<WithCredentials> {
                 HeaderName::from_static("rpc-host"),
                 HeaderValue::from_str(domain.as_str())?,
             ))
-            .service(real_channel.clone());
-
-        let signaling_channel = ServiceBuilder::new()
-            .layer(AddAuthorizationLayer::bearer(&token))
-            .layer(SetRequestHeaderLayer::overriding(
-                HeaderName::from_static("rpc-host"),
-                HeaderValue::from_str(domain.as_str())?,
-            ))
             .service(real_channel);
 
         if disable_webrtc {
             log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
-            match maybe_connect_via_webrtc(original_uri, signaling_channel, webrtc_options).await {
+            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!(
