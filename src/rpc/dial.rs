@@ -432,8 +432,6 @@ impl<T: AuthMethod> DialBuilder<T> {
 
     async fn get_mdns_uri(&self) -> Option<Parts> {
         log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
-        return None;
-
         let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
 
@@ -495,10 +493,14 @@ impl<T: AuthMethod> DialBuilder<T> {
         {
             Ok(c) => c,
             Err(e) => {
-                let mut uri_parts = uri.clone().into_parts();
-                uri_parts.scheme = Some(Scheme::HTTP);
-                let uri = Uri::from_parts(uri_parts)?;
-                Channel::builder(uri).connect().await?
+                if allow_downgrade {
+                    let mut uri_parts = uri.clone().into_parts();
+                    uri_parts.scheme = Some(Scheme::HTTP);
+                    let uri = Uri::from_parts(uri_parts)?;
+                    Channel::builder(uri).connect().await?
+                } else {
+                    return Err(anyhow::anyhow!(e));
+                }
             }
         };
         Ok(chan)
@@ -571,12 +573,13 @@ impl DialBuilder<WithoutCredentials> {
             }
         };
 
-        let signaling_channel = if let Some(ref override_addr) = self.config.signaling_server_override {
-            let override_uri = Uri::from_parts(uri_parts_with_defaults(override_addr))?;
-            let override_domain = override_uri.clone().authority().map(|a| a.as_str().to_string()).unwrap_or_else(|| override_addr.clone());
-            Self::create_channel(self.config.allow_downgrade, &override_domain, override_uri, false).await?
-        } else {
-            channel.clone()
+        let signaling_channel = match self.config.signaling_server_override.as_deref() {
+            Some(addr) => {
+                let uri = Uri::from_parts(uri_parts_with_defaults(addr))?;
+                let signaling_domain = uri.authority().map(|a| a.host().to_string()).unwrap_or_else(|| addr.to_string());
+                Self::create_channel(self.config.allow_downgrade, &signaling_domain, uri, false).await?
+            }
+            None => channel.clone(),
         };
 
         // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
@@ -628,9 +631,12 @@ impl DialBuilder<WithoutCredentials> {
         let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
             "Attempting to connect but there was no uri"
         ))?;
-        if self.config.disable_mdns {
-            return self.connect_inner(None, original_uri).await;
-        }
+        let skip_mdns = self.config.disable_mdns
+            || self
+                .config
+                .webrtc_options
+                .as_ref()
+                .map_or(false, |o| o.force_relay);
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
@@ -638,11 +644,14 @@ impl DialBuilder<WithoutCredentials> {
         // debugging purposes. Hence the loop and pinning. The pinning lets us reference
         // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
+        //
+        // When mDNS is skipped (disable_mdns or force_relay), with_mdns_err is pre-set so
+        // the select guard disables that branch and only the direct connection is attempted.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
             let without_mdns = self.connect_inner(None, original_uri2);
         }
-        let mut with_mdns_err: Option<anyhow::Error> = None;
+        let mut with_mdns_err: Option<anyhow::Error> = skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {
@@ -757,25 +766,21 @@ impl DialBuilder<WithCredentials> {
             }
         };
 
-        // Build the signaling channel first so we can authenticate against it when an override
-        // is set. This ensures the token is valid for the signaling server's auth (e.g. when
-        // pointing at a local app server that validates tokens differently from the robot).
-        let signaling_real_channel = if let Some(ref override_addr) = self.config.signaling_server_override {
-            let override_uri = Uri::from_parts(uri_parts_with_defaults(override_addr))?;
-            let override_domain = override_uri.authority().map(|a| a.as_str().to_string()).unwrap_or_else(|| override_addr.clone());
-            Self::create_channel(allow_downgrade, &override_domain, override_uri, false).await?
-        } else {
-            real_channel.clone()
+        // When a signaling server override is set, authenticate against it rather than the
+        // robot channel — the override server (e.g. a local app instance) validates tokens
+        // independently and the robot's token would be rejected.
+        let signaling_raw_channel = match self.config.signaling_server_override.as_deref() {
+            Some(addr) => {
+                let uri = Uri::from_parts(uri_parts_with_defaults(addr))?;
+                let signaling_domain = uri.authority().map(|a| a.host().to_string()).unwrap_or_else(|| addr.to_string());
+                Self::create_channel(allow_downgrade, &signaling_domain, uri, false).await?
+            }
+            None => real_channel.clone(),
         };
 
         log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
-        let auth_channel = if self.config.signaling_server_override.is_some() {
-            signaling_real_channel.clone()
-        } else {
-            real_channel.clone()
-        };
         let token = get_auth_token(
-            &mut auth_channel.clone(),
+            &mut signaling_raw_channel.clone(),
             self.config
                 .credentials
                 .as_ref()
@@ -805,7 +810,7 @@ impl DialBuilder<WithCredentials> {
                 HeaderName::from_static("rpc-host"),
                 HeaderValue::from_str(domain.as_str())?,
             ))
-            .service(signaling_real_channel);
+            .service(signaling_raw_channel);
 
         if disable_webrtc {
             log::debug!("Connected via gRPC");
@@ -851,9 +856,12 @@ impl DialBuilder<WithCredentials> {
             "Attempting to connect but there was no uri"
         ))?;
 
-        if self.config.disable_mdns {
-            return self.connect_inner(None, original_uri).await;
-        }
+        let skip_mdns = self.config.disable_mdns
+            || self
+                .config
+                .webrtc_options
+                .as_ref()
+                .map_or(false, |o| o.force_relay);
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
@@ -861,11 +869,14 @@ impl DialBuilder<WithCredentials> {
         // debugging purposes. Hence the loop and pinning. The pinning lets us reference
         // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
+        //
+        // When mDNS is skipped (disable_mdns or force_relay), with_mdns_err is pre-set so
+        // the select guard disables that branch and only the direct connection is attempted.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
             let without_mdns = self.connect_inner(None, original_uri2);
         }
-        let mut with_mdns_err: Option<anyhow::Error> = None;
+        let mut with_mdns_err: Option<anyhow::Error> = skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {

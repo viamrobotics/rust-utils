@@ -1,5 +1,4 @@
 use std::fmt;
-use tokio::time::Instant;
 use webrtc::stats;
 
 pub(crate) struct StatsReport(pub(crate) stats::StatsReport);
@@ -9,7 +8,6 @@ impl fmt::Display for StatsReport {
         // NOTE(benjirewis): StatsReport contains 13 types of stat reports; there may be more relevant stats
         // to print here, but for now I have stuck with only printing the candidates.
         writeln!(f, "\nnominated ICE candidates:\n")?;
-        let now = Instant::now();
         for (_, value) in &self.0.reports {
             match value {
                 stats::StatsReportType::LocalCandidate(ref cand)
@@ -22,11 +20,7 @@ impl fmt::Display for StatsReport {
                     writeln!(f, "\t{} ICE candidate:", remote_or_local)?;
                     writeln!(f, "\t\tIP address: {}", cand.ip)?;
                     writeln!(f, "\t\tport: {}", cand.port)?;
-                    writeln!(
-                        f,
-                        "\t\tnominated {:#?} ago",
-                        now.checked_duration_since(cand.timestamp).unwrap_or_default()
-                    )?;
+                    writeln!(f, "\t\tnominated {:#?} ago", cand.timestamp.elapsed())?;
                     writeln!(f, "\t\trelay protocol: {}", cand.relay_protocol)?;
                     writeln!(f, "\t\tnetwork type: {}", cand.network_type)?;
                 }

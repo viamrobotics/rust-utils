@@ -45,8 +45,6 @@ pub(crate) struct Options {
     /// candidates are used. Useful for testing direct connectivity without relay fallback.
     pub(crate) force_p2p: bool,
     /// When set, retains only ICE servers whose URLs contain this host string.
-    /// Applied after the full ICE server list is assembled. Useful for isolating
-    /// a specific TURN server (e.g. coturn) when multiple are provided.
     pub(crate) relay_host_filter: Option<String>,
 }
 
@@ -77,8 +75,7 @@ impl Options {
         // TODO(RSDK-235): remove hard coding of signaling server address and prefer SRV lookup instead
         let path = uri.to_string();
         if path.contains(".viam.cloud") {
-            // Hard-code localhost:8081 into here so that we use the local version of app.
-            Some(("localhost:8081".to_string(), false))
+            Some(("app.viam.com:443".to_string(), true))
         } else if path.contains(".robot.viaminternal") {
             Some(("app.viaminternal:8089".to_string(), false))
         } else {
@@ -119,12 +116,17 @@ impl Options {
         self
     }
 
-    /// Retains only ICE servers whose URLs contain the given host string, applied after
-    /// the full ICE server list is assembled. Useful for isolating a specific TURN server.
+    /// Retains only ICE servers whose URLs contain the given host string.
     pub(crate) fn relay_host_filter(mut self, host: String) -> Self {
         self.relay_host_filter = Some(host);
         self
     }
+}
+
+/// Retains only ICE servers whose URLs contain the given host string.
+pub(crate) fn filter_ice_servers_by_host(mut config: RTCConfiguration, host: &str) -> RTCConfiguration {
+    config.ice_servers.retain(|s| s.urls.iter().any(|url| url.contains(host)));
+    config
 }
 
 /// Returns true if any of the ICE server's URLs use a TURN scheme.
@@ -132,15 +134,6 @@ pub(crate) fn ice_server_has_turn(s: &RTCIceServer) -> bool {
     s.urls
         .iter()
         .any(|url| url.starts_with("turn:") || url.starts_with("turns:"))
-}
-
-/// Retains only ICE servers whose URLs contain the given host string.
-pub(crate) fn filter_ice_servers_by_host(
-    mut config: RTCConfiguration,
-    host: &str,
-) -> RTCConfiguration {
-    config.ice_servers.retain(|s| s.urls.iter().any(|url| url.contains(host)));
-    config
 }
 
 /// Applies force_relay or force_p2p options to a config and optional server config.
