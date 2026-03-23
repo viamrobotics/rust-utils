@@ -435,7 +435,7 @@ impl<T: AuthMethod> DialBuilder<T> {
         if self.config.disable_mdns {
             return None;
         }
-        
+
         let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
 
