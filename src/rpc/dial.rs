@@ -432,6 +432,10 @@ impl<T: AuthMethod> DialBuilder<T> {
 
     async fn get_mdns_uri(&self) -> Option<Parts> {
         log::debug!("{}", log_prefixes::MDNS_QUERY_ATTEMPT);
+        if self.config.disable_mdns {
+            return None;
+        }
+        
         let mut uri = self.duplicate_uri()?;
         let candidate = uri.authority.clone()?.to_string();
 
@@ -539,7 +543,7 @@ impl DialBuilder<WithoutCredentials> {
         }
         let original_uri = Uri::from_parts(original_uri_parts)?;
         let uri2 = original_uri.clone();
-        let uri = infer_remote_uri_from_authority(original_uri);
+        let uri = infer_remote_uri_from_authority(original_uri, self.config.signaling_server_override.as_deref());
         let domain = uri2.authority().to_owned().unwrap().host().to_owned();
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
@@ -573,15 +577,6 @@ impl DialBuilder<WithoutCredentials> {
             }
         };
 
-        let signaling_channel = match self.config.signaling_server_override.as_deref() {
-            Some(addr) => {
-                let uri = Uri::from_parts(uri_parts_with_defaults(addr))?;
-                let signaling_domain = uri.authority().map(|a| a.host().to_string()).unwrap_or_else(|| addr.to_string());
-                Self::create_channel(self.config.allow_downgrade, &signaling_domain, uri, false).await?
-            }
-            None => channel.clone(),
-        };
-
         // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
         // need to add these dummy layers.
         let intercepted_channel = ServiceBuilder::new()
@@ -593,7 +588,7 @@ impl DialBuilder<WithoutCredentials> {
                 HeaderName::from_static("rpc-host"),
                 HeaderValue::from_str(&domain)?,
             ))
-            .service(signaling_channel);
+            .service(channel.clone());
 
         if disable_webrtc {
             log::debug!("{}", log_prefixes::DIALED_GRPC);
@@ -734,7 +729,7 @@ impl DialBuilder<WithCredentials> {
         let original_uri = Uri::from_parts(original_uri_parts)?;
 
         let domain = original_uri.authority().unwrap().host().to_string();
-        let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
+        let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone(), self.config.signaling_server_override.as_deref());
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -766,21 +761,9 @@ impl DialBuilder<WithCredentials> {
             }
         };
 
-        // When a signaling server override is set, authenticate against it rather than the
-        // robot channel — the override server (e.g. a local app instance) validates tokens
-        // independently and the robot's token would be rejected.
-        let signaling_raw_channel = match self.config.signaling_server_override.as_deref() {
-            Some(addr) => {
-                let uri = Uri::from_parts(uri_parts_with_defaults(addr))?;
-                let signaling_domain = uri.authority().map(|a| a.host().to_string()).unwrap_or_else(|| addr.to_string());
-                Self::create_channel(allow_downgrade, &signaling_domain, uri, false).await?
-            }
-            None => real_channel.clone(),
-        };
-
         log::debug!("{}", log_prefixes::ACQUIRING_AUTH_TOKEN);
         let token = get_auth_token(
-            &mut signaling_raw_channel.clone(),
+            &mut real_channel.clone(),
             self.config
                 .credentials
                 .as_ref()
@@ -802,7 +785,7 @@ impl DialBuilder<WithCredentials> {
                 HeaderName::from_static("rpc-host"),
                 HeaderValue::from_str(domain.as_str())?,
             ))
-            .service(real_channel);
+            .service(real_channel.clone());
 
         let signaling_channel = ServiceBuilder::new()
             .layer(AddAuthorizationLayer::bearer(&token))
@@ -810,7 +793,7 @@ impl DialBuilder<WithCredentials> {
                 HeaderName::from_static("rpc-host"),
                 HeaderValue::from_str(domain.as_str())?,
             ))
-            .service(signaling_raw_channel);
+            .service(real_channel);
 
         if disable_webrtc {
             log::debug!("Connected via gRPC");
@@ -1399,7 +1382,10 @@ fn encode_sdp(sdp: RTCSessionDescription) -> Result<String> {
     Ok(base64::encode(sdp))
 }
 
-fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
+fn infer_remote_uri_from_authority(uri: Uri, override_addr: Option<&str>) -> Uri {
+    if let Some(addr) = override_addr {
+        return Uri::from_parts(uri_parts_with_defaults(addr)).unwrap_or(uri);
+    }
     let authority = uri.authority().map(Authority::as_str).unwrap_or_default();
     let is_local_connection = authority.contains(".local.viam.cloud")
         || authority.contains("localhost")
