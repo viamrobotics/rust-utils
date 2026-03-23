@@ -104,23 +104,6 @@ impl Options {
         self
     }
 
-    /// Forces ICE transport policy to relay-only (only TURN candidates considered).
-    pub(crate) fn force_relay(mut self) -> Self {
-        self.force_relay = true;
-        self
-    }
-
-    /// Strips TURN servers from the ICE config so only host/srflx candidates are used.
-    pub(crate) fn force_p2p(mut self) -> Self {
-        self.force_p2p = true;
-        self
-    }
-
-    /// Retains only ICE servers whose URLs contain the given host string.
-    pub(crate) fn relay_host_filter(mut self, host: String) -> Self {
-        self.relay_host_filter = Some(host);
-        self
-    }
 }
 
 /// Retains only ICE servers whose URLs contain the given host string.

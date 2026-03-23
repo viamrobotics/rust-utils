@@ -631,7 +631,7 @@ impl DialBuilder<WithoutCredentials> {
                 .config
                 .webrtc_options
                 .as_ref()
-                .map_or(false, |o| o.force_relay);
+                .is_some_and(|o| o.force_relay);
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
@@ -836,7 +836,7 @@ impl DialBuilder<WithCredentials> {
                 .config
                 .webrtc_options
                 .as_ref()
-                .map_or(false, |o| o.force_relay);
+                .is_some_and(|o| o.force_relay);
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
