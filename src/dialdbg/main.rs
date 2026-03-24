@@ -63,10 +63,8 @@ pub(crate) struct Args {
     uri: Option<String>,
 
     /// Force ICE transport policy to relay-only (only TURN candidates). Implies WebRTC.
-    /// Optionally accepts a host string to filter to a specific TURN server, e.g.
-    /// "--force-relay 34.9.65.195" or "--force-relay turn.viam.com".
-    #[arg(long, num_args(0..=1), default_missing_value = "", conflicts_with("nowebrtc"), conflicts_with("force_p2p"))]
-    force_relay: Option<String>,
+    #[arg(long, action, conflicts_with("nowebrtc"), conflicts_with("force_p2p"))]
+    force_relay: bool,
 
     /// Strip TURN servers so only host/srflx candidates are used. Implies WebRTC.
     #[arg(long, action, conflicts_with("nowebrtc"), conflicts_with("force_relay"))]
@@ -132,7 +130,7 @@ async fn dial_webrtc(
     credential: &str,
     credential_type: &str,
     entity: Option<String>,
-    force_relay: Option<String>,
+    force_relay: bool,
     force_p2p: bool,
     signaling_server: Option<String>,
     disable_mdns: bool,
@@ -143,11 +141,8 @@ async fn dial_webrtc(
                 .uri(uri)
                 .without_credentials()
                 .allow_downgrade();
-            if let Some(ref host) = force_relay {
+            if force_relay {
                 b = b.force_relay();
-                if !host.is_empty() {
-                    b = b.relay_host_filter(host.clone());
-                }
             }
             if force_p2p {
                 b = b.force_p2p();
@@ -170,11 +165,8 @@ async fn dial_webrtc(
                 .uri(uri)
                 .with_credentials(creds)
                 .allow_downgrade();
-            if let Some(ref host) = force_relay {
+            if force_relay {
                 b = b.force_relay();
-                if !host.is_empty() {
-                    b = b.relay_host_filter(host.clone());
-                }
             }
             if force_p2p {
                 b = b.force_p2p();
@@ -340,7 +332,7 @@ pub(crate) async fn main_inner(args: Args) -> Result<()> {
             credential.as_str(),
             credential_type.as_str(),
             args.entity.clone(),
-            args.force_relay.clone(),
+            args.force_relay,
             args.force_p2p,
             args.signaling_server.clone(),
             args.disable_mdns,

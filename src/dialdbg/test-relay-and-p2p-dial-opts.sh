@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cargo build --features dialdbg --bin viam-dialdbg 2>&1 | tail -1
+BINARY=./target/debug/viam-dialdbg
+
+HOST="machine-main.ozy75nuoux.viam.cloud"
+ENTITY="4f04c6ca-b9df-440d-82db-6d383b0c92a1"
+APIKEY="ymw99jc6h6ki2m9rlhzekp8r2tpj9zjy"
+COMMON=(-u "$HOST" -e "$ENTITY" -t api-key -c "$APIKEY" --nogrpc --nortt)
+
+PASS=0
+FAIL=0
+
+# Extract the local ICE candidate type from dialdbg output.
+# Stats print "local ICE candidate:" followed by fields including "candidate type: <type>".
+# We grab the type value on the line immediately after the local candidate header.
+local_candidate_type() {
+  awk '/\tlocal ICE candidate:/{found=1} found && /candidate type:/{print $NF; found=0}' <<< "$1"
+}
+
+assert() {
+  local name="$1" output="$2" want_type="$3"  # want_type: "relay", "!relay", or "none"
+  printf '\n=== %s ===\n' "$name"
+  printf '%s\n' "$output"
+
+  local actual
+  actual=$(local_candidate_type "$output")
+
+  if [[ "$want_type" == "none" ]]; then
+    # Expect connection failure — no candidates should be nominated.
+    if [[ -z "$actual" ]]; then
+      printf 'PASS: no candidates nominated (expected failure)\n'
+      ((++PASS))
+    else
+      printf 'FAIL: expected no candidates, got local candidate type: %s\n' "$actual"
+      ((++FAIL))
+    fi
+  elif [[ "$want_type" == "!relay" ]]; then
+    # Expect a successful non-relay connection.
+    if [[ -n "$actual" && "$actual" != "relay" ]]; then
+      printf 'PASS: local candidate type: %s (not relay)\n' "$actual"
+      ((++PASS))
+    elif [[ -z "$actual" ]]; then
+      printf 'FAIL: connection failed (no candidates nominated)\n'
+      ((++FAIL))
+    else
+      printf 'FAIL: expected non-relay candidate, got: %s\n' "$actual"
+      ((++FAIL))
+    fi
+  else
+    # Expect a specific candidate type (e.g. "relay").
+    if [[ "$actual" == "$want_type" ]]; then
+      printf 'PASS: local candidate type: %s\n' "$actual"
+      ((++PASS))
+    elif [[ -z "$actual" ]]; then
+      printf 'FAIL: connection failed (no candidates nominated)\n'
+      ((++FAIL))
+    else
+      printf 'FAIL: expected candidate type %s, got: %s\n' "$want_type" "$actual"
+      ((++FAIL))
+    fi
+  fi
+}
+
+run() {
+  "$BINARY" "${COMMON[@]}" "$@" 2>/dev/null || true
+}
+
+# 1. Baseline — expect non-relay (host or srflx)
+assert "baseline (no flags)" "$(run)" "!relay"
+
+# 2. ForceRelay — expect relay
+assert "ForceRelay" "$(run --force-relay)" "relay"
+
+# 3. ForceP2P — expect non-relay (host or srflx)
+assert "ForceP2P" "$(run --force-p2p)" "!relay"
+
+printf '\n%d passed, %d failed.\n' "$PASS" "$FAIL"
+[[ $FAIL -eq 0 ]]
