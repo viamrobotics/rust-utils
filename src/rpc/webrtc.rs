@@ -44,6 +44,10 @@ pub(crate) struct Options {
     /// Strips TURN servers from the ICE configuration so only host and server-reflexive
     /// candidates are used. Useful for testing direct connectivity without relay fallback.
     pub(crate) force_p2p: bool,
+    /// When set, filters the assembled ICE server list to only TURN servers whose URL
+    /// contains this substring. Non-TURN servers are unaffected. Can be combined with
+    /// force_relay to route through a specific TURN server.
+    pub(crate) relay_host_filter: Option<String>,
 }
 
 impl fmt::Debug for Options {
@@ -102,6 +106,18 @@ impl Options {
         self
     }
 
+}
+
+/// Removes TURN servers from config whose URLs do not contain host.
+/// Non-TURN servers are left unchanged.
+pub(crate) fn filter_ice_servers_by_host(mut config: RTCConfiguration, host: &str) -> RTCConfiguration {
+    config.ice_servers.retain(|s| {
+        if !ice_server_has_turn(s) {
+            return true;
+        }
+        s.urls.iter().any(|url| url.contains(host))
+    });
+    config
 }
 
 /// Returns true if any of the ICE server's URLs use a TURN scheme.

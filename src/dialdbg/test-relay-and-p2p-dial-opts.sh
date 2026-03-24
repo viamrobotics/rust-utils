@@ -4,9 +4,12 @@ set -euo pipefail
 cargo build --features dialdbg --bin viam-dialdbg 2>&1 | tail -1
 BINARY=./target/debug/viam-dialdbg
 
-HOST=""
-ENTITY=""
-APIKEY=""
+HOST="<machine-fqdn>"
+ENTITY="<api-key-id>"
+APIKEY="<api-key>"
+# RELAY_HOST should be a substring matching at least one TURN server URL returned
+# by the signaling server (e.g. "turn.viam.com" for prod coturn).
+RELAY_HOST="<relay-host-substring>"
 COMMON=(-u "$HOST" -e "$ENTITY" -t api-key -c "$APIKEY" --nogrpc --nortt)
 
 PASS=0
@@ -16,7 +19,7 @@ FAIL=0
 # Stats print "local ICE candidate:" followed by fields including "candidate type: <type>".
 # We grab the type value on the line immediately after the local candidate header.
 local_candidate_type() {
-  awk '/\tlocal ICE candidate:/{found=1} found && /candidate type:/{print $NF; found=0}' <<< "$1"
+  awk '/\tlocal ICE candidate:/{found=1} found && /candidate type:/{print $NF; found=0}' <<< "$1" | head -1
 }
 
 assert() {
@@ -73,8 +76,19 @@ assert "baseline (no flags)" "$(run)" "!relay"
 # 2. ForceRelay — expect relay
 assert "ForceRelay" "$(run --force-relay)" "relay"
 
-# 3. ForceP2P — expect non-relay (host or srflx)
+# 3. ForceRelay + RelayHostFilter matching a valid TURN server — expect relay
+assert "ForceRelay + RelayHostFilter" "$(run --force-relay --relay-host-filter "$RELAY_HOST")" "relay"
+
+# 4. ForceP2P — expect non-relay (host or srflx)
 assert "ForceP2P" "$(run --force-p2p)" "!relay"
+
+# 5. RelayHostFilter alone — filter limits TURN options but ICE still picks
+# host/srflx; expect non-relay
+assert "RelayHostFilter (no ForceRelay)" "$(run --relay-host-filter "$RELAY_HOST")" "!relay"
+
+# 6. ForceRelay + non-matching RelayHostFilter — all TURN filtered out,
+# no relay candidates, expect failure
+assert "ForceRelay + RelayHostFilter=notexist (expect: fail)" "$(run --force-relay --relay-host-filter notexist.example.com)" "none"
 
 printf '\n%d passed, %d failed.\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

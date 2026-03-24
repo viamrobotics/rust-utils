@@ -338,6 +338,17 @@ impl<T: AuthMethod> DialBuilder<T> {
         self
     }
 
+    /// Filters the assembled ICE server list to only TURN servers whose URL contains
+    /// the given substring. Can be combined with force_relay to route through a specific
+    /// TURN server.
+    pub fn relay_host_filter(mut self, host: String) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .relay_host_filter = Some(host);
+        self
+    }
+
     /// Overrides the signaling server address used for WebRTC negotiation.
     /// Useful for testing against a specific app deployment (e.g. a Cloud Run PR deploy).
     pub fn signaling_server(mut self, address: String) -> Self {
@@ -970,7 +981,10 @@ async fn maybe_connect_via_webrtc(
         webrtc_options.force_relay,
         webrtc_options.force_p2p,
     );
-    let config = webrtc::extend_webrtc_config(base_config, optional_config);
+    let mut config = webrtc::extend_webrtc_config(base_config, optional_config);
+    if let Some(ref host) = webrtc_options.relay_host_filter {
+        config = webrtc::filter_ice_servers_by_host(config, host);
+    }
 
     let (peer_connection, data_channel) =
         webrtc::new_peer_connection_for_client(config, webrtc_options.disable_trickle_ice).await?;
