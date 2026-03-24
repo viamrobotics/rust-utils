@@ -616,12 +616,8 @@ impl DialBuilder<WithoutCredentials> {
         let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
             "Attempting to connect but there was no uri"
         ))?;
-        let skip_mdns = self.config.disable_mdns
-            || self
-                .config
-                .webrtc_options
-                .as_ref()
-                .is_some_and(|o| o.force_relay);
+
+        let skip_mdns = self.config.disable_mdns;
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
@@ -630,7 +626,7 @@ impl DialBuilder<WithoutCredentials> {
         // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
         //
-        // When mDNS is skipped (disable_mdns or force_relay), with_mdns_err is pre-set so
+        // When mDNS is skipped (disable_mdns), with_mdns_err is pre-set so
         // the select guard disables that branch and only the direct connection is attempted.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
@@ -821,12 +817,7 @@ impl DialBuilder<WithCredentials> {
             "Attempting to connect but there was no uri"
         ))?;
 
-        let skip_mdns = self.config.disable_mdns
-            || self
-                .config
-                .webrtc_options
-                .as_ref()
-                .is_some_and(|o| o.force_relay);
+        let skip_mdns = self.config.disable_mdns;
 
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
@@ -835,7 +826,7 @@ impl DialBuilder<WithCredentials> {
         // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
         //
-        // When mDNS is skipped (disable_mdns or force_relay), with_mdns_err is pre-set so
+        // When mDNS is skipped (disable_mdns), with_mdns_err is pre-set so
         // the select guard disables that branch and only the direct connection is attempted.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
