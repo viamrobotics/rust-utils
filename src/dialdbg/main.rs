@@ -70,11 +70,11 @@ pub(crate) struct Args {
     #[arg(long, action, conflicts_with("nowebrtc"), conflicts_with("force_relay"))]
     force_p2p: bool,
 
-    /// Filter assembled ICE servers to only TURN servers whose URL contains this
-    /// substring. Can be combined with --force-relay to route through a specific
-    /// TURN server. Implies WebRTC.
+    /// Filter the signaling server's TURN list to only the server whose parsed URI
+    /// matches. Uses the same struct comparison as the server-side TURN_URI env var.
+    /// Example: "turn:turn.viam.com:443". Implies WebRTC.
     #[arg(long, conflicts_with("nowebrtc"))]
-    relay_host_filter: Option<String>,
+    turn_uri: Option<String>,
 
     /// Override the signaling server address used for WebRTC negotiation. Useful for
     /// testing against a specific app deployment (e.g. a Cloud Run PR deploy).
@@ -138,7 +138,7 @@ async fn dial_webrtc(
     entity: Option<String>,
     force_relay: bool,
     force_p2p: bool,
-    relay_host_filter: Option<String>,
+    turn_uri: Option<String>,
     signaling_server: Option<String>,
     disable_mdns: bool,
 ) -> Option<ViamChannel> {
@@ -154,8 +154,8 @@ async fn dial_webrtc(
             if force_p2p {
                 b = b.force_p2p();
             }
-            if let Some(host) = relay_host_filter {
-                b = b.relay_host_filter(host);
+            if let Some(u) = turn_uri {
+                b = b.turn_uri(u);
             }
             if let Some(server) = signaling_server {
                 b = b.signaling_server(server);
@@ -181,8 +181,8 @@ async fn dial_webrtc(
             if force_p2p {
                 b = b.force_p2p();
             }
-            if let Some(host) = relay_host_filter {
-                b = b.relay_host_filter(host);
+            if let Some(u) = turn_uri {
+                b = b.turn_uri(u);
             }
             if let Some(server) = signaling_server {
                 b = b.signaling_server(server);
@@ -347,7 +347,7 @@ pub(crate) async fn main_inner(args: Args) -> Result<()> {
             args.entity.clone(),
             args.force_relay,
             args.force_p2p,
-            args.relay_host_filter.clone(),
+            args.turn_uri.clone(),
             args.signaling_server.clone(),
             args.disable_mdns,
         )

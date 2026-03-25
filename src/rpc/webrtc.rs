@@ -44,10 +44,12 @@ pub(crate) struct Options {
     /// Strips TURN servers from the ICE configuration so only host and server-reflexive
     /// candidates are used. Useful for testing direct connectivity without relay fallback.
     pub(crate) force_p2p: bool,
-    /// When set, filters the assembled ICE server list to only TURN servers whose URL
-    /// contains this substring. Non-TURN servers are unaffected. Can be combined with
-    /// force_relay to route through a specific TURN server.
-    pub(crate) relay_host_filter: Option<String>,
+    /// When set, filters the signaling server's TURN list to only the server whose
+    /// parsed URI matches. Uses struct comparison identical to the server-side TURN_URI
+    /// env var. Leave transport unspecified for UDP default.
+    /// Example: "turn:turn.viam.com:443"
+    pub(crate) turn_uri: Option<String>,
+
 }
 
 impl fmt::Debug for Options {
@@ -108,15 +110,72 @@ impl Options {
 
 }
 
-/// Removes TURN servers from config whose URLs do not contain host.
-/// Non-TURN servers are left unchanged.
-pub(crate) fn filter_ice_servers_by_host(mut config: RTCConfiguration, host: &str) -> RTCConfiguration {
-    config.ice_servers.retain(|s| {
-        if !ice_server_has_turn(s) {
-            return true;
+/// A parsed TURN URI with scheme, host, port, and transport components.
+/// Transport defaults to "udp" when unspecified, matching stun.ParseURI behavior.
+#[derive(Debug, PartialEq)]
+pub(crate) struct TurnUri {
+    pub scheme: String,
+    pub host: String,
+    pub port: u16,
+    pub transport: String,
+}
+
+impl TurnUri {
+    /// Parses a TURN URI string of the form "scheme:host:port?transport=proto".
+    /// Returns None for non-TURN URIs or malformed input.
+    pub fn parse(s: &str) -> Option<Self> {
+        let (scheme, rest) = s.split_once(':')?;
+        if scheme != "turn" && scheme != "turns" {
+            return None;
         }
-        s.urls.iter().any(|url| url.contains(host))
-    });
+        let (hostport, query) = rest.split_once('?').unwrap_or((rest, ""));
+        let (host, port_str) = hostport.rsplit_once(':')?;
+        let port = port_str.parse().ok()?;
+        let transport = query
+            .split('&')
+            .find_map(|p| p.strip_prefix("transport="))
+            .unwrap_or("udp")
+            .to_string();
+        Some(TurnUri {
+            scheme: scheme.to_string(),
+            host: host.to_string(),
+            port,
+            transport,
+        })
+    }
+
+
+}
+
+/// Filters TURN server URLs in config to only those whose parsed URI matches turn_uri.
+/// Non-TURN URLs (e.g. stun:) are always kept unchanged.
+pub(crate) fn apply_turn_options(
+    mut config: RTCConfiguration,
+    turn_uri: Option<&TurnUri>,
+) -> RTCConfiguration {
+    if turn_uri.is_none() {
+        return config;
+    }
+    for server in &mut config.ice_servers {
+        server.urls = server
+            .urls
+            .iter()
+            .filter_map(|url| {
+                if !url.starts_with("turn:") && !url.starts_with("turns:") {
+                    return Some(url.clone());
+                }
+                let uri = TurnUri::parse(url)?;
+                if let Some(filter) = turn_uri {
+                    if &uri != filter {
+                        return None;
+                    }
+                }
+                Some(url.clone())
+            })
+            .collect();
+    }
+    // Remove ICE server entries that had all their TURN URLs filtered out.
+    config.ice_servers.retain(|s| !s.urls.is_empty());
     config
 }
 

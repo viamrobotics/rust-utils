@@ -4,12 +4,12 @@ set -euo pipefail
 cargo build --features dialdbg --bin viam-dialdbg 2>&1 | tail -1
 BINARY=./target/debug/viam-dialdbg
 
-HOST="<machine-fqdn>"
-ENTITY="<api-key-id>"
-APIKEY="<api-key>"
-# RELAY_HOST should be a substring matching at least one TURN server URL returned
-# by the signaling server (e.g. "turn.viam.com" for prod coturn).
-RELAY_HOST="<relay-host-substring>"
+HOST="machine-main.ozy75nuoux.viam.cloud"
+ENTITY="4f04c6ca-b9df-440d-82db-6d383b0c92a1"
+APIKEY="ymw99jc6h6ki2m9rlhzekp8r2tpj9zjy"
+# TURN_URI should be the URI of a TURN server returned by the signaling server.
+# Example: "turn:turn.viam.com:443"
+TURN_URI="turn:turn.viam.com:443"
 COMMON=(-u "$HOST" -e "$ENTITY" -t api-key -c "$APIKEY" --nogrpc --nortt)
 
 PASS=0
@@ -76,19 +76,17 @@ assert "baseline (no flags)" "$(run)" "!relay"
 # 2. ForceRelay — expect relay
 assert "ForceRelay" "$(run --force-relay)" "relay"
 
-# 3. ForceRelay + RelayHostFilter matching a valid TURN server — expect relay
-assert "ForceRelay + RelayHostFilter" "$(run --force-relay --relay-host-filter "$RELAY_HOST")" "relay"
+# 3. ForceRelay + TurnUri matching a valid TURN server — expect relay
+assert "ForceRelay + TurnUri" "$(run --force-relay --turn-uri "$TURN_URI")" "relay"
 
 # 4. ForceP2P — expect non-relay (host or srflx)
 assert "ForceP2P" "$(run --force-p2p)" "!relay"
 
-# 5. RelayHostFilter alone — filter limits TURN options but ICE still picks
-# host/srflx; expect non-relay
-assert "RelayHostFilter (no ForceRelay)" "$(run --relay-host-filter "$RELAY_HOST")" "!relay"
+# 5. TurnUri alone — filters TURN options but ICE still picks host/srflx; expect non-relay
+assert "TurnUri (no ForceRelay)" "$(run --turn-uri "$TURN_URI")" "!relay"
 
-# 6. ForceRelay + non-matching RelayHostFilter — all TURN filtered out,
-# no relay candidates, expect failure
-assert "ForceRelay + RelayHostFilter=notexist (expect: fail)" "$(run --force-relay --relay-host-filter notexist.example.com)" "none"
+# 6. ForceRelay + non-matching TurnUri — all TURN filtered out, no relay candidates, expect failure
+assert "ForceRelay + TurnUri=notexist (expect: fail)" "$(run --force-relay --turn-uri "turn:notexist.example.com:3478")" "none"
 
 printf '\n%d passed, %d failed.\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

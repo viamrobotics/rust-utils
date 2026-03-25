@@ -338,16 +338,17 @@ impl<T: AuthMethod> DialBuilder<T> {
         self
     }
 
-    /// Filters the assembled ICE server list to only TURN servers whose URL contains
-    /// the given substring. Can be combined with force_relay to route through a specific
-    /// TURN server.
-    pub fn relay_host_filter(mut self, host: String) -> Self {
+    /// Filters the signaling server's TURN list to only the server whose parsed URI
+    /// matches. Uses struct comparison identical to the server-side TURN_URI env var.
+    /// Example: "turn:turn.viam.com:443"
+    pub fn turn_uri(mut self, uri: impl Into<String>) -> Self {
         self.config
             .webrtc_options
             .get_or_insert_with(Options::default)
-            .relay_host_filter = Some(host);
+            .turn_uri = Some(uri.into());
         self
     }
+
 
     /// Overrides the signaling server address used for WebRTC negotiation.
     /// Useful for testing against a specific app deployment (e.g. a Cloud Run PR deploy).
@@ -982,9 +983,11 @@ async fn maybe_connect_via_webrtc(
         webrtc_options.force_p2p,
     );
     let mut config = webrtc::extend_webrtc_config(base_config, optional_config);
-    if let Some(ref host) = webrtc_options.relay_host_filter {
-        config = webrtc::filter_ice_servers_by_host(config, host);
-    }
+    let turn_uri = webrtc_options
+        .turn_uri
+        .as_deref()
+        .and_then(webrtc::TurnUri::parse);
+    config = webrtc::apply_turn_options(config, turn_uri.as_ref());
 
     let (peer_connection, data_channel) =
         webrtc::new_peer_connection_for_client(config, webrtc_options.disable_trickle_ice).await?;
