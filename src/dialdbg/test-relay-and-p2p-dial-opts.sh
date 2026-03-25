@@ -4,12 +4,12 @@ set -euo pipefail
 cargo build --features dialdbg --bin viam-dialdbg 2>&1 | tail -1
 BINARY=./target/debug/viam-dialdbg
 
-HOST="machine-main.ozy75nuoux.viam.cloud"
-ENTITY="4f04c6ca-b9df-440d-82db-6d383b0c92a1"
-APIKEY="ymw99jc6h6ki2m9rlhzekp8r2tpj9zjy"
+HOST="<machine-fqdn>"
+ENTITY="<api-key-id>"
+APIKEY="<api-key>"
 # TURN_URI should be the URI of a TURN server returned by the signaling server.
 # Example: "turn:turn.viam.com:443"
-TURN_URI="turn:turn.viam.com:443"
+TURN_URI="<turn-uri>"
 COMMON=(-u "$HOST" -e "$ENTITY" -t api-key -c "$APIKEY" --nogrpc --nortt)
 
 PASS=0

@@ -339,16 +339,15 @@ impl<T: AuthMethod> DialBuilder<T> {
     }
 
     /// Filters the signaling server's TURN list to only the server whose parsed URI
-    /// matches. Uses struct comparison identical to the server-side TURN_URI env var.
-    /// Example: "turn:turn.viam.com:443"
-    pub fn turn_uri(mut self, uri: impl Into<String>) -> Self {
+    /// matches (compared by scheme, host, port, and transport — defaulting transport
+    /// to UDP if unspecified). Example: "turn:turn.viam.com:443"
+    pub fn turn_uri(mut self, uri: String) -> Self {
         self.config
             .webrtc_options
             .get_or_insert_with(Options::default)
-            .turn_uri = Some(uri.into());
+            .turn_uri = Some(uri);
         self
     }
-
 
     /// Overrides the signaling server address used for WebRTC negotiation.
     /// Useful for testing against a specific app deployment (e.g. a Cloud Run PR deploy).

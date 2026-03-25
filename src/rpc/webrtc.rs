@@ -45,11 +45,9 @@ pub(crate) struct Options {
     /// candidates are used. Useful for testing direct connectivity without relay fallback.
     pub(crate) force_p2p: bool,
     /// When set, filters the signaling server's TURN list to only the server whose
-    /// parsed URI matches. Uses struct comparison identical to the server-side TURN_URI
-    /// env var. Leave transport unspecified for UDP default.
-    /// Example: "turn:turn.viam.com:443"
+    /// parsed URI matches (compared by scheme, host, port, and transport — defaulting
+    /// transport to UDP if unspecified). Example: "turn:turn.viam.com:443"
     pub(crate) turn_uri: Option<String>,
-
 }
 
 impl fmt::Debug for Options {
@@ -143,8 +141,6 @@ impl TurnUri {
             transport,
         })
     }
-
-
 }
 
 /// Filters TURN server URLs in config to only those whose parsed URI matches turn_uri.
@@ -153,9 +149,9 @@ pub(crate) fn apply_turn_options(
     mut config: RTCConfiguration,
     turn_uri: Option<&TurnUri>,
 ) -> RTCConfiguration {
-    if turn_uri.is_none() {
+    let Some(filter) = turn_uri else {
         return config;
-    }
+    };
     for server in &mut config.ice_servers {
         server.urls = server
             .urls
@@ -165,10 +161,8 @@ pub(crate) fn apply_turn_options(
                     return Some(url.clone());
                 }
                 let uri = TurnUri::parse(url)?;
-                if let Some(filter) = turn_uri {
-                    if &uri != filter {
-                        return None;
-                    }
+                if &uri != filter {
+                    return None;
                 }
                 Some(url.clone())
             })
