@@ -1370,7 +1370,10 @@ fn encode_sdp(sdp: RTCSessionDescription) -> Result<String> {
 
 fn infer_remote_uri_from_authority(uri: Uri, override_addr: Option<&str>) -> Uri {
     if let Some(addr) = override_addr {
-        return Uri::from_parts(uri_parts_with_defaults(addr)).unwrap_or(uri);
+        return Uri::from_parts(uri_parts_with_defaults(addr)).unwrap_or_else(|e| {
+            log::warn!("Failed to parse signaling server override {addr:?}: {e}; falling back to original URI");
+            uri
+        });
     }
     let authority = uri.authority().map(Authority::as_str).unwrap_or_default();
     let is_local_connection = authority.contains(".local.viam.cloud")
