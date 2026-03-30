@@ -982,10 +982,13 @@ async fn maybe_connect_via_webrtc(
         webrtc_options.force_p2p,
     );
     let mut config = webrtc::extend_webrtc_config(base_config, optional_config);
-    let turn_uri = webrtc_options
-        .turn_uri
-        .as_deref()
-        .and_then(webrtc::TurnUri::parse);
+    let turn_uri = webrtc_options.turn_uri.as_deref().and_then(|s| {
+        let parsed = webrtc::TurnUri::parse(s);
+        if parsed.is_none() {
+            log::warn!("Failed to parse turn_uri, ignoring: {s:?}");
+        }
+        parsed
+    });
     config = webrtc::apply_turn_options(config, turn_uri.as_ref());
 
     let (peer_connection, data_channel) =
