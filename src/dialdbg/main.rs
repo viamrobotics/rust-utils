@@ -71,13 +71,12 @@ pub(crate) struct Args {
     force_p2p: bool,
 
     /// Filter the signaling server's TURN list to only the server whose parsed URI
-    /// matches. Uses the same struct comparison as the server-side TURN_URI env var.
+    /// matches.
     /// Example: "turn:turn.viam.com:443". Implies WebRTC.
     #[arg(long, conflicts_with("nowebrtc"))]
     turn_uri: Option<String>,
 
-    /// Override the signaling server address used for WebRTC negotiation. Useful for
-    /// testing against a specific app deployment (e.g. a Cloud Run PR deploy).
+    /// Override the signaling server address used for WebRTC negotiation.
     #[arg(long, conflicts_with("nowebrtc"))]
     signaling_server: Option<String>,
 

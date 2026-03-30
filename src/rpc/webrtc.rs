@@ -160,10 +160,7 @@ pub(crate) fn apply_turn_options(
                 if !url.starts_with("turn:") && !url.starts_with("turns:") {
                     return Some(url.clone());
                 }
-                let Some(uri) = TurnUri::parse(url) else {
-                    log::warn!("Failed to parse TURN URL {url:?}; dropping from ICE config");
-                    return None;
-                };
+                let uri = TurnUri::parse(url)?;
                 if &uri != filter {
                     return None;
                 }

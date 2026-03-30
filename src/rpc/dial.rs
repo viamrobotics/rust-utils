@@ -350,7 +350,6 @@ impl<T: AuthMethod> DialBuilder<T> {
     }
 
     /// Overrides the signaling server address used for WebRTC negotiation.
-    /// Useful for testing against a specific app deployment (e.g. a Cloud Run PR deploy).
     pub fn signaling_server(mut self, address: String) -> Self {
         self.config.signaling_server_override = Some(address);
         self
