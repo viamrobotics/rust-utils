@@ -543,7 +543,10 @@ impl DialBuilder<WithoutCredentials> {
         }
         let original_uri = Uri::from_parts(original_uri_parts)?;
         let uri2 = original_uri.clone();
-        let uri = infer_remote_uri_from_authority(original_uri, self.config.signaling_server_override.as_deref());
+        let uri = infer_remote_uri_from_authority(
+            original_uri,
+            self.config.signaling_server_override.as_deref(),
+        );
         let domain = uri2.authority().to_owned().unwrap().host().to_owned();
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
@@ -555,7 +558,9 @@ impl DialBuilder<WithoutCredentials> {
         }
 
         let channel = match mdns_uri {
-            Some(uri) => Self::create_channel(self.config.allow_downgrade, &domain, uri, true).await,
+            Some(uri) => {
+                Self::create_channel(self.config.allow_downgrade, &domain, uri, true).await
+            }
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -642,7 +647,8 @@ impl DialBuilder<WithoutCredentials> {
             let with_mdns = self.clone().connect_mdns(original_uri);
             let without_mdns = self.connect_inner(None, original_uri2);
         }
-        let mut with_mdns_err: Option<anyhow::Error> = skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
+        let mut with_mdns_err: Option<anyhow::Error> =
+            skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {
@@ -725,7 +731,10 @@ impl DialBuilder<WithCredentials> {
         let original_uri = Uri::from_parts(original_uri_parts)?;
 
         let domain = original_uri.authority().unwrap().host().to_string();
-        let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone(), self.config.signaling_server_override.as_deref());
+        let uri_for_auth = infer_remote_uri_from_authority(
+            original_uri.clone(),
+            self.config.signaling_server_override.as_deref(),
+        );
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -842,7 +851,8 @@ impl DialBuilder<WithCredentials> {
             let with_mdns = self.clone().connect_mdns(original_uri);
             let without_mdns = self.connect_inner(None, original_uri2);
         }
-        let mut with_mdns_err: Option<anyhow::Error> = skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
+        let mut with_mdns_err: Option<anyhow::Error> =
+            skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {

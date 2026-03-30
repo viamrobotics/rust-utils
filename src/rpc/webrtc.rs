@@ -105,11 +105,10 @@ impl Options {
         self.disable_webrtc = true;
         self
     }
-
 }
 
 /// A parsed TURN URI with scheme, host, port, and transport components.
-/// Transport defaults to "udp" when unspecified, matching stun.ParseURI behavior.
+/// Transport defaults to "udp" when unspecified.
 #[derive(Debug, PartialEq)]
 pub(crate) struct TurnUri {
     pub scheme: String,

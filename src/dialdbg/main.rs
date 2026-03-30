@@ -67,12 +67,16 @@ pub(crate) struct Args {
     force_relay: bool,
 
     /// Strip TURN servers so only host/srflx candidates are used. Implies WebRTC.
-    #[arg(long, action, conflicts_with("nowebrtc"), conflicts_with("force_relay"))]
+    #[arg(
+        long,
+        action,
+        conflicts_with("nowebrtc"),
+        conflicts_with("force_relay")
+    )]
     force_p2p: bool,
 
     /// Filter the signaling server's TURN list to only the server whose parsed URI
-    /// matches.
-    /// Example: "turn:turn.viam.com:443". Implies WebRTC.
+    /// matches. Example: "turn:turn.viam.com:443". Implies WebRTC.
     #[arg(long, conflicts_with("nowebrtc"))]
     turn_uri: Option<String>,
 
@@ -84,7 +88,6 @@ pub(crate) struct Args {
     /// you want to test cloud relay without mDNS bypassing it.
     #[arg(long, action)]
     disable_mdns: bool,
-
 }
 
 async fn dial_grpc(
