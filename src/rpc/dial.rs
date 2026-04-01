@@ -25,8 +25,10 @@ use ::http::{
 use ::viam_mdns::{discover, Response};
 use ::webrtc::ice_transport::{
     ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
+    ice_candidate_type::RTCIceCandidateType,
     ice_connection_state::RTCIceConnectionState,
 };
+use ::webrtc::stats::StatsReportType;
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use anyhow::{Context, Result};
 use core::fmt;
@@ -331,7 +333,7 @@ impl<T: AuthMethod> DialBuilder<T> {
         for ipv4 in addresses {
             for candidate in candidates {
                 let discovery = discover::interface_with_loopback(
-                    VIAM_MDNS_SERVICE_NAME,
+                    VIAM_MDNS_SERVICE_NAME,f
                     Duration::from_millis(250),
                     ipv4,
                 )
@@ -1262,7 +1264,6 @@ async fn maybe_connect_via_webrtc(
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
 
-    // Best-effort report of connection metadata for per-org metrics.
     {
         let peer_conn = peer_connection.clone();
         let mut sc = SignalingServiceClient::new(channel.clone());
@@ -1353,13 +1354,10 @@ fn metadata_from_parts(parts: &http::request::Parts) -> Metadata {
 }
 
 /// Inspects a WebRTC stats report to determine which ICE candidate type was
-/// selected for the connection. Mirrors the Go implementation in wrtc_client.go.
+/// selected for the connection.
 fn selected_ice_candidate_type(
     stats: &::webrtc::stats::StatsReport,
 ) -> IceCandidateType {
-    use ::webrtc::ice_transport::ice_candidate_type::RTCIceCandidateType;
-    use ::webrtc::stats::StatsReportType;
-
     // Find the nominated candidate pair and get its remote candidate ID.
     let remote_cand_id = stats.reports.values().find_map(|s| {
         if let StatsReportType::CandidatePair(p) = s {
@@ -1392,7 +1390,7 @@ fn selected_ice_candidate_type(
                 if cand.url.is_empty() {
                     return IceCandidateType::Unspecified;
                 }
-                if cand.url.contains("viam.com") || cand.url.contains("viaminternal") {
+                if cand.url.contains("viam.com") {
                     IceCandidateType::CoturnRelay
                 } else {
                     IceCandidateType::TwilioRelay
@@ -1404,16 +1402,11 @@ fn selected_ice_candidate_type(
 }
 
 /// Reports WebRTC connection metadata to the signaling server as a best-effort
-/// fire-and-forget operation. Mirrors the Go implementation in wrtc_client.go.
-async fn report_connection_metadata<T>(
-    signaling_client: &mut SignalingServiceClient<T>,
+/// fire-and-forget operation.
+async fn report_connection_metadata(
+    signaling_client: &mut SignalingServiceClient<AddAuthorization<SetRequestHeader<Channel, HeaderValue>>>,
     peer_conn: std::sync::Arc<::webrtc::peer_connection::RTCPeerConnection>,
-) where
-    T: tonic::client::GrpcService<tonic::body::BoxBody>,
-    T::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
-    T::ResponseBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    <T::ResponseBody as http_body::Body>::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
-{
+) {
     let stats = peer_conn.get_stats().await;
     let candidate_type = selected_ice_candidate_type(&stats);
     if candidate_type == IceCandidateType::Unspecified {
@@ -1423,8 +1416,7 @@ async fn report_connection_metadata<T>(
 
     let request = tonic::Request::new(ReportConnectionMetadataRequest {
         candidate_type: candidate_type as i32,
-        // TODO(APP-14871): use SDK_TYPE_RUST once the proto enum value is defined.
-        sdk_type: SdkType::Go as i32,
+        sdk_type: SdkType::PythonCpp as i32,
     });
 
     if let Err(e) = signaling_client.report_connection_metadata(request).await {
