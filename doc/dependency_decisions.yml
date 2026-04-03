@@ -71,3 +71,9 @@
     :why:
     :versions: []
     :when: 2025-11-04 16:20:20.790232000 Z
+- - :permit
+  - zlib
+  - :who: ethan
+    :why: functionally equivalent to MIT
+    :versions: []
+    :when: 2026-04-03 14:00:01.288493000 Z
