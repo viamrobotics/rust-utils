@@ -21,6 +21,7 @@ use webrtc::{
     interceptor::registry::Registry,
     peer_connection::{
         configuration::RTCConfiguration, peer_connection_state::RTCPeerConnectionState,
+        policy::ice_transport_policy::RTCIceTransportPolicy,
         sdp::session_description::RTCSessionDescription, signaling_state::RTCSignalingState,
         RTCPeerConnection,
     },
@@ -37,6 +38,16 @@ pub(crate) struct Options {
     pub(crate) config: RTCConfiguration,
     pub(crate) signaling_insecure: bool,
     pub(crate) signaling_server_address: String,
+    /// Forces ICE transport policy to relay-only, so only TURN candidates are used.
+    /// Useful for testing relay connectivity through a TURN server.
+    pub(crate) force_relay: bool,
+    /// Strips TURN servers from the ICE configuration so only host and server-reflexive
+    /// candidates are used. Useful for testing direct connectivity without relay fallback.
+    pub(crate) force_p2p: bool,
+    /// When set, filters the signaling server's TURN list to only the server whose
+    /// parsed URI matches (compared by scheme, host, port, and transport — defaulting
+    /// transport to UDP if unspecified). Example: "turn:turn.viam.com:443"
+    pub(crate) turn_uri: Option<String>,
 }
 
 impl fmt::Debug for Options {
@@ -94,6 +105,95 @@ impl Options {
         self.disable_webrtc = true;
         self
     }
+}
+
+/// A parsed TURN URI with scheme, host, port, and transport components.
+/// Transport defaults to "udp" when unspecified.
+#[derive(Debug, PartialEq)]
+pub(crate) struct TurnUri {
+    pub scheme: String,
+    pub host: String,
+    pub port: u16,
+    pub transport: String,
+}
+
+impl TurnUri {
+    /// Parses a TURN URI string of the form "scheme:host:port?transport=proto".
+    /// Returns None for non-TURN URIs or malformed input.
+    pub fn parse(s: &str) -> Option<Self> {
+        let (scheme, rest) = s.split_once(':')?;
+        if scheme != "turn" && scheme != "turns" {
+            return None;
+        }
+        let (hostport, query) = rest.split_once('?').unwrap_or((rest, ""));
+        let (host, port_str) = hostport.rsplit_once(':')?;
+        let port = port_str.parse().ok()?;
+        let transport = query
+            .split('&')
+            .find_map(|p| p.strip_prefix("transport="))
+            .unwrap_or("udp")
+            .to_string();
+        Some(TurnUri {
+            scheme: scheme.to_string(),
+            host: host.to_string(),
+            port,
+            transport,
+        })
+    }
+}
+
+/// Filters TURN server URLs in config to only those whose parsed URI matches turn_uri.
+/// Non-TURN URLs (e.g. stun:) are always kept unchanged.
+pub(crate) fn apply_turn_options(
+    mut config: RTCConfiguration,
+    turn_uri: Option<&TurnUri>,
+) -> RTCConfiguration {
+    let Some(filter) = turn_uri else {
+        return config;
+    };
+    for server in &mut config.ice_servers {
+        server.urls = server
+            .urls
+            .iter()
+            .filter_map(|url| {
+                if !url.starts_with("turn:") && !url.starts_with("turns:") {
+                    return Some(url.clone());
+                }
+                let uri = TurnUri::parse(url)?;
+                if &uri != filter {
+                    return None;
+                }
+                Some(url.clone())
+            })
+            .collect();
+    }
+    // Remove ICE server entries that had all their TURN URLs filtered out.
+    config.ice_servers.retain(|s| !s.urls.is_empty());
+    config
+}
+
+/// Returns true if any of the ICE server's URLs use a TURN scheme.
+pub(crate) fn ice_server_has_turn(s: &RTCIceServer) -> bool {
+    s.urls
+        .iter()
+        .any(|url| url.starts_with("turn:") || url.starts_with("turns:"))
+}
+
+/// Applies force_relay or force_p2p options to a config and optional server config.
+pub(crate) fn apply_ice_policy(
+    mut config: RTCConfiguration,
+    mut optional: Option<WebRtcConfig>,
+    force_relay: bool,
+    force_p2p: bool,
+) -> (RTCConfiguration, Option<WebRtcConfig>) {
+    if force_p2p {
+        optional = None;
+        config.ice_servers.retain(|s| !ice_server_has_turn(s));
+    }
+    if force_relay {
+        config.ice_transport_policy = RTCIceTransportPolicy::Relay;
+    }
+    (config, optional)
 }
 
 fn default_configuration() -> RTCConfiguration {
