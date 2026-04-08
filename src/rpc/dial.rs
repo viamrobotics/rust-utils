@@ -10,7 +10,8 @@ use crate::gen::proto::rpc::v1::{
 use crate::gen::proto::rpc::webrtc::v1::{
     call_response::Stage, call_update_request::Update,
     signaling_service_client::SignalingServiceClient, CallUpdateRequest,
-    OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
+    IceCandidateType, OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
+    ReportConnectionMetadataRequest, SdkType,
 };
 use crate::gen::proto::rpc::webrtc::v1::{
     CallRequest, IceCandidate, Metadata, RequestHeaders, Strings,
@@ -24,8 +25,10 @@ use ::http::{
 use ::viam_mdns::{discover, Response};
 use ::webrtc::ice_transport::{
     ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
+    ice_candidate_type::RTCIceCandidateType,
     ice_connection_state::RTCIceConnectionState,
 };
+use ::webrtc::stats::StatsReportType;
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use anyhow::{Context, Result};
 use core::fmt;
@@ -372,7 +375,7 @@ impl<T: AuthMethod> DialBuilder<T> {
         for ipv4 in addresses {
             for candidate in candidates {
                 let discovery = discover::interface_with_loopback(
-                    VIAM_MDNS_SERVICE_NAME,
+                    VIAM_MDNS_SERVICE_NAME,f
                     Duration::from_millis(250),
                     ipv4,
                 )
@@ -1361,6 +1364,15 @@ async fn maybe_connect_via_webrtc(
     exchange_done.store(true, Ordering::Release);
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
+
+    {
+        let peer_conn = peer_connection.clone();
+        let mut sc = SignalingServiceClient::new(channel.clone());
+        tokio::spawn(async move {
+            report_connection_metadata(&mut sc, peer_conn).await;
+        });
+    }
+
     Ok(client_channel)
 }
 
@@ -1446,4 +1458,75 @@ fn metadata_from_parts(parts: &http::request::Parts) -> Metadata {
         md.insert(k, v);
     }
     Metadata { md }
+}
+
+/// Inspects a WebRTC stats report to determine which ICE candidate type was
+/// selected for the connection.
+fn selected_ice_candidate_type(
+    stats: &::webrtc::stats::StatsReport,
+) -> IceCandidateType {
+    // Find the nominated candidate pair and get its remote candidate ID.
+    let remote_cand_id = stats.reports.values().find_map(|s| {
+        if let StatsReportType::CandidatePair(p) = s {
+            if p.nominated {
+                return Some(p.remote_candidate_id.clone());
+            }
+        }
+        None
+    });
+
+    let remote_cand_id = match remote_cand_id {
+        Some(id) if !id.is_empty() => id,
+        _ => return IceCandidateType::Unspecified,
+    };
+
+    let remote = stats.reports.get(&remote_cand_id).and_then(|s| {
+        if let StatsReportType::RemoteIceCandidate(c) = s {
+            Some(c)
+        } else {
+            None
+        }
+    });
+
+    match remote {
+        None => IceCandidateType::Unspecified,
+        Some(cand) => match cand.candidate_type {
+            RTCIceCandidateType::Host => IceCandidateType::Host,
+            RTCIceCandidateType::Srflx | RTCIceCandidateType::Prflx => IceCandidateType::Stun,
+            RTCIceCandidateType::Relay => {
+                if cand.url.is_empty() {
+                    return IceCandidateType::Unspecified;
+                }
+                if cand.url.contains("viam.com") {
+                    IceCandidateType::CoturnRelay
+                } else {
+                    IceCandidateType::TwilioRelay
+                }
+            }
+            _ => IceCandidateType::Unspecified,
+        },
+    }
+}
+
+/// Reports WebRTC connection metadata to the signaling server as a best-effort
+/// fire-and-forget operation.
+async fn report_connection_metadata(
+    signaling_client: &mut SignalingServiceClient<AddAuthorization<SetRequestHeader<Channel, HeaderValue>>>,
+    peer_conn: std::sync::Arc<::webrtc::peer_connection::RTCPeerConnection>,
+) {
+    let stats = peer_conn.get_stats().await;
+    let candidate_type = selected_ice_candidate_type(&stats);
+    if candidate_type == IceCandidateType::Unspecified {
+        log::debug!("could not determine selected ICE candidate type, skipping report");
+        return;
+    }
+
+    let request = tonic::Request::new(ReportConnectionMetadataRequest {
+        candidate_type: candidate_type as i32,
+        sdk_type: SdkType::PythonCpp as i32,
+    });
+
+    if let Err(e) = signaling_client.report_connection_metadata(request).await {
+        log::debug!("failed to report connection metadata: {e}");
+    }
 }
