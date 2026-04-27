@@ -450,6 +450,8 @@ pub struct CommonLanguageSettings {
     #[prost(enumeration="ClientLibraryDestination", repeated, tag="2")]
     pub destinations: ::prost::alloc::vec::Vec<i32>,
     /// Configuration for which RPCs should be generated in the GAPIC client.
+    ///
+    /// Note: This field should not be used in most cases.
     #[prost(message, optional, tag="3")]
     pub selective_gapic_generation: ::core::option::Option<SelectiveGapicGeneration>,
 }
@@ -815,6 +817,8 @@ pub mod method_settings {
 }
 /// This message is used to configure the generation of a subset of the RPCs in
 /// a service for client libraries.
+///
+/// Note: This feature should not be used in most cases.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SelectiveGapicGeneration {
