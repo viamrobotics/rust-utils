@@ -129,8 +129,9 @@ fn dial_with_cred(
 /// * `c_timeout` a float, set how many seconds we should try to dial before timing out
 /// * `c_force_relay` a bool, set to true to force ICE relay-only policy (TURN candidates only)
 /// * `c_force_p2p` a bool, set to true to strip TURN servers and force host/reflexive candidates only
-/// * `c_turn_uri` a C-style string with a TURN URI filter (e.g. "turns::443?transport=tcp"); set to
-///   NULL to use all TURN servers. An empty host matches any TURN provider.
+/// * `c_turn_uri` a C-style string with a TURN URI filter (e.g. "turn:turn.viam.com:443"); set to
+///   NULL or empty to use all TURN servers. The filter matches TURN URLs by scheme, host, port,
+///   and transport (transport defaults to "udp" if unspecified).
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
 #[no_mangle]
 pub unsafe extern "C" fn viam_dial(
