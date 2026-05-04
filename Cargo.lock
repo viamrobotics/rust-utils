@@ -1514,6 +1514,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-rustls"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec3efd23720e2049821a693cbc7e65ea87c72f1c58ff2f9522ff332b1491e590"
+dependencies = [
+ "futures-util",
+ "http",
+ "hyper",
+ "log",
+ "rustls 0.21.12",
+ "rustls-native-certs",
+ "tokio",
+ "tokio-rustls 0.24.1",
+]
+
+[[package]]
 name = "hyper-timeout"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3819,8 +3835,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "viam-mdns"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed628096380455931a36c47c97ac663b97f80a7174ed2b26a96bae3dc01282f6"
 dependencies = [
  "async-std",
  "async-stream 0.2.1",
@@ -3855,6 +3869,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
+ "hyper-rustls",
  "interceptor 0.12.0",
  "libc",
  "local-ip-address",
@@ -3864,6 +3879,7 @@ dependencies = [
  "prost",
  "prost-types",
  "rand 0.8.5",
+ "rustls 0.21.12",
  "serde",
  "serde_json",
  "tokio",

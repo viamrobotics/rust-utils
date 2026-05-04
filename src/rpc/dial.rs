@@ -21,7 +21,7 @@ use ::http::{
     uri::{Authority, Parts, PathAndQuery, Scheme},
     HeaderValue, Version,
 };
-use ::viam_mdns::{discover, Response};
+use ::viam_mdns::{discover, RecordKind, Response};
 use ::webrtc::ice_transport::{
     ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
     ice_connection_state::RTCIceConnectionState,
@@ -43,9 +43,59 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::{mpsc, watch};
+use tonic::body::BoxBody;
 use tonic::codegen::BoxFuture;
 use tonic::transport::{Body, Channel, Uri};
-use tonic::{body::BoxBody, transport::ClientTlsConfig};
+
+/// TLS certificate verifier that accepts any certificate, used for mDNS connections
+/// where the local device's cert is signed by a public CA (Let's Encrypt or Google)
+/// but previously only the leaf cert was sent in the TLS handshake.  Without the
+/// intermediate CA cert in the chain, clients cannot build the path to the root even
+/// though the root is in the system trust store, so verification fails.
+///
+/// TODO(RSDK-13879): app commit d83137fc added `Bundle: true` to ACME certificate
+/// issuance (both Let's Encrypt and Google CA paths), which causes the full chain
+/// (leaf + intermediate) to be stored and sent during TLS handshakes.  A follow-up
+/// migration (RSDK-13799) redistributes renewal dates so that all existing robot
+/// certificates are re-issued with the bundled chain by May 22, 2026.  After that
+/// date, `NoCertVerification` can be replaced with tonic's standard TLS:
+///   1. Remove this struct entirely.
+///   2. Remove the `hyper-rustls` and `rustls` dependencies from Cargo.toml.
+///   3. Restore the `domain: &str` parameter to `create_channel` (it was removed
+///      along with this workaround).  The domain is the robot's canonical hostname
+///      from the original URI (e.g. `my-robot.abcdefg.local.viam.cloud`), NOT the
+///      discovered IP — it is needed for SNI and SAN verification since the cert's
+///      SANs are hostnames, not IP addresses.
+///   4. In `create_channel` (non-loopback mDNS path below), replace the entire
+///      custom-connector block with:
+///         let tls_config = ClientTlsConfig::new().domain_name(domain);
+///         let mut parts = uri.into_parts();
+///         parts.scheme = Some(Scheme::HTTPS);
+///         let uri = Uri::from_parts(parts)?;
+///         return Channel::builder(uri.clone())
+///             .tls_config(tls_config)?
+///             .connect()
+///             .await
+///             .with_context(|| format!("Connecting to {:?}", uri));
+///      `ClientTlsConfig::new()` uses the webpki root CA bundle (tonic is built
+///      with `tls-webpki-roots`), which already contains the Let's Encrypt and
+///      Google CA roots — no custom cert pinning required.
+#[derive(Debug)]
+struct NoCertVerification;
+
+impl rustls::client::ServerCertVerifier for NoCertVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
+    }
+}
 use tower::{Service, ServiceBuilder};
 use tower_http::auth::AddAuthorization;
 use tower_http::auth::AddAuthorizationLayer;
@@ -358,6 +408,7 @@ impl<T: AuthMethod> DialBuilder<T> {
     async fn get_addr_from_interface(
         iface: (&str, Vec<&IpAddr>),
         candidates: &Vec<String>,
+        local_ipv4s: &std::collections::HashSet<Ipv4Addr>,
     ) -> Option<String> {
         let addresses: Vec<Ipv4Addr> = iface
             .1
@@ -371,12 +422,17 @@ impl<T: AuthMethod> DialBuilder<T> {
         let mut resp: Option<Response> = None;
         for ipv4 in addresses {
             for candidate in candidates {
-                let discovery = discover::interface_with_loopback(
+                let discovery = match discover::interface_with_loopback(
                     VIAM_MDNS_SERVICE_NAME,
                     Duration::from_millis(250),
                     ipv4,
-                )
-                .ok()?;
+                ) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        log::debug!("mDNS socket error on {ipv4}: {e}");
+                        continue;
+                    }
+                };
                 let stream = discovery.listen();
                 pin_mut!(stream);
                 while let Some(Ok(response)) = stream.next().await {
@@ -389,10 +445,19 @@ impl<T: AuthMethod> DialBuilder<T> {
                         // candidates based on the actual "my-cool-robot" name without being opinionated
                         // on whether the candidate is locally named or not.
                         let local_agnostic_candidate = candidate.as_str().split("viam").next()?;
+                        log::debug!(
+                            "mDNS response on {ipv4}: hostname={hostname:?}, candidate={candidate:?}, local_agnostic={local_agnostic_candidate:?}, matches={}",
+                            hostname.contains(local_agnostic_candidate)
+                        );
                         if hostname.contains(local_agnostic_candidate) {
                             resp = Some(response);
                             break;
                         }
+                    } else {
+                        log::debug!(
+                            "mDNS response on {ipv4}: no hostname (no PTR record); answers={:?}",
+                            response.answers
+                        );
                     }
                     if resp.is_some() {
                         break;
@@ -409,10 +474,33 @@ impl<T: AuthMethod> DialBuilder<T> {
             has_webrtc = has_webrtc || field.contains("webrtc");
         }
 
-        let ip_addr = match resp.ip_addr() {
-            Some(std::net::IpAddr::V4(ip_v4)) => Some(ip_v4),
-            Some(std::net::IpAddr::V6(_)) | None => None,
-        };
+        // Log all records in the response for diagnostics.
+        log::debug!(
+            "mDNS matched response records: {:?}",
+            resp.records().collect::<Vec<_>>()
+        );
+
+        // Prefer a non-loopback IPv4 address that is currently present on one of our own
+        // network interfaces.  viam-server may advertise a stale IP (e.g. a WiFi address
+        // from when it was started that is now unreachable because WiFi was turned off).
+        // Accepting only IPs we can actually route to avoids ENETUNREACH at connect time.
+        // If no reachable non-loopback IP is found, fall back to any advertised IPv4
+        // (including loopback) so that offline-only (loopback-only) machines still work.
+        let ip_addr = resp
+            .records()
+            .filter_map(|r| match r.kind {
+                RecordKind::A(addr) if !addr.is_loopback() && local_ipv4s.contains(&addr) => {
+                    Some(addr)
+                }
+                _ => None,
+            })
+            .next()
+            .or_else(|| {
+                resp.records().find_map(|r| match r.kind {
+                    RecordKind::A(addr) => Some(addr),
+                    _ => None,
+                })
+            });
 
         if !(has_grpc || has_webrtc) || ip_addr.is_none() {
             return None;
@@ -420,6 +508,7 @@ impl<T: AuthMethod> DialBuilder<T> {
         let mut local_addr = ip_addr?.to_string();
         local_addr.push(':');
         local_addr.push_str(&resp.port()?.to_string());
+        log::debug!("mDNS resolved address: {local_addr}");
         Some(local_addr)
     }
 
@@ -443,6 +532,18 @@ impl<T: AuthMethod> DialBuilder<T> {
 
         let ifaces = list_afinet_netifas().ok()?;
 
+        // Collect all local IPv4 addresses so we can validate mDNS response IPs.
+        // viam-server may advertise a stale IP (e.g. a WiFi address from when it started,
+        // now unreachable because WiFi is off). By only accepting non-loopback IPs that are
+        // currently present on a local interface, we avoid picking an unreachable address.
+        let local_ipv4s: std::collections::HashSet<Ipv4Addr> = ifaces
+            .iter()
+            .filter_map(|(_, ip)| match ip {
+                IpAddr::V4(v4) => Some(*v4),
+                _ => None,
+            })
+            .collect();
+
         let ifaces: HashMap<&str, Vec<&IpAddr>> =
             ifaces.iter().fold(HashMap::new(), |mut map, (k, v)| {
                 map.entry(k).or_default().push(v);
@@ -451,7 +552,11 @@ impl<T: AuthMethod> DialBuilder<T> {
 
         let mut iface_futures = FuturesUnordered::new();
         for iface in ifaces {
-            iface_futures.push(Self::get_addr_from_interface(iface, &candidates));
+            iface_futures.push(Self::get_addr_from_interface(
+                iface,
+                &candidates,
+                &local_ipv4s,
+            ));
         }
 
         let mut local_addr: Option<String> = None;
@@ -479,18 +584,61 @@ impl<T: AuthMethod> DialBuilder<T> {
         Some(uri)
     }
 
-    async fn create_channel(
-        allow_downgrade: bool,
-        domain: &str,
-        uri: Uri,
-        for_mdns: bool,
-    ) -> Result<Channel> {
-        let mut chan = Channel::builder(uri.clone());
+    // TODO(RSDK-13879) step 3: restore `domain: &str` as a second parameter (after
+    // `allow_downgrade`) and thread it through all four call sites below.  See the
+    // `NoCertVerification` doc comment for the full migration instructions.
+    async fn create_channel(allow_downgrade: bool, uri: Uri, for_mdns: bool) -> Result<Channel> {
         if for_mdns {
-            let tls_config = ClientTlsConfig::new().domain_name(domain);
-            chan = chan.tls_config(tls_config)?;
+            let host = uri.host().unwrap_or("");
+            let is_loopback = host
+                .parse::<std::net::IpAddr>()
+                .map(|ip| ip.is_loopback())
+                .unwrap_or(false);
+
+            if is_loopback {
+                // viam-server serves plain gRPC (no TLS) on the loopback port it advertises
+                // via mDNS. The server only accepts HTTP/2 (gRPC requires it), so we must use
+                // h2c (HTTP/2 cleartext Prior Knowledge). tonic's own connect() sets
+                // http2_only=true which sends the h2c connection preface directly over TCP.
+                // We intentionally do NOT use connect_with_connector here: hyper-rustls's
+                // plain-TCP path sends HTTP/1.1, which the server rejects with an empty reply
+                // (BrokenPipe from our side).
+                log::debug!("mDNS create_channel: loopback {host}, using tonic h2c connect");
+                return Channel::builder(uri.clone())
+                    .connect()
+                    .await
+                    .with_context(|| format!("Connecting to {:?}", uri));
+            }
+
+            // Non-loopback LAN address: viam-server uses TLS but currently only sends the leaf
+            // cert (no intermediate), so standard verification fails.  Use a custom connector
+            // that skips cert verification for now.
+            // TODO(RSDK-13879) step 4: replace the block below with standard tonic TLS once all
+            // robot certs include the full chain (after May 22, 2026).  See the
+            // `NoCertVerification` doc comment for the exact replacement snippet.
+            log::debug!("mDNS create_channel: LAN address {host}, using no-cert-verify TLS");
+            let tls_config = rustls::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_custom_certificate_verifier(Arc::new(NoCertVerification))
+                .with_no_client_auth();
+
+            let connector = hyper_rustls::HttpsConnectorBuilder::new()
+                .with_tls_config(tls_config)
+                .https_or_http()
+                .enable_http2()
+                .build();
+
+            let mut parts = uri.into_parts();
+            parts.scheme = Some(Scheme::HTTPS);
+            let uri = Uri::from_parts(parts)?;
+            log::debug!("mDNS create_channel: connecting to {uri:?}");
+            return Channel::builder(uri.clone())
+                .connect_with_connector(connector)
+                .await
+                .with_context(|| format!("Connecting to {:?}", uri));
         }
-        let chan = match chan
+
+        let chan = match Channel::builder(uri.clone())
             .connect()
             .await
             .with_context(|| format!("Connecting to {:?}", uri.clone()))
@@ -558,9 +706,8 @@ impl DialBuilder<WithoutCredentials> {
         }
 
         let channel = match mdns_uri {
-            Some(uri) => {
-                Self::create_channel(self.config.allow_downgrade, domain, uri, true).await
-            }
+            // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
+            Some(uri) => Self::create_channel(self.config.allow_downgrade, uri, true).await,
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -574,11 +721,11 @@ impl DialBuilder<WithoutCredentials> {
             Err(e) => {
                 if attempting_mdns {
                     log::debug!(
-                        "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
+                        "Unable to connect via mDNS; falling back to robot URI. Error: {e:#}"
                     );
                 }
-                Self::create_channel(self.config.allow_downgrade, domain, uri.clone(), false)
-                    .await?
+                // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
+                Self::create_channel(self.config.allow_downgrade, uri.clone(), false).await?
             }
         };
 
@@ -746,7 +893,8 @@ impl DialBuilder<WithCredentials> {
             log::debug!("Attempting to connect");
         }
         let channel = match mdns_uri {
-            Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true).await,
+            // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
+            Some(uri) => Self::create_channel(allow_downgrade, uri, true).await,
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -759,10 +907,11 @@ impl DialBuilder<WithCredentials> {
             Err(e) => {
                 if attempting_mdns {
                     log::debug!(
-                        "Unable to connect via mDNS; falling back to robot URI. Error: {e}"
+                        "Unable to connect via mDNS; falling back to robot URI. Error: {e:#}"
                     );
                 }
-                Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
+                // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
+                Self::create_channel(allow_downgrade, uri_for_auth, false).await?
             }
         };
 
