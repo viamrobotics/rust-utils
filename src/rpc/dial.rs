@@ -243,6 +243,7 @@ pub struct DialOptions {
     disable_mdns: bool,
     allow_downgrade: bool,
     insecure: bool,
+    signaling_server_override: Option<String>,
 }
 #[derive(Clone)]
 pub struct WantsCredentials(());
@@ -284,6 +285,7 @@ impl DialOptions {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -302,6 +304,7 @@ impl DialBuilder<WantsUri> {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -318,6 +321,7 @@ impl DialBuilder<WantsCredentials> {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -332,6 +336,7 @@ impl DialBuilder<WantsCredentials> {
                 disable_mdns: false,
                 insecure: false,
                 webrtc_options: None,
+                signaling_server_override: None,
             },
         }
     }
@@ -360,6 +365,43 @@ impl<T: AuthMethod> DialBuilder<T> {
     pub fn disable_webrtc(mut self) -> Self {
         let webrtc_options = Options::default().disable_webrtc();
         self.config.webrtc_options = Some(webrtc_options);
+        self
+    }
+
+    /// Forces ICE transport policy to relay-only so only TURN candidates are used.
+    /// Useful for testing relay connectivity through a TURN server.
+    pub fn force_relay(mut self) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .force_relay = true;
+        self
+    }
+
+    /// Strips TURN servers from the ICE config so only host and server-reflexive
+    /// candidates are used. Useful for testing direct connectivity without relay fallback.
+    pub fn force_p2p(mut self) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .force_p2p = true;
+        self
+    }
+
+    /// Filters the signaling server's TURN list to only the server whose parsed URI
+    /// matches (compared by scheme, host, port, and transport — defaulting transport
+    /// to UDP if unspecified). Example: "turn:turn.viam.com:443"
+    pub fn turn_uri(mut self, uri: String) -> Self {
+        self.config
+            .webrtc_options
+            .get_or_insert_with(Options::default)
+            .turn_uri = Some(uri);
+        self
+    }
+
+    /// Overrides the signaling server address used for WebRTC negotiation.
+    pub fn signaling_server(mut self, address: String) -> Self {
+        self.config.signaling_server_override = Some(address);
         self
     }
 
@@ -628,6 +670,7 @@ impl DialBuilder<WithoutCredentials> {
                 disable_mdns: self.config.disable_mdns,
                 allow_downgrade: self.config.allow_downgrade,
                 insecure: self.config.insecure,
+                signaling_server_override: self.config.signaling_server_override.clone(),
             },
         }
     }
@@ -648,7 +691,10 @@ impl DialBuilder<WithoutCredentials> {
         }
         let original_uri = Uri::from_parts(original_uri_parts)?;
         let uri2 = original_uri.clone();
-        let uri = infer_remote_uri_from_authority(original_uri);
+        let uri = infer_remote_uri_from_authority(
+            original_uri,
+            self.config.signaling_server_override.as_deref(),
+        );
         let domain = uri2.authority().to_owned().unwrap().as_str();
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
@@ -682,6 +728,7 @@ impl DialBuilder<WithoutCredentials> {
                 Self::create_channel(self.config.allow_downgrade, uri.clone(), false).await?
             }
         };
+
         // TODO (RSDK-517) make maybe_connect_via_webrtc take a more generic type so we don't
         // need to add these dummy layers.
         let intercepted_channel = ServiceBuilder::new()
@@ -731,17 +778,24 @@ impl DialBuilder<WithoutCredentials> {
         let original_uri2 = duplicate_uri(&original_uri).ok_or(anyhow::anyhow!(
             "Attempting to connect but there was no uri"
         ))?;
+
+        let skip_mdns = self.config.disable_mdns;
+
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
         // abandon the `Err` results, and we want to provide comprehensive logging for
         // debugging purposes. Hence the loop and pinning. The pinning lets us reference
         // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
+        //
+        // When mDNS is skipped (disable_mdns), with_mdns_err is pre-set so
+        // the select guard disables that branch and only the direct connection is attempted.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
             let without_mdns = self.connect_inner(None, original_uri2);
         }
-        let mut with_mdns_err: Option<anyhow::Error> = None;
+        let mut with_mdns_err: Option<anyhow::Error> =
+            skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {
@@ -799,6 +853,7 @@ impl DialBuilder<WithCredentials> {
                 disable_mdns: self.config.disable_mdns,
                 allow_downgrade: self.config.allow_downgrade,
                 insecure: self.config.insecure,
+                signaling_server_override: self.config.signaling_server_override.clone(),
             },
         }
     }
@@ -823,7 +878,10 @@ impl DialBuilder<WithCredentials> {
         let original_uri = Uri::from_parts(original_uri_parts)?;
 
         let domain = original_uri.authority().unwrap().to_string();
-        let uri_for_auth = infer_remote_uri_from_authority(original_uri.clone());
+        let uri_for_auth = infer_remote_uri_from_authority(
+            original_uri.clone(),
+            self.config.signaling_server_override.as_deref(),
+        );
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -927,17 +985,23 @@ impl DialBuilder<WithCredentials> {
             "Attempting to connect but there was no uri"
         ))?;
 
+        let skip_mdns = self.config.disable_mdns;
+
         // We want to short circuit and return the first `Ok` result from our connection
         // attempts, which `tokio::select!` does great. Buuuuut, we don't want to
         // abandon the `Err` results, and we want to provide comprehensive logging for
         // debugging purposes. Hence the loop and pinning. The pinning lets us reference
         // the same future multiple times, while the loop lets us immediately return on the
         // first `Ok` result while still seeing and logging any error results.
+        //
+        // When mDNS is skipped (disable_mdns), with_mdns_err is pre-set so
+        // the select guard disables that branch and only the direct connection is attempted.
         tokio::pin! {
             let with_mdns = self.clone().connect_mdns(original_uri);
             let without_mdns = self.connect_inner(None, original_uri2);
         }
-        let mut with_mdns_err: Option<anyhow::Error> = None;
+        let mut with_mdns_err: Option<anyhow::Error> =
+            skip_mdns.then(|| anyhow::anyhow!("mDNS skipped"));
         let mut without_mdns_err: Option<anyhow::Error> = None;
         while with_mdns_err.is_none() || without_mdns_err.is_none() {
             tokio::select! {
@@ -1069,7 +1133,42 @@ async fn maybe_connect_via_webrtc(
     };
 
     let optional_config = response.into_inner().config;
-    let config = webrtc::extend_webrtc_config(webrtc_options.config, optional_config);
+
+    if webrtc_options.force_relay && webrtc_options.force_p2p {
+        log::warn!("force_relay and force_p2p are both set; forceP2P strips TURN servers that forceRelay requires so the connection will fail");
+    }
+
+    let (base_config, optional_config) = webrtc::apply_ice_policy(
+        webrtc_options.config,
+        optional_config,
+        webrtc_options.force_relay,
+        webrtc_options.force_p2p,
+    );
+
+    if webrtc_options.force_relay {
+        log::debug!("force relay enabled; using relay-only ICE transport policy");
+    }
+
+    if webrtc_options.force_p2p {
+        log::debug!("force P2P enabled; stripping TURN servers and ignoring signaling server ICE config");
+    }
+
+    let mut config = webrtc::extend_webrtc_config(base_config, optional_config);
+    
+    if webrtc_options.force_p2p && webrtc_options.turn_uri.is_some() {
+        log::warn!("force_p2p is set alongside turn_uri; the TURN filter will have no effect since TURN servers were already stripped");
+    }
+    let turn_uri = webrtc_options.turn_uri.as_deref().and_then(|s| {
+        let parsed = webrtc::TurnUri::parse(s);
+        if parsed.is_none() {
+            log::warn!("Failed to parse turn_uri, ignoring: {s:?}");
+        }
+        parsed
+    });
+    config = webrtc::apply_turn_options(config, turn_uri.as_ref());
+    if let Some(ref uri) = turn_uri {
+        log::debug!("TURN filter options set: turn_uri={uri:?}");
+    }
 
     let (peer_connection, data_channel) =
         webrtc::new_peer_connection_for_client(config, webrtc_options.disable_trickle_ice).await?;
@@ -1451,7 +1550,13 @@ fn encode_sdp(sdp: RTCSessionDescription) -> Result<String> {
     Ok(base64::encode(sdp))
 }
 
-fn infer_remote_uri_from_authority(uri: Uri) -> Uri {
+fn infer_remote_uri_from_authority(uri: Uri, override_addr: Option<&str>) -> Uri {
+    if let Some(addr) = override_addr {
+        return Uri::from_parts(uri_parts_with_defaults(addr)).unwrap_or_else(|e| {
+            log::warn!("Failed to parse signaling server override {addr:?}: {e}; falling back to original URI");
+            uri
+        });
+    }
     let authority = uri.authority().map(Authority::as_str).unwrap_or_default();
     let is_local_connection = authority.contains(".local.viam.cloud")
         || authority.contains("localhost")
