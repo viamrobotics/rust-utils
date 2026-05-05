@@ -81,14 +81,16 @@ fn dial_without_cred(
     uri: String,
     allow_insec: bool,
     disable_webrtc: bool,
+    force_relay: bool,
+    force_p2p: bool,
+    turn_uri: Option<String>,
 ) -> Result<DialBuilder<WithoutCredentials>> {
     let c = DialOptions::builder().uri(&uri).without_credentials();
-    let c = if disable_webrtc {
-        c.disable_webrtc()
-    } else {
-        c
-    };
+    let c = if disable_webrtc { c.disable_webrtc() } else { c };
     let c = if allow_insec { c.allow_downgrade() } else { c };
+    let c = if force_relay { c.force_relay() } else { c };
+    let c = if force_p2p { c.force_p2p() } else { c };
+    let c = if let Some(u) = turn_uri { c.turn_uri(u) } else { c };
     Ok(c)
 }
 
@@ -99,15 +101,17 @@ fn dial_with_cred(
     payload: &str,
     allow_insec: bool,
     disable_webrtc: bool,
+    force_relay: bool,
+    force_p2p: bool,
+    turn_uri: Option<String>,
 ) -> Result<DialBuilder<WithCredentials>> {
     let creds = RPCCredentials::new(entity, String::from(r#type), String::from(payload));
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
-    let c = if disable_webrtc {
-        c.disable_webrtc()
-    } else {
-        c
-    };
+    let c = if disable_webrtc { c.disable_webrtc() } else { c };
     let c = if allow_insec { c.allow_downgrade() } else { c };
+    let c = if force_relay { c.force_relay() } else { c };
+    let c = if force_p2p { c.force_p2p() } else { c };
+    let c = if let Some(u) = turn_uri { c.turn_uri(u) } else { c };
     Ok(c)
 }
 
@@ -124,6 +128,15 @@ fn dial_with_cred(
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
 /// * `c_timeout` a float, set how many seconds we should try to dial before timing out
 /// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
+//
+//  NOTE:  C++ SDK's existing 7-arg call site of viam_dial relies on `rt_ptr` keeping its original trailing position; the following 
+//  args are appended so cbindgen.toml's C++ default-argument trailer can fill them in for 7-arg callers.
+//
+/// * `c_force_relay` a bool, set to true to force ICE relay-only policy (TURN candidates only)
+/// * `c_force_p2p` a bool, set to true to strip TURN servers and force host/reflexive candidates only
+/// * `c_turn_uri` a C-style string with a TURN URI filter (e.g. "turn:turn.viam.com:443"); set to
+///   NULL or empty to use all TURN servers. The filter matches TURN URLs by scheme, host, port,
+///   and transport (transport defaults to "udp" if unspecified).
 #[no_mangle]
 pub unsafe extern "C" fn viam_dial(
     c_uri: *const c_char,
@@ -133,6 +146,9 @@ pub unsafe extern "C" fn viam_dial(
     c_allow_insec: bool,
     c_timeout: f32,
     rt_ptr: Option<&mut DialFfi>,
+    c_force_relay: bool,
+    c_force_p2p: bool,
+    c_turn_uri: *const c_char,
 ) -> *mut c_char {
     let uri = {
         if c_uri.is_null() {
@@ -215,6 +231,20 @@ pub unsafe extern "C" fn viam_dial(
     };
     let timeout_duration = Duration::from_secs_f32(c_timeout);
 
+    let turn_uri_opt = {
+        match c_turn_uri.is_null() {
+            true => None,
+            false => match CStr::from_ptr(c_turn_uri).to_str() {
+                Ok(s) if !s.is_empty() => Some(s.to_string()),
+                Ok(_) => None,
+                Err(e) => {
+                    log::error!("Error parsing turn_uri string: {:?}", e);
+                    return ptr::null_mut();
+                }
+            },
+        }
+    };
+
     let (server, channel) = match runtime.block_on(async move {
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
@@ -227,6 +257,9 @@ pub unsafe extern "C" fn viam_dial(
                         p.to_str()?,
                         allow_insec,
                         disable_webrtc,
+                        c_force_relay,
+                        c_force_p2p,
+                        turn_uri_opt,
                     )?
                     .connect(),
                 )
@@ -235,7 +268,15 @@ pub unsafe extern "C" fn viam_dial(
             (None, None) => {
                 timeout(
                     timeout_duration,
-                    dial_without_cred(uri_str, allow_insec, disable_webrtc)?.connect(),
+                    dial_without_cred(
+                        uri_str,
+                        allow_insec,
+                        disable_webrtc,
+                        c_force_relay,
+                        c_force_p2p,
+                        turn_uri_opt,
+                    )?
+                    .connect(),
                 )
                 .await?
             }
@@ -298,6 +339,9 @@ pub unsafe extern "C" fn dial(
         c_allow_insec,
         c_timeout,
         rt_ptr,
+        false,
+        false,
+        ptr::null(),
     )
 }
 
