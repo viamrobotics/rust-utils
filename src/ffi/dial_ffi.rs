@@ -127,12 +127,16 @@ fn dial_with_cred(
 /// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
 /// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
 /// * `c_timeout` a float, set how many seconds we should try to dial before timing out
+/// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
+//
+//  NOTE:  C++ SDK's existing 7-arg call site of viam_dial relies on `rt_ptr` keeping its original trailing position; the following 
+//  args are appended so cbindgen.toml's C++ default-argument trailer can fill them in for 7-arg callers.
+//
 /// * `c_force_relay` a bool, set to true to force ICE relay-only policy (TURN candidates only)
 /// * `c_force_p2p` a bool, set to true to strip TURN servers and force host/reflexive candidates only
 /// * `c_turn_uri` a C-style string with a TURN URI filter (e.g. "turn:turn.viam.com:443"); set to
 ///   NULL or empty to use all TURN servers. The filter matches TURN URLs by scheme, host, port,
 ///   and transport (transport defaults to "udp" if unspecified).
-/// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
 #[no_mangle]
 pub unsafe extern "C" fn viam_dial(
     c_uri: *const c_char,
@@ -141,10 +145,10 @@ pub unsafe extern "C" fn viam_dial(
     c_payload: *const c_char,
     c_allow_insec: bool,
     c_timeout: f32,
+    rt_ptr: Option<&mut DialFfi>,
     c_force_relay: bool,
     c_force_p2p: bool,
     c_turn_uri: *const c_char,
-    rt_ptr: Option<&mut DialFfi>,
 ) -> *mut c_char {
     let uri = {
         if c_uri.is_null() {
@@ -334,10 +338,10 @@ pub unsafe extern "C" fn dial(
         c_payload,
         c_allow_insec,
         c_timeout,
+        rt_ptr,
         false,
         false,
         ptr::null(),
-        rt_ptr,
     )
 }
 
