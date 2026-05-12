@@ -59,14 +59,9 @@ tower = { version = "0.4" }
 tower-http = { version = "0.3.3", features = ["add-extension","auth","propagate-header","set-header","sensitive-headers","trace","compression-gzip"]}
 tracing = {version = "0.1.34"}
 tracing-subscriber = {version = "0.3.20", features = ["env-filter"]}
-viam-mdns = "3.0.1"
+viam-mdns = "3.0.2"
 webpki-roots = "0.21.1"
 webrtc = "0.12.0"
-
-# Override viam-mdns with the local development version while the macOS fix is
-# not yet published.  Remove this section before releasing a new crate version.
-[patch.crates-io]
-viam-mdns = { path = "../mdns" }
 
 [dev-dependencies]
 async-stream = "0.3.3"

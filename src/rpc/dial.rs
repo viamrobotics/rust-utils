@@ -532,10 +532,11 @@ impl<T: AuthMethod> DialBuilder<T> {
 
         let ifaces = list_afinet_netifas().ok()?;
 
-        // Collect all local IPv4 addresses so we can validate mDNS response IPs.
+        // Collect all local IPv4 addresses for use in get_addr_from_interface, which prefers
+        // mDNS response IPs that are currently assigned to one of our own interfaces.
         // viam-server may advertise a stale IP (e.g. a WiFi address from when it started,
-        // now unreachable because WiFi is off). By only accepting non-loopback IPs that are
-        // currently present on a local interface, we avoid picking an unreachable address.
+        // now unreachable because WiFi is off); filtering by current interface addresses
+        // avoids connecting to an unreachable address.
         let local_ipv4s: std::collections::HashSet<Ipv4Addr> = ifaces
             .iter()
             .filter_map(|(_, ip)| match ip {

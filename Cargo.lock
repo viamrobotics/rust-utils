@@ -3834,7 +3834,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "viam-mdns"
-version = "3.0.1"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce53ef154ea1112452901aac5abb8e51abe92036eaa0ff8bd367404fe0bff0cd"
 dependencies = [
  "async-std",
  "async-stream 0.2.1",
