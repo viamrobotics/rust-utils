@@ -417,8 +417,9 @@ pub unsafe extern "C" fn viam_dial(
 /// # Arguments
 /// * `c_uri`, `c_entity`, `c_type`, `c_payload`, `c_allow_insec`, `c_timeout`,
 ///   `rt_ptr` — same as [`viam_dial`].
-/// * `opts` — an opaque handle from [`viam_dial_opts_new`]. Must not be NULL;
-///   NULL returns a NULL path. Caller retains ownership and must free it with
+/// * `opts` — an opaque handle from [`viam_dial_opts_new`], or NULL to use
+///   default options (no force_relay, no force_p2p, no turn_uri filter). When
+///   non-NULL, the caller retains ownership and must free the handle with
 ///   [`viam_dial_opts_free`] after this call returns.
 #[no_mangle]
 pub unsafe extern "C" fn viam_dial_with_opts(
@@ -431,11 +432,13 @@ pub unsafe extern "C" fn viam_dial_with_opts(
     rt_ptr: Option<&mut DialFfi>,
     opts: *const c_void,
 ) -> *mut c_char {
-    if opts.is_null() {
-        log::error!("viam_dial_with_opts called with NULL opts; use viam_dial_opts_new()");
-        return ptr::null_mut();
-    }
-    let opts_ref: &DialOpts = &*(opts as *const DialOpts);
+    let default_opts;
+    let opts_ref: &DialOpts = if opts.is_null() {
+        default_opts = DialOpts::default();
+        &default_opts
+    } else {
+        &*(opts as *const DialOpts)
+    };
     dial_impl(
         c_uri,
         c_entity,
