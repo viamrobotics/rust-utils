@@ -64,7 +64,7 @@ impl DialFfi {
     }
 }
 
-// Internal-only options bag backing the opaque handle exposed across the FFI.
+// Internal-only options struct backing the opaque handle exposed across the FFI.
 // Field additions here are ABI-additive: the C side only ever sees a `void *`
 // (see `viam_dial_opts_new` etc. below), so new fields require new setters but
 // never break the existing header.
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn viam_dial_opts_set_force_relay(opts: *mut c_void, value
 }
 
 /// Strip TURN servers from the ICE configuration so the connection must be
-/// established peer-to-peer (host/srflx/prflx candidates only — no relay).
+/// established peer-to-peer (host/srflx/prflx).
 ///
 /// # Safety
 /// `opts` must be a handle obtained from [`viam_dial_opts_new`]. NULL is a no-op.
