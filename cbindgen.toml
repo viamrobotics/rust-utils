@@ -53,6 +53,7 @@ rename_types = "snake_case"
 
 [fn]
 deprecated = "/// @deprecated please use `viam_`-prefixed function instead"
+deprecated_with_note = "/// @deprecated {}"
 
 [struct]
 rename_fields = "SnakeCase"

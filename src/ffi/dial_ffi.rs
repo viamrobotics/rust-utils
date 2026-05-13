@@ -14,7 +14,7 @@ use tracing::Level;
 use crate::rpc::dial::{
     DialBuilder, DialOptions, RPCCredentials, ViamChannel, WithCredentials, WithoutCredentials,
 };
-use libc::c_char;
+use libc::{c_char, c_void};
 
 use crate::proxy;
 use hyper::Server;
@@ -63,6 +63,18 @@ impl DialFfi {
         }
     }
 }
+
+// Internal-only options struct backing the opaque handle exposed across the FFI.
+// Field additions here are ABI-additive: the C side only ever sees a `void *`
+// (see `viam_dial_opts_new` etc. below), so new fields require new setters but
+// never break the existing header.
+#[derive(Default)]
+struct DialOpts {
+    force_relay: bool,
+    force_p2p: bool,
+    turn_uri: Option<String>,
+}
+
 /// Initialize a tokio runtime to run a gRPC client/sever, user should call this function before trying to dial to a Robot
 /// Returns a pointer to a [`DialFfi`]
 #[no_mangle]
@@ -77,18 +89,97 @@ pub extern "C" fn init_rust_runtime() -> Box<DialFfi> {
     viam_init_rust_runtime()
 }
 
+/// Allocate a fresh dial options handle with default values
+/// (force_relay=false, force_p2p=false, turn_uri=NULL).
+///
+/// The returned pointer is opaque on the C side (`void *`) and must be freed
+/// with [`viam_dial_opts_free`]. Pass it to [`viam_dial_with_opts`] after
+/// mutating via the `viam_dial_opts_set_*` setters.
+///
+/// Returns NULL on allocation failure.
+#[no_mangle]
+pub extern "C" fn viam_dial_opts_new() -> *mut c_void {
+    Box::into_raw(Box::<DialOpts>::default()) as *mut c_void
+}
+
+/// Free a dial options handle previously returned by [`viam_dial_opts_new`].
+///
+/// # Safety
+/// The pointer must come from [`viam_dial_opts_new`] and must not be freed
+/// more than once. NULL is a no-op.
+#[no_mangle]
+pub unsafe extern "C" fn viam_dial_opts_free(opts: *mut c_void) {
+    if opts.is_null() {
+        return;
+    }
+    drop(Box::from_raw(opts as *mut DialOpts));
+}
+
+/// Force the ICE transport policy to relay-only (TURN candidates only).
+///
+/// # Safety
+/// `opts` must be a handle obtained from [`viam_dial_opts_new`]. NULL is a no-op.
+#[no_mangle]
+pub unsafe extern "C" fn viam_dial_opts_set_force_relay(opts: *mut c_void, value: bool) {
+    if opts.is_null() {
+        return;
+    }
+    (*(opts as *mut DialOpts)).force_relay = value;
+}
+
+/// Strip TURN servers from the ICE configuration so the connection must be
+/// established peer-to-peer (host/srflx/prflx).
+///
+/// # Safety
+/// `opts` must be a handle obtained from [`viam_dial_opts_new`]. NULL is a no-op.
+#[no_mangle]
+pub unsafe extern "C" fn viam_dial_opts_set_force_p2p(opts: *mut c_void, value: bool) {
+    if opts.is_null() {
+        return;
+    }
+    (*(opts as *mut DialOpts)).force_p2p = value;
+}
+
+/// Set a TURN URI filter (e.g. `"turn:turn.viam.com:443"`). When set, only TURN
+/// servers matching scheme/host/port/transport (transport defaults to "udp")
+/// are used. Pass NULL or an empty string to clear and use all TURN servers.
+/// The string is copied; the caller may free their copy after this call returns.
+///
+/// # Safety
+/// `opts` must be a handle obtained from [`viam_dial_opts_new`]. NULL is a no-op.
+#[no_mangle]
+pub unsafe extern "C" fn viam_dial_opts_set_turn_uri(opts: *mut c_void, value: *const c_char) {
+    if opts.is_null() {
+        return;
+    }
+    let opts = &mut *(opts as *mut DialOpts);
+    if value.is_null() {
+        opts.turn_uri = None;
+        return;
+    }
+    match CStr::from_ptr(value).to_str() {
+        Ok(s) if !s.is_empty() => opts.turn_uri = Some(s.to_string()),
+        Ok(_) => opts.turn_uri = None,
+        Err(e) => log::error!("invalid turn_uri string: {e:?}"),
+    }
+}
+
 fn dial_without_cred(
     uri: String,
     allow_insec: bool,
     disable_webrtc: bool,
+    opts: &DialOpts,
 ) -> Result<DialBuilder<WithoutCredentials>> {
     let c = DialOptions::builder().uri(&uri).without_credentials();
-    let c = if disable_webrtc {
-        c.disable_webrtc()
+    let c = if disable_webrtc { c.disable_webrtc() } else { c };
+    let c = if allow_insec { c.allow_downgrade() } else { c };
+    let c = if opts.force_relay { c.force_relay() } else { c };
+    let c = if opts.force_p2p { c.force_p2p() } else { c };
+    let c = if let Some(u) = opts.turn_uri.clone() {
+        c.turn_uri(u)
     } else {
         c
     };
-    let c = if allow_insec { c.allow_downgrade() } else { c };
     Ok(c)
 }
 
@@ -99,33 +190,25 @@ fn dial_with_cred(
     payload: &str,
     allow_insec: bool,
     disable_webrtc: bool,
+    opts: &DialOpts,
 ) -> Result<DialBuilder<WithCredentials>> {
     let creds = RPCCredentials::new(entity, String::from(r#type), String::from(payload));
     let c = DialOptions::builder().uri(&uri).with_credentials(creds);
-    let c = if disable_webrtc {
-        c.disable_webrtc()
+    let c = if disable_webrtc { c.disable_webrtc() } else { c };
+    let c = if allow_insec { c.allow_downgrade() } else { c };
+    let c = if opts.force_relay { c.force_relay() } else { c };
+    let c = if opts.force_p2p { c.force_p2p() } else { c };
+    let c = if let Some(u) = opts.turn_uri.clone() {
+        c.turn_uri(u)
     } else {
         c
     };
-    let c = if allow_insec { c.allow_downgrade() } else { c };
     Ok(c)
 }
 
-/// Returns a path to a proxy to a robot
-/// # Safety
-///
-/// This function must be called from another language. See [`dial`](mod@crate::rpc::dial) for dial from rust
-/// The function returns a path to a proxy as a [`c_char`], the string should be freed with free_string when not needed anymore.
-/// When falling to dial it will return a NULL pointer
-/// # Arguments
-/// * `c_uri` a C-style string representing the address of robot you want to connect to
-/// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
-/// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
-/// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
-/// * `c_timeout` a float, set how many seconds we should try to dial before timing out
-/// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
-#[no_mangle]
-pub unsafe extern "C" fn viam_dial(
+// Shared implementation behind both `viam_dial` (default opts) and
+// `viam_dial_with_opts` (caller-supplied opts).
+unsafe fn dial_impl(
     c_uri: *const c_char,
     c_entity: *const c_char,
     c_type: *const c_char,
@@ -133,6 +216,7 @@ pub unsafe extern "C" fn viam_dial(
     c_allow_insec: bool,
     c_timeout: f32,
     rt_ptr: Option<&mut DialFfi>,
+    opts: &DialOpts,
 ) -> *mut c_char {
     let uri = {
         if c_uri.is_null() {
@@ -227,6 +311,7 @@ pub unsafe extern "C" fn viam_dial(
                         p.to_str()?,
                         allow_insec,
                         disable_webrtc,
+                        opts,
                     )?
                     .connect(),
                 )
@@ -235,7 +320,7 @@ pub unsafe extern "C" fn viam_dial(
             (None, None) => {
                 timeout(
                     timeout_duration,
-                    dial_without_cred(uri_str, allow_insec, disable_webrtc)?.connect(),
+                    dial_without_cred(uri_str, allow_insec, disable_webrtc, opts)?.connect(),
                 )
                 .await?
             }
@@ -279,6 +364,93 @@ pub unsafe extern "C" fn viam_dial(
     path.into_raw()
 }
 
+/// Returns a path to a proxy to a robot, using default dial options
+/// (no force_relay, no force_p2p, no turn_uri filter).
+///
+/// # Safety
+///
+/// This function must be called from another language. See [`dial`](mod@crate::rpc::dial) for dial from rust
+/// The function returns a path to a proxy as a [`c_char`], the string should be freed with free_string when not needed anymore.
+/// When falling to dial it will return a NULL pointer
+/// # Arguments
+/// * `c_uri` a C-style string representing the address of robot you want to connect to
+/// * `c_type` a C-style string representing the type of robot's secret you want to use, set to NULL if you don't need authentication
+/// * `c_payload` a C-style string that is the robot's secret, set to NULL if you don't need authentication
+/// * `c_allow_insecure` a bool, set to true when allowing insecure connection to your robot
+/// * `c_timeout` a float, set how many seconds we should try to dial before timing out
+/// * `rt_ptr` a pointer to a rust runtime previously obtained with init_rust_runtime
+#[no_mangle]
+#[deprecated(note = "please use viam_dial_with_opts instead")]
+pub unsafe extern "C" fn viam_dial(
+    c_uri: *const c_char,
+    c_entity: *const c_char,
+    c_type: *const c_char,
+    c_payload: *const c_char,
+    c_allow_insec: bool,
+    c_timeout: f32,
+    rt_ptr: Option<&mut DialFfi>,
+) -> *mut c_char {
+    dial_impl(
+        c_uri,
+        c_entity,
+        c_type,
+        c_payload,
+        c_allow_insec,
+        c_timeout,
+        rt_ptr,
+        &DialOpts::default(),
+    )
+}
+
+/// Returns a path to a proxy to a robot, using caller-supplied dial options.
+///
+/// This is the permanent successor to [`viam_dial`]. New dial options can be
+/// added in the future by adding new `viam_dial_opts_set_*` setters without
+/// changing this function's signature or breaking the C ABI.
+///
+/// # Safety
+///
+/// This function must be called from another language. The function returns
+/// a path to a proxy as a [`c_char`]; the string should be freed with
+/// [`viam_free_string`] when not needed anymore. On failure it returns NULL.
+///
+/// # Arguments
+/// * `c_uri`, `c_entity`, `c_type`, `c_payload`, `c_allow_insec`, `c_timeout`,
+///   `rt_ptr` — same as [`viam_dial`].
+/// * `opts` — an opaque handle from [`viam_dial_opts_new`], or NULL to use
+///   default options (no force_relay, no force_p2p, no turn_uri filter). When
+///   non-NULL, the caller retains ownership and must free the handle with
+///   [`viam_dial_opts_free`] after this call returns.
+#[no_mangle]
+pub unsafe extern "C" fn viam_dial_with_opts(
+    c_uri: *const c_char,
+    c_entity: *const c_char,
+    c_type: *const c_char,
+    c_payload: *const c_char,
+    c_allow_insec: bool,
+    c_timeout: f32,
+    rt_ptr: Option<&mut DialFfi>,
+    opts: *const c_void,
+) -> *mut c_char {
+    let default_opts;
+    let opts_ref: &DialOpts = if opts.is_null() {
+        default_opts = DialOpts::default();
+        &default_opts
+    } else {
+        &*(opts as *const DialOpts)
+    };
+    dial_impl(
+        c_uri,
+        c_entity,
+        c_type,
+        c_payload,
+        c_allow_insec,
+        c_timeout,
+        rt_ptr,
+        opts_ref,
+    )
+}
+
 #[no_mangle]
 #[deprecated]
 pub unsafe extern "C" fn dial(
@@ -290,7 +462,7 @@ pub unsafe extern "C" fn dial(
     c_timeout: f32,
     rt_ptr: Option<&mut DialFfi>,
 ) -> *mut c_char {
-    viam_dial(
+    dial_impl(
         c_uri,
         c_entity,
         c_type,
@@ -298,6 +470,7 @@ pub unsafe extern "C" fn dial(
         c_allow_insec,
         c_timeout,
         rt_ptr,
+        &DialOpts::default(),
     )
 }
 
