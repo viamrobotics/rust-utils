@@ -45,57 +45,8 @@ use std::{
 use tokio::sync::{mpsc, watch};
 use tonic::body::BoxBody;
 use tonic::codegen::BoxFuture;
-use tonic::transport::{Body, Channel, Uri};
+use tonic::transport::{Body, Channel, ClientTlsConfig, Uri};
 
-/// TLS certificate verifier that accepts any certificate, used for mDNS connections
-/// where the local device's cert is signed by a public CA (Let's Encrypt or Google)
-/// but previously only the leaf cert was sent in the TLS handshake.  Without the
-/// intermediate CA cert in the chain, clients cannot build the path to the root even
-/// though the root is in the system trust store, so verification fails.
-///
-/// TODO(RSDK-13879): app commit d83137fc added `Bundle: true` to ACME certificate
-/// issuance (both Let's Encrypt and Google CA paths), which causes the full chain
-/// (leaf + intermediate) to be stored and sent during TLS handshakes.  A follow-up
-/// migration (RSDK-13799) redistributes renewal dates so that all existing robot
-/// certificates are re-issued with the bundled chain by May 22, 2026.  After that
-/// date, `NoCertVerification` can be replaced with tonic's standard TLS:
-///   1. Remove this struct entirely.
-///   2. Remove the `hyper-rustls` and `rustls` dependencies from Cargo.toml.
-///   3. Restore the `domain: &str` parameter to `create_channel` (it was removed
-///      along with this workaround).  The domain is the robot's canonical hostname
-///      from the original URI (e.g. `my-robot.abcdefg.local.viam.cloud`), NOT the
-///      discovered IP — it is needed for SNI and SAN verification since the cert's
-///      SANs are hostnames, not IP addresses.
-///   4. In `create_channel` (non-loopback mDNS path below), replace the entire
-///      custom-connector block with:
-///         let tls_config = ClientTlsConfig::new().domain_name(domain);
-///         let mut parts = uri.into_parts();
-///         parts.scheme = Some(Scheme::HTTPS);
-///         let uri = Uri::from_parts(parts)?;
-///         return Channel::builder(uri.clone())
-///             .tls_config(tls_config)?
-///             .connect()
-///             .await
-///             .with_context(|| format!("Connecting to {:?}", uri));
-///      `ClientTlsConfig::new()` uses the webpki root CA bundle (tonic is built
-///      with `tls-webpki-roots`), which already contains the Let's Encrypt and
-///      Google CA roots — no custom cert pinning required.
-#[derive(Debug)]
-struct NoCertVerification;
-
-impl rustls::client::ServerCertVerifier for NoCertVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}
 use tower::{Service, ServiceBuilder};
 use tower_http::auth::AddAuthorization;
 use tower_http::auth::AddAuthorizationLayer;
@@ -480,12 +431,22 @@ impl<T: AuthMethod> DialBuilder<T> {
             resp.records().collect::<Vec<_>>()
         );
 
-        // Prefer a non-loopback IPv4 address that is currently present on one of our own
-        // network interfaces.  viam-server may advertise a stale IP (e.g. a WiFi address
-        // from when it was started that is now unreachable because WiFi was turned off).
-        // Accepting only IPs we can actually route to avoids ENETUNREACH at connect time.
-        // If no reachable non-loopback IP is found, fall back to any advertised IPv4
-        // (including loopback) so that offline-only (loopback-only) machines still work.
+        // Select the best IP from the mDNS response using a three-tier preference:
+        //
+        // 1. Non-loopback IP that is currently assigned to one of our own network
+        //    interfaces.  This handles the same-machine case (client and robot on
+        //    the same host) while avoiding stale IPs that were valid when
+        //    viam-server started but are now unreachable (e.g. a WiFi address after
+        //    WiFi was disconnected).
+        //
+        // 2. Any IP (including loopback) that is currently assigned to one of our
+        //    interfaces.  This catches 127.0.0.1 when offline on the same machine:
+        //    127.0.0.1 is excluded from tier 1 by the !is_loopback() guard, but it
+        //    is always in local_ipv4s, so it is correctly preferred here over a
+        //    stale non-loopback address that is no longer assigned.
+        //
+        // 3. Last resort: any advertised IPv4, for the common case of connecting to
+        //    a robot on a separate machine (its IP will never appear in local_ipv4s).
         let ip_addr = resp
             .records()
             .filter_map(|r| match r.kind {
@@ -496,10 +457,17 @@ impl<T: AuthMethod> DialBuilder<T> {
             })
             .next()
             .or_else(|| {
-                resp.records().find_map(|r| match r.kind {
-                    RecordKind::A(addr) => Some(addr),
-                    _ => None,
-                })
+                resp.records()
+                    .find_map(|r| match r.kind {
+                        RecordKind::A(addr) if local_ipv4s.contains(&addr) => Some(addr),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        resp.records().find_map(|r| match r.kind {
+                            RecordKind::A(addr) => Some(addr),
+                            _ => None,
+                        })
+                    })
             });
 
         if !(has_grpc || has_webrtc) || ip_addr.is_none() {
@@ -580,61 +548,29 @@ impl<T: AuthMethod> DialBuilder<T> {
 
         let auth = local_addr.parse::<Authority>().ok()?;
         uri.authority = Some(auth);
-        uri.scheme = Some(Scheme::HTTP);
 
         Some(uri)
     }
 
-    // TODO(RSDK-13879) step 3: restore `domain: &str` as a second parameter (after
-    // `allow_downgrade`) and thread it through all four call sites below.  See the
-    // `NoCertVerification` doc comment for the full migration instructions.
-    async fn create_channel(allow_downgrade: bool, uri: Uri, for_mdns: bool) -> Result<Channel> {
+    async fn create_channel(
+        allow_downgrade: bool,
+        domain: &str,
+        uri: Uri,
+        for_mdns: bool,
+    ) -> Result<Channel> {
         if for_mdns {
             let host = uri.host().unwrap_or("");
-            let is_loopback = host
-                .parse::<std::net::IpAddr>()
-                .map(|ip| ip.is_loopback())
-                .unwrap_or(false);
-
-            if is_loopback {
-                // viam-server serves plain gRPC (no TLS) on the loopback port it advertises
-                // via mDNS. The server only accepts HTTP/2 (gRPC requires it), so we must use
-                // h2c (HTTP/2 cleartext Prior Knowledge). tonic's own connect() sets
-                // http2_only=true which sends the h2c connection preface directly over TCP.
-                // We intentionally do NOT use connect_with_connector here: hyper-rustls's
-                // plain-TCP path sends HTTP/1.1, which the server rejects with an empty reply
-                // (BrokenPipe from our side).
-                log::debug!("mDNS create_channel: loopback {host}, using tonic h2c connect");
-                return Channel::builder(uri.clone())
-                    .connect()
-                    .await
-                    .with_context(|| format!("Connecting to {:?}", uri));
-            }
-
-            // Non-loopback LAN address: viam-server uses TLS but currently only sends the leaf
-            // cert (no intermediate), so standard verification fails.  Use a custom connector
-            // that skips cert verification for now.
-            // TODO(RSDK-13879) step 4: replace the block below with standard tonic TLS once all
-            // robot certs include the full chain (after May 22, 2026).  See the
-            // `NoCertVerification` doc comment for the exact replacement snippet.
-            log::debug!("mDNS create_channel: LAN address {host}, using no-cert-verify TLS");
-            let tls_config = rustls::ClientConfig::builder()
-                .with_safe_defaults()
-                .with_custom_certificate_verifier(Arc::new(NoCertVerification))
-                .with_no_client_auth();
-
-            let connector = hyper_rustls::HttpsConnectorBuilder::new()
-                .with_tls_config(tls_config)
-                .https_or_http()
-                .enable_http2()
-                .build();
-
+            // viam-server serves TLS gRPC on the port it advertises via mDNS, including on
+            // loopback.  `domain` is the robot's canonical hostname (e.g.
+            // `my-robot.abcdefg.viam.cloud`) used for SNI and SAN verification.
+            log::debug!("mDNS create_channel: connecting to {host} with TLS");
+            let tls_config = ClientTlsConfig::new().domain_name(domain);
             let mut parts = uri.into_parts();
             parts.scheme = Some(Scheme::HTTPS);
             let uri = Uri::from_parts(parts)?;
-            log::debug!("mDNS create_channel: connecting to {uri:?}");
             return Channel::builder(uri.clone())
-                .connect_with_connector(connector)
+                .tls_config(tls_config)?
+                .connect()
                 .await
                 .with_context(|| format!("Connecting to {:?}", uri));
         }
@@ -707,8 +643,7 @@ impl DialBuilder<WithoutCredentials> {
         }
 
         let channel = match mdns_uri {
-            // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
-            Some(uri) => Self::create_channel(self.config.allow_downgrade, uri, true).await,
+            Some(uri) => Self::create_channel(self.config.allow_downgrade, domain, uri, true).await,
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -721,12 +656,16 @@ impl DialBuilder<WithoutCredentials> {
             }
             Err(e) => {
                 if attempting_mdns {
-                    log::debug!(
-                        "Unable to connect via mDNS; falling back to robot URI. Error: {e:#}"
-                    );
+                    // mDNS found the robot but the connection failed — don't fall through to
+                    // the remote/signaling URI here.  The parallel `without_mdns` branch in
+                    // `connect()` is already handling that case.  Returning an error lets the
+                    // select! loop surface whichever branch succeeds, and avoids a spurious
+                    // connection attempt to app.viam.com when the device is offline.
+                    log::debug!("Unable to connect via mDNS. Error: {e:#}");
+                    return Err(e);
                 }
-                // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
-                Self::create_channel(self.config.allow_downgrade, uri.clone(), false).await?
+                Self::create_channel(self.config.allow_downgrade, domain, uri.clone(), false)
+                    .await?
             }
         };
 
@@ -743,7 +682,7 @@ impl DialBuilder<WithoutCredentials> {
             ))
             .service(channel.clone());
 
-        if disable_webrtc {
+        if disable_webrtc || attempting_mdns {
             log::debug!("{}", log_prefixes::DIALED_GRPC);
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
@@ -894,8 +833,7 @@ impl DialBuilder<WithCredentials> {
             log::debug!("Attempting to connect");
         }
         let channel = match mdns_uri {
-            // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
-            Some(uri) => Self::create_channel(allow_downgrade, uri, true).await,
+            Some(uri) => Self::create_channel(allow_downgrade, &domain, uri, true).await,
             // not actually an error necessarily, but we want to ensure that a channel is still
             // created with the default uri
             None => Err(anyhow::anyhow!("")),
@@ -907,12 +845,15 @@ impl DialBuilder<WithCredentials> {
             }
             Err(e) => {
                 if attempting_mdns {
-                    log::debug!(
-                        "Unable to connect via mDNS; falling back to robot URI. Error: {e:#}"
-                    );
+                    // mDNS found the robot but the connection failed — don't fall through to
+                    // the remote/signaling URI here.  The parallel `without_mdns` branch in
+                    // `connect()` is already handling that case.  Returning an error lets the
+                    // select! loop surface whichever branch succeeds, and avoids a spurious
+                    // auth attempt against app.viam.com when the device is offline.
+                    log::debug!("Unable to connect via mDNS. Error: {e:#}");
+                    return Err(e);
                 }
-                // TODO(RSDK-13879) step 3: pass `domain` as second arg once NoCertVerification is removed.
-                Self::create_channel(allow_downgrade, uri_for_auth, false).await?
+                Self::create_channel(allow_downgrade, &domain, uri_for_auth, false).await?
             }
         };
 
@@ -942,7 +883,7 @@ impl DialBuilder<WithCredentials> {
             ))
             .service(real_channel);
 
-        if disable_webrtc {
+        if disable_webrtc || attempting_mdns {
             log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
@@ -1151,11 +1092,13 @@ async fn maybe_connect_via_webrtc(
     }
 
     if webrtc_options.force_p2p {
-        log::debug!("force P2P enabled; stripping TURN servers and ignoring signaling server ICE config");
+        log::debug!(
+            "force P2P enabled; stripping TURN servers and ignoring signaling server ICE config"
+        );
     }
 
     let mut config = webrtc::extend_webrtc_config(base_config, optional_config);
-    
+
     if webrtc_options.force_p2p && webrtc_options.turn_uri.is_some() {
         log::warn!("force_p2p is set alongside turn_uri; the TURN filter will have no effect since TURN servers were already stripped");
     }
@@ -1561,7 +1504,8 @@ fn infer_remote_uri_from_authority(uri: Uri, override_addr: Option<&str>) -> Uri
     let authority = uri.authority().map(Authority::as_str).unwrap_or_default();
     let is_local_connection = authority.contains(".local.viam.cloud")
         || authority.contains("localhost")
-        || authority.contains("0.0.0.0");
+        || authority.contains("0.0.0.0")
+        || authority.contains("127.0.0.1");
 
     if !is_local_connection {
         if let Some((new_uri, _)) = Options::infer_signaling_server_address(&uri) {
