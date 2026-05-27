@@ -682,6 +682,7 @@ impl DialBuilder<WithoutCredentials> {
             ))
             .service(channel.clone());
 
+        // TODO (RSDK-14026): support WebRTC over mDNS for offline connections (e.g. video streaming).
         if disable_webrtc || attempting_mdns {
             log::debug!("{}", log_prefixes::DIALED_GRPC);
             Ok(ViamChannel::Direct(channel.clone()))
@@ -883,6 +884,7 @@ impl DialBuilder<WithCredentials> {
             ))
             .service(real_channel);
 
+        // TODO (RSDK-14026): support WebRTC over mDNS for offline connections (e.g. video streaming).
         if disable_webrtc || attempting_mdns {
             log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
@@ -1077,7 +1079,8 @@ async fn maybe_connect_via_webrtc(
     let optional_config = response.into_inner().config;
 
     if webrtc_options.force_relay && webrtc_options.force_p2p {
-        log::warn!("force_relay and force_p2p are both set; forceP2P strips TURN servers that forceRelay requires so the connection will fail");
+        log::warn!(
+            "force_relay and force_p2p are both set; forceP2P strips TURN servers that forceRelay requires so the connection will fail");
     }
 
     let (base_config, optional_config) = webrtc::apply_ice_policy(
