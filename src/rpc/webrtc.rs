@@ -80,6 +80,8 @@ impl Options {
             Some(("app.viam.com:443".to_string(), true))
         } else if path.contains(".robot.viaminternal") {
             Some(("app.viaminternal:8089".to_string(), false))
+        } else if path.contains(".viamstg.cloud") {
+            Some(("app.viam.dev:443".to_string(), true))
         } else {
             None
         }
