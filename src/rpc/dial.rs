@@ -565,14 +565,35 @@ impl<T: AuthMethod> DialBuilder<T> {
             // `my-robot.abcdefg.viam.cloud`) used for SNI and SAN verification.
             log::debug!("mDNS create_channel: connecting to {host} with TLS");
             let tls_config = ClientTlsConfig::new().domain_name(domain);
-            let mut parts = uri.into_parts();
+            let mut parts = uri.clone().into_parts();
             parts.scheme = Some(Scheme::HTTPS);
-            let uri = Uri::from_parts(parts)?;
-            return Channel::builder(uri.clone())
+            let tls_uri = Uri::from_parts(parts)?;
+            match Channel::builder(tls_uri.clone())
                 .tls_config(tls_config)?
                 .connect()
                 .await
-                .with_context(|| format!("Connecting to {:?}", uri));
+                .with_context(|| format!("Connecting to {:?}", tls_uri))
+            {
+                Ok(channel) => return Ok(channel),
+                // When the caller allows insecure/downgrade, retry the local connection over plaintext
+                // instead of failing. A local viam-server with no TLS serves plain gRPC on the advertised
+                // port, so the TLS handshake above fails against it.
+                Err(e) => {
+                    if allow_downgrade {
+                        let mut parts = uri.into_parts();
+                        parts.scheme = Some(Scheme::HTTP);
+                        let uri = Uri::from_parts(parts)?;
+                        log::debug!(
+                            "mDNS TLS connect failed ({e:#}); downgrading to plaintext h2c {uri:?}"
+                        );
+                        return Channel::builder(uri.clone())
+                            .connect()
+                            .await
+                            .with_context(|| format!("Connecting to {:?}", uri));
+                    }
+                    return Err(e);
+                }
+            }
         }
 
         let chan = match Channel::builder(uri.clone())
