@@ -326,6 +326,10 @@ impl<T: AuthMethod> DialBuilder<T> {
             .webrtc_options
             .get_or_insert_with(Options::default)
             .force_relay = true;
+        // Forcing relay-only ICE is pointless if the dial short-circuits to a
+        // local mDNS connection (plain gRPC over LAN/loopback that bypasses
+        // WebRTC/ICE entirely), so disable mDNS as well.
+        self.config.disable_mdns = true;
         self
     }
 
@@ -336,6 +340,10 @@ impl<T: AuthMethod> DialBuilder<T> {
             .webrtc_options
             .get_or_insert_with(Options::default)
             .force_p2p = true;
+        // Forcing host/srflx-only ICE is pointless if the dial short-circuits to
+        // a local mDNS connection (plain gRPC over LAN/loopback that bypasses
+        // WebRTC/ICE entirely), so disable mDNS as well.
+        self.config.disable_mdns = true;
         self
     }
 
