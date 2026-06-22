@@ -9,8 +9,9 @@ use crate::gen::proto::rpc::v1::{
 };
 use crate::gen::proto::rpc::webrtc::v1::{
     call_response::Stage, call_update_request::Update,
-    signaling_service_client::SignalingServiceClient, CallUpdateRequest,
-    OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
+    signaling_service_client::SignalingServiceClient, CallUpdateRequest, ConnectionCandidate,
+    IceCandidateType, OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
+    ReportConnectionMetadataRequest, SdkType,
 };
 use crate::gen::proto::rpc::webrtc::v1::{
     CallRequest, IceCandidate, Metadata, RequestHeaders, Strings,
@@ -22,11 +23,13 @@ use ::http::{
     HeaderValue, Version,
 };
 use ::viam_mdns::{discover, RecordKind, Response};
+use ::webrtc::ice::candidate::{CandidatePairState, CandidateType};
 use ::webrtc::ice_transport::{
     ice_candidate::{RTCIceCandidate, RTCIceCandidateInit},
     ice_connection_state::RTCIceConnectionState,
 };
 use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
+use ::webrtc::stats::StatsReportType;
 use anyhow::{Context, Result};
 use core::fmt;
 use futures::stream::FuturesUnordered;
@@ -1478,6 +1481,15 @@ async fn maybe_connect_via_webrtc(
     exchange_done.store(true, Ordering::Release);
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
+
+    {
+        let peer_conn = client_channel.base_channel.peer_connection.clone();
+        let mut sc = SignalingServiceClient::new(channel.clone());
+        tokio::spawn(async move {
+            report_connection_metadata(&mut sc, peer_conn).await;
+        });
+    }
+
     Ok(client_channel)
 }
 
@@ -1564,4 +1576,86 @@ fn metadata_from_parts(parts: &http::request::Parts) -> Metadata {
         md.insert(k, v);
     }
     Metadata { md }
+}
+
+/// Inspects the nominated ICE candidate pair and classifies each side's candidate type and,
+/// for relay candidates, also returns the relayed transport address.
+///
+/// We match on the nominated, succeeded pair rather than the transport's authoritative selected
+/// pair because webrtc-rs's get_selected_candidate_pair returns an opaque RTCIceCandidatePair
+/// (no accessors for its candidates). This is reliable here: webrtc-rs uses regular nomination
+/// (a single nominated pair) and we sample once at connection establishment.
+fn classify_connection(
+    stats: &::webrtc::stats::StatsReport,
+) -> (IceCandidateType, String, IceCandidateType, String) {
+    let (local_id, remote_id) = stats
+        .reports
+        .values()
+        .find_map(|s| {
+            if let StatsReportType::CandidatePair(p) = s {
+                if p.nominated && p.state == CandidatePairState::Succeeded {
+                    return Some((p.local_candidate_id.clone(), p.remote_candidate_id.clone()));
+                }
+            }
+            None
+        })
+        .unwrap_or_default();
+
+    let (local_type, local_addr) = classify_candidate(stats, &local_id);
+    let (remote_type, remote_addr) = classify_candidate(stats, &remote_id);
+    (local_type, local_addr, remote_type, remote_addr)
+}
+
+/// Maps a single ICE candidate to an ICE candidate type and, for relay candidates, also
+/// returns the relayed transport address.
+fn classify_candidate(
+    stats: &::webrtc::stats::StatsReport,
+    cand_id: &str,
+) -> (IceCandidateType, String) {
+    if cand_id.is_empty() {
+        return (IceCandidateType::Unspecified, String::new());
+    }
+    let cand = stats.reports.get(cand_id).and_then(|s| match s {
+        StatsReportType::LocalCandidate(c) | StatsReportType::RemoteCandidate(c) => Some(c),
+        _ => None,
+    });
+    match cand {
+        None => (IceCandidateType::Unspecified, String::new()),
+        Some(c) => match c.candidate_type {
+            CandidateType::Host => (IceCandidateType::Host, String::new()),
+            CandidateType::ServerReflexive | CandidateType::PeerReflexive => {
+                (IceCandidateType::Stun, String::new())
+            }
+            CandidateType::Relay => (IceCandidateType::Relay, c.ip.clone()),
+            _ => (IceCandidateType::Unspecified, String::new()),
+        },
+    }
+}
+
+/// Reports per-side WebRTC connection metadata to the signaling server as a best-effort
+/// fire-and-forget operation.
+async fn report_connection_metadata(
+    signaling_client: &mut SignalingServiceClient<
+        AddAuthorization<SetRequestHeader<Channel, HeaderValue>>,
+    >,
+    peer_conn: std::sync::Arc<::webrtc::peer_connection::RTCPeerConnection>,
+) {
+    let stats = peer_conn.get_stats().await;
+    let (local_type, local_addr, remote_type, remote_addr) = classify_connection(&stats);
+
+    let request = tonic::Request::new(ReportConnectionMetadataRequest {
+        local: Some(ConnectionCandidate {
+            r#type: local_type as i32,
+            relay_address: local_addr,
+        }),
+        remote: Some(ConnectionCandidate {
+            r#type: remote_type as i32,
+            relay_address: remote_addr,
+        }),
+        sdk_type: SdkType::PythonCpp as i32,
+    });
+
+    if let Err(e) = signaling_client.report_connection_metadata(request).await {
+        log::debug!("failed to report connection metadata: {e}");
+    }
 }
