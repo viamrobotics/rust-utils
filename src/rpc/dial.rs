@@ -160,9 +160,29 @@ async fn pump_request_body(
 ) -> Result<()> {
     use http_body::Body as _;
 
+    // Abort the pump if the underlying connection dies. `body.data()` polls the
+    // app-side request body, which is independent of the data channel, so without
+    // this a dead connection with an idle-but-open send half would park this task
+    // forever while it pins the channel Arc alive. Built once outside the loop so the
+    // hot send path does not re-register a waiter on every message.
+    let cancelled = channel.base_channel.closed_token.clone().cancelled_owned();
+    tokio::pin!(cancelled);
+
     let mut buf: Vec<u8> = Vec::new();
-    while let Some(chunk) = body.data().await {
-        let chunk = chunk.map_err(|e| anyhow::anyhow!("error reading request body: {e}"))?;
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            _ = &mut cancelled => {
+                return Err(anyhow::anyhow!(
+                    "connection closed before request body completed; aborting send"
+                ));
+            }
+            chunk = body.data() => chunk,
+        };
+        let chunk = match chunk {
+            Some(chunk) => chunk.map_err(|e| anyhow::anyhow!("error reading request body: {e}"))?,
+            None => break, // body complete
+        };
         buf.extend_from_slice(&chunk);
 
         // Emit every complete gRPC message currently buffered. A gRPC frame is a
