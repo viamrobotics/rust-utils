@@ -112,12 +112,21 @@ impl ViamChannel {
             status_code = STATUS_CODE_UNKNOWN;
         }
 
-        let data = hyper::body::to_bytes(body).await.unwrap().to_vec();
-        if let Err(e) = channel.write_message(Some(stream), data).await {
-            log::error!("error sending message: {e}");
-            channel.close_stream_with_recv_error(stream_id, e);
-            status_code = STATUS_CODE_UNKNOWN;
-        };
+        // Pump the request body to the data channel on its own task so that response
+        // frames (delivered async via on_channel_message into the resp body) can flow
+        // back to the caller WHILE requests are still being sent. Required for
+        // client-streaming and bidi; previously we drained the whole body with
+        // `to_bytes` before returning the response, which serialized send-then-receive.
+        if status_code == STATUS_CODE_OK {
+            let send_channel = channel.clone();
+            let send_stream = stream.clone();
+            tokio::spawn(async move {
+                if let Err(e) = pump_request_body(&send_channel, &send_stream, body).await {
+                    log::error!("error sending message: {e}");
+                    send_channel.close_stream_with_recv_error(stream_id, e);
+                }
+            });
+        }
 
         let body = match channel.resp_body_from_stream(stream_id) {
             Ok(body) => body,
@@ -137,6 +146,69 @@ impl ViamChannel {
 
         response.body(body).unwrap()
     }
+}
+
+/// Reads `body` frame-by-frame, reassembling complete gRPC-framed messages across
+/// hyper frame boundaries and forwarding each to the data channel as soon as it is
+/// complete, then signals end of stream. Streaming the body (rather than buffering it
+/// whole with `to_bytes`) is what lets client requests interleave with server
+/// responses, enabling client-streaming and bidi.
+async fn pump_request_body(
+    channel: &Arc<WebRTCClientChannel>,
+    stream: &crate::gen::proto::rpc::webrtc::v1::Stream,
+    mut body: BoxBody,
+) -> Result<()> {
+    use http_body::Body as _;
+
+    // Abort the pump if the underlying connection dies. `body.data()` polls the
+    // app-side request body, which is independent of the data channel, so without
+    // this a dead connection with an idle-but-open send half would park this task
+    // forever while it pins the channel Arc alive. Built once outside the loop so the
+    // hot send path does not re-register a waiter on every message.
+    let cancelled = channel.base_channel.closed_token.clone().cancelled_owned();
+    tokio::pin!(cancelled);
+
+    let mut buf: Vec<u8> = Vec::new();
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            _ = &mut cancelled => {
+                return Err(anyhow::anyhow!(
+                    "connection closed before request body completed; aborting send"
+                ));
+            }
+            chunk = body.data() => chunk,
+        };
+        let chunk = match chunk {
+            Some(chunk) => chunk.map_err(|e| anyhow::anyhow!("error reading request body: {e}"))?,
+            None => break, // body complete
+        };
+        buf.extend_from_slice(&chunk);
+
+        // Emit every complete gRPC message currently buffered. A gRPC frame is a
+        // 1-byte compression flag + 4-byte big-endian length + payload.
+        loop {
+            if buf.len() < 5 {
+                break;
+            }
+            let len = u32::from_be_bytes(buf[1..5].try_into().unwrap()) as usize;
+            let total = 5 + len;
+            if buf.len() < total {
+                break; // message spans further frames; wait for the rest
+            }
+            let msg: Vec<u8> = buf.drain(..total).collect();
+            channel.write_grpc_message(stream, &msg).await?;
+        }
+    }
+
+    if !buf.is_empty() {
+        return Err(anyhow::anyhow!(
+            "request body ended with {} trailing bytes of an incomplete message",
+            buf.len()
+        ));
+    }
+
+    channel.write_eos(stream).await
 }
 
 impl Service<http::Request<BoxBody>> for ViamChannel {

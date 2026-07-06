@@ -7,6 +7,7 @@ use std::{
         Arc,
     },
 };
+use tokio_util::sync::CancellationToken;
 use webrtc::{
     data_channel::RTCDataChannel, ice_transport::ice_connection_state::RTCIceConnectionState,
     peer_connection::RTCPeerConnection,
@@ -19,6 +20,10 @@ pub struct WebRTCBaseChannel {
     pub(crate) data_channel: Arc<RTCDataChannel>,
     closed_reason: AtomicPtr<Option<anyhow::Error>>,
     closed: AtomicBool,
+    // Cancelled when the channel closes (locally via `close`, or when the data channel
+    // closes/errors). Lets detached tasks tied to this channel — e.g. the outbound
+    // request-body pump — abort instead of parking forever and pinning the channel alive.
+    pub(crate) closed_token: CancellationToken,
 }
 
 impl Debug for WebRTCBaseChannel {
@@ -68,11 +73,24 @@ impl WebRTCBaseChannel {
             data_channel,
             closed_reason: AtomicPtr::new(&mut None),
             closed: AtomicBool::new(false),
+            closed_token: CancellationToken::new(),
         });
 
+        // Cancel the token when the data channel closes so that tasks tied to this
+        // channel unblock even if the peer connection dies remotely. The token is a
+        // cheap, independent allocation, so moving a clone into the handler does not
+        // keep the channel Arc alive.
+        let close_token = channel.closed_token.clone();
+        dc.on_close(Box::new(move || {
+            close_token.cancel();
+            Box::pin(async {})
+        }));
+
         let c = Arc::downgrade(&channel);
+        let error_token = channel.closed_token.clone();
         dc.on_error(Box::new(move |err: webrtc::Error| {
             log::error!("Data channel error: {err}");
+            error_token.cancel();
             let c = match c.upgrade() {
                 Some(c) => c,
                 None => return Box::pin(async {}),
@@ -94,6 +112,7 @@ impl WebRTCBaseChannel {
             return Ok(());
         }
         self.closed.store(true, Ordering::Release);
+        self.closed_token.cancel();
 
         self.peer_connection
             .close()

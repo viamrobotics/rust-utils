@@ -186,90 +186,65 @@ impl WebRTCClientChannel {
         self.send(&header_vec).await
     }
 
-    pub(crate) async fn write_message(
-        &self,
-        stream: Option<Stream>,
-        mut data: Vec<u8>,
-    ) -> Result<()> {
-        // even if no meaningful data, any actual message will include at least frame header bytes
-        let has_message = !data.is_empty();
+    /// Sends a single complete gRPC-framed message (1-byte compression flag + 4-byte
+    /// big-endian length + payload), packetizing the payload across multiple Requests
+    /// when it exceeds MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE. The caller is responsible
+    /// for splitting a body into individual gRPC messages and for signaling end of
+    /// stream via `write_eos` once all messages have been sent.
+    pub(crate) async fn write_grpc_message(&self, stream: &Stream, data: &[u8]) -> Result<()> {
+        if data.len() < 5 {
+            return Err(anyhow::anyhow!(
+                "Attempted to process message with irregular length"
+            ));
+        }
 
-        // rust libraries are munging streamed client requests into a single http request.
-        // we can look at the gRPC header bytes to determine the length of the first message
-        // and compare it to the length of the data to determine whether this http request
-        // is a single unary call, or a streaming call.
-        // TODO(RSDK-654) The munging of streaming requests into a single http request is
-        // likely going to cause problems for us when we encounter a need for bidi streaming
-        // in the real world. Look into how we can fix it, and hopefully get rid of this
-        // header math in the process.
-
-        let mut to_add_bytes = [0u8; 4];
-
-        // always run the loop at least once, check at completion if we've sent all data and
-        // break the loop accordingly
+        // 1..5 are the gRPC length-prefix bytes; strip the 5-byte header and packetize
+        // the payload. The webrtc eom/eos framing replaces the gRPC framing on the wire.
+        let mut payload = &data[5..];
         loop {
-            if data.len() < 5 {
-                return Err(anyhow::anyhow!(
-                    "Attempted to process message with irregular length"
-                ));
+            let split_at = MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE.min(payload.len());
+            let (to_send, remaining) = payload.split_at(split_at);
+            let eom = remaining.is_empty();
+            let request = Request {
+                stream: Some(stream.clone()),
+                r#type: Some(Type::Message(RequestMessage {
+                    has_message: true,
+                    eos: false,
+                    packet_message: Some(PacketMessage {
+                        eom,
+                        data: to_send.to_vec(),
+                    }),
+                })),
+            };
+
+            let request = Message::encode_to_vec(&request);
+            if let Err(e) = self.send(&request).await {
+                log::error!("error sending message: {e}");
+                return Err(e);
             }
 
-            // because we might have multiple requests contained within our data, we have
-            // to do the manual work of breaking apart the body into separate requests.
-
-            // 1-5 because those are the length header bytes for gRPC
-            to_add_bytes.clone_from_slice(&data[1..5]);
-            let mut next_message_length: usize =
-                u32::from_be_bytes(to_add_bytes).try_into().unwrap();
-
-            data = data.split_off(5);
-            // we need an internal loop because a single message may be longer than the
-            // MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE in which case we don't want to shave off
-            // a five byte header. but, a single call to write_message may contain multiple
-            // distinct messages within the data vec, so we want to be able to evaluate length
-            // multiple times if necessary. we use a loop with an exit check at the bottom
-            // because we always want to send a request at least once, even if the data is empty.
-            loop {
-                let split_at = MAX_REQUEST_MESSAGE_PACKET_DATA_SIZE
-                    .min(data.len())
-                    .min(next_message_length);
-                let (to_send, remaining) = data.split_at(split_at);
-                next_message_length -= split_at;
-                let stream = stream.clone();
-                let eos = remaining.is_empty();
-                let request = Request {
-                    stream,
-                    r#type: Some(Type::Message(RequestMessage {
-                        has_message,
-                        // note(ethan): the variable name that used to exist for determining `eos` was
-                        // `it_was_all_a_stream`. Which isn't important at all, but
-                        // `it_was_all_a_stream` is the best variable name I've ever shipped into
-                        // production and it makes me sad to see it go, so I wanted to memorialize
-                        // it somehow!
-                        eos,
-                        packet_message: Some(PacketMessage {
-                            eom: next_message_length == 0 || eos,
-                            data: to_send.to_vec(),
-                        }),
-                    })),
-                };
-
-                let request = Message::encode_to_vec(&request);
-                if let Err(e) = self.send(&request).await {
-                    log::error!("error sending message: {e}");
-                    return Err(e);
-                }
-
-                data = remaining.to_vec();
-                if next_message_length == 0 {
-                    break;
-                }
-            }
-            if data.is_empty() {
+            payload = remaining;
+            if eom {
                 break;
             }
         }
         Ok(())
+    }
+
+    /// Signals the end of the client's send stream (the gRPC CloseSend equivalent).
+    // note(ethan): the variable that used to carry this signal was named
+    // `it_was_all_a_stream` — the best variable name I've ever shipped into production.
+    // Memorialized here so it is not forgotten.
+    pub(crate) async fn write_eos(&self, stream: &Stream) -> Result<()> {
+        let request = Request {
+            stream: Some(stream.clone()),
+            r#type: Some(Type::Message(RequestMessage {
+                has_message: false,
+                eos: true,
+                packet_message: None,
+            })),
+        };
+        self.send(&Message::encode_to_vec(&request)).await
     }
 
     async fn send(&self, data: &[u8]) -> Result<()> {

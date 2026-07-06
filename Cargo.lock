@@ -3873,6 +3873,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.23.4",
  "tokio-stream",
+ "tokio-util",
  "tonic",
  "tonic-build",
  "tower",
