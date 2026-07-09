@@ -375,4 +375,210 @@ pub struct OptionalWebRtcConfigResponse {
     #[prost(message, optional, tag="1")]
     pub config: ::core::option::Option<WebRtcConfig>,
 }
+/// ConnectionCandidate describes the selected ICE candidate for one side of a WebRTC connection.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConnectionCandidate {
+    #[prost(enumeration="IceCandidateType", tag="1")]
+    pub r#type: i32,
+    /// relay_address is the relay server address of this candidate; set only when type is
+    /// RELAY, so the signaling server can classify the provider by matching against known
+    /// coturn addresses.
+    #[prost(string, tag="2")]
+    pub relay_address: ::prost::alloc::string::String,
+}
+/// ReportConnectionMetadataRequest reports metadata about a WebRTC dial, per side: local is the
+/// dialing SDK and remote is the robot.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReportConnectionMetadataRequest {
+    #[prost(message, optional, tag="1")]
+    pub local: ::core::option::Option<ConnectionCandidate>,
+    #[prost(message, optional, tag="2")]
+    pub remote: ::core::option::Option<ConnectionCandidate>,
+    #[prost(enumeration="SdkType", tag="3")]
+    pub sdk_type: i32,
+    /// reached_stage is the furthest dial checkpoint reached. READY indicates success; any earlier
+    /// value is where a failed dial stopped.
+    #[prost(enumeration="DialStage", tag="4")]
+    pub reached_stage: i32,
+    /// duration_ms is the wall-clock time from dial start to connection ready or to the failure.
+    #[prost(uint32, tag="5")]
+    pub duration_ms: u32,
+    /// signaling_path is how the dial was signaled (cloud / local / mDNS); reported regardless of outcome.
+    #[prost(enumeration="ConnectionSignalingPath", tag="6")]
+    pub signaling_path: i32,
+    /// failure_code is the gRPC status code of a failed dial
+    #[prost(int32, tag="7")]
+    pub failure_code: i32,
+    /// sdk_version is the version of the dialing SDK (e.g. a semver or git tag).
+    #[prost(string, tag="8")]
+    pub sdk_version: ::prost::alloc::string::String,
+}
+/// ReportConnectionMetadataResponse is empty.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReportConnectionMetadataResponse {
+}
+/// ICECandidateType represents the type of ICE candidate selected for a WebRTC connection.
+/// The signaling server further classifies RELAY by relay server specific provider from the address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum IceCandidateType {
+    Unspecified = 0,
+    /// ICE_CANDIDATE_TYPE_HOST indicates a direct connection was established.
+    Host = 1,
+    /// ICE_CANDIDATE_TYPE_STUN indicates a STUN-assisted connection was established.
+    Stun = 2,
+    /// ICE_CANDIDATE_TYPE_RELAY indicates a TURN relay candidate was selected.
+    Relay = 3,
+}
+impl IceCandidateType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            IceCandidateType::Unspecified => "ICE_CANDIDATE_TYPE_UNSPECIFIED",
+            IceCandidateType::Host => "ICE_CANDIDATE_TYPE_HOST",
+            IceCandidateType::Stun => "ICE_CANDIDATE_TYPE_STUN",
+            IceCandidateType::Relay => "ICE_CANDIDATE_TYPE_RELAY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ICE_CANDIDATE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ICE_CANDIDATE_TYPE_HOST" => Some(Self::Host),
+            "ICE_CANDIDATE_TYPE_STUN" => Some(Self::Stun),
+            "ICE_CANDIDATE_TYPE_RELAY" => Some(Self::Relay),
+            _ => None,
+        }
+    }
+}
+/// SDKType represents the Viam SDK used to establish the connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SdkType {
+    Unspecified = 0,
+    Go = 1,
+    Typescript = 2,
+    PythonCpp = 3,
+}
+impl SdkType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            SdkType::Unspecified => "SDK_TYPE_UNSPECIFIED",
+            SdkType::Go => "SDK_TYPE_GO",
+            SdkType::Typescript => "SDK_TYPE_TYPESCRIPT",
+            SdkType::PythonCpp => "SDK_TYPE_PYTHON_CPP",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SDK_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SDK_TYPE_GO" => Some(Self::Go),
+            "SDK_TYPE_TYPESCRIPT" => Some(Self::Typescript),
+            "SDK_TYPE_PYTHON_CPP" => Some(Self::PythonCpp),
+            _ => None,
+        }
+    }
+}
+/// DialStage is the furthest checkpoint a WebRTC dial reached. READY means the dial succeeded; any
+/// earlier value is the stage at which a failed dial stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DialStage {
+    Unspecified = 0,
+    /// DIAL_STAGE_SIGNALING_CONNECTED: the signaling channel was established.
+    SignalingConnected = 1,
+    /// DIAL_STAGE_CONFIG_FETCHED: ICE/TURN configuration was fetched from the signaling server.
+    ConfigFetched = 2,
+    /// DIAL_STAGE_OFFER_SENT: the SDP offer was sent to the signaling server (the Call was accepted).
+    OfferSent = 3,
+    /// DIAL_STAGE_ANSWER_RECEIVED: the answerer's SDP answer was received and applied.
+    AnswerReceived = 4,
+    /// DIAL_STAGE_ICE_CONNECTED: ICE connectivity was established (a candidate pair connected).
+    IceConnected = 5,
+    /// DIAL_STAGE_DTLS_CONNECTED: the DTLS handshake completed (peer connection connected) but the
+    /// data channel is not yet open.
+    DtlsConnected = 6,
+    /// DIAL_STAGE_READY: the connection is fully ready (data channel open). This is success.
+    Ready = 7,
+}
+impl DialStage {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            DialStage::Unspecified => "DIAL_STAGE_UNSPECIFIED",
+            DialStage::SignalingConnected => "DIAL_STAGE_SIGNALING_CONNECTED",
+            DialStage::ConfigFetched => "DIAL_STAGE_CONFIG_FETCHED",
+            DialStage::OfferSent => "DIAL_STAGE_OFFER_SENT",
+            DialStage::AnswerReceived => "DIAL_STAGE_ANSWER_RECEIVED",
+            DialStage::IceConnected => "DIAL_STAGE_ICE_CONNECTED",
+            DialStage::DtlsConnected => "DIAL_STAGE_DTLS_CONNECTED",
+            DialStage::Ready => "DIAL_STAGE_READY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DIAL_STAGE_UNSPECIFIED" => Some(Self::Unspecified),
+            "DIAL_STAGE_SIGNALING_CONNECTED" => Some(Self::SignalingConnected),
+            "DIAL_STAGE_CONFIG_FETCHED" => Some(Self::ConfigFetched),
+            "DIAL_STAGE_OFFER_SENT" => Some(Self::OfferSent),
+            "DIAL_STAGE_ANSWER_RECEIVED" => Some(Self::AnswerReceived),
+            "DIAL_STAGE_ICE_CONNECTED" => Some(Self::IceConnected),
+            "DIAL_STAGE_DTLS_CONNECTED" => Some(Self::DtlsConnected),
+            "DIAL_STAGE_READY" => Some(Self::Ready),
+            _ => None,
+        }
+    }
+}
+/// ConnectionSignalingPath is how a WebRTC dial was signaled, derived from the signaling address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ConnectionSignalingPath {
+    Unspecified = 0,
+    /// CONNECTION_SIGNALING_PATH_CLOUD_SIGNALED: signaled through app's signaling server.
+    CloudSignaled = 1,
+    /// CONNECTION_SIGNALING_PATH_MDNS_LOCAL: signaled over an mDNS-discovered local-network path.
+    MdnsLocal = 2,
+    /// CONNECTION_SIGNALING_PATH_LOCAL: signaled through a loopback/private-address signaling server
+    /// (e.g. a machine's own signaling server) without mDNS discovery.
+    Local = 3,
+}
+impl ConnectionSignalingPath {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ConnectionSignalingPath::Unspecified => "CONNECTION_SIGNALING_PATH_UNSPECIFIED",
+            ConnectionSignalingPath::CloudSignaled => "CONNECTION_SIGNALING_PATH_CLOUD_SIGNALED",
+            ConnectionSignalingPath::MdnsLocal => "CONNECTION_SIGNALING_PATH_MDNS_LOCAL",
+            ConnectionSignalingPath::Local => "CONNECTION_SIGNALING_PATH_LOCAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CONNECTION_SIGNALING_PATH_UNSPECIFIED" => Some(Self::Unspecified),
+            "CONNECTION_SIGNALING_PATH_CLOUD_SIGNALED" => Some(Self::CloudSignaled),
+            "CONNECTION_SIGNALING_PATH_MDNS_LOCAL" => Some(Self::MdnsLocal),
+            "CONNECTION_SIGNALING_PATH_LOCAL" => Some(Self::Local),
+            _ => None,
+        }
+    }
+}
 // @@protoc_insertion_point(module)

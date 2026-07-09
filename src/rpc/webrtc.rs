@@ -1,5 +1,6 @@
+use super::dial_report::DialStageTracker;
 use super::log_prefixes;
-use crate::gen::proto::rpc::webrtc::v1::{IceServer, ResponseTrailers, WebRtcConfig};
+use crate::gen::proto::rpc::webrtc::v1::{DialStage, IceServer, ResponseTrailers, WebRtcConfig};
 use anyhow::Result;
 use bytes::Bytes;
 use core::fmt;
@@ -276,6 +277,7 @@ fn create_invalid_sdp_err(err: serde_json::error::Error) -> webrtc::Error {
 pub(crate) async fn new_peer_connection_for_client(
     config: RTCConfiguration,
     disable_trickle_ice: bool,
+    dial_stage: Arc<DialStageTracker>,
 ) -> Result<(Arc<RTCPeerConnection>, Arc<RTCDataChannel>)> {
     let web_api = new_webrtc_api()?;
     let peer_connection = Arc::new(web_api.new_peer_connection(config).await?);
@@ -296,6 +298,8 @@ pub(crate) async fn new_peer_connection_for_client(
         move |connection: RTCPeerConnectionState| {
             log::info!("peer connection state change: {connection}");
             if connection == RTCPeerConnectionState::Connected {
+                // Connected means ICE and DTLS both completed; the data channel may not be open yet.
+                dial_stage.advance(DialStage::DtlsConnected);
                 log::debug!("{}", log_prefixes::DIALED_WEBRTC);
             }
             Box::pin(async move {})

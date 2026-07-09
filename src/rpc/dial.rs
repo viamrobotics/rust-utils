@@ -1,5 +1,6 @@
 use super::{
     client_channel::*,
+    dial_report::{classify_signaling_path, report_dial_outcome, DialStageTracker},
     log_prefixes,
     webrtc::{webrtc_action_with_timeout, Options},
 };
@@ -9,8 +10,8 @@ use crate::gen::proto::rpc::v1::{
 };
 use crate::gen::proto::rpc::webrtc::v1::{
     call_response::Stage, call_update_request::Update,
-    signaling_service_client::SignalingServiceClient, CallUpdateRequest,
-    OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
+    signaling_service_client::SignalingServiceClient, CallUpdateRequest, ConnectionSignalingPath,
+    DialStage, OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
 };
 use crate::gen::proto::rpc::webrtc::v1::{
     CallRequest, IceCandidate, Metadata, RequestHeaders, Strings,
@@ -711,6 +712,7 @@ impl DialBuilder<WithoutCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
+        let dial_start = Instant::now();
         let webrtc_options = self.config.webrtc_options;
         let disable_webrtc = match &webrtc_options {
             Some(options) => options.disable_webrtc,
@@ -780,7 +782,16 @@ impl DialBuilder<WithoutCredentials> {
             log::debug!("{}", log_prefixes::DIALED_GRPC);
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
-            match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
+            let signaling_path = classify_signaling_path(&uri);
+            match maybe_connect_via_webrtc(
+                uri,
+                intercepted_channel.clone(),
+                webrtc_options,
+                dial_start,
+                signaling_path,
+            )
+            .await
+            {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
@@ -897,6 +908,7 @@ impl DialBuilder<WithCredentials> {
         mdns_uri: Option<Parts>,
         mut original_uri_parts: Parts,
     ) -> Result<ViamChannel> {
+        let dial_start = Instant::now();
         let is_insecure = self.config.insecure;
 
         let webrtc_options = self.config.webrtc_options;
@@ -916,6 +928,7 @@ impl DialBuilder<WithCredentials> {
             original_uri.clone(),
             self.config.signaling_server_override.as_deref(),
         );
+        let signaling_path = classify_signaling_path(&uri_for_auth);
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -982,7 +995,15 @@ impl DialBuilder<WithCredentials> {
             log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
-            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
+            match maybe_connect_via_webrtc(
+                original_uri,
+                channel.clone(),
+                webrtc_options,
+                dial_start,
+                signaling_path,
+            )
+            .await
+            {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!(
@@ -1148,18 +1169,53 @@ impl fmt::Display for CallerUpdateStats {
     }
 }
 
+/// Attempts a WebRTC dial and, win or lose, reports the outcome (furthest stage reached,
+/// duration, signaling path, selected candidate pair, failure code) to the signaling server it
+/// dialed through, mirroring the Go SDK's connection-metadata telemetry. The report is
+/// best-effort and detached, so it neither delays the caller's direct-connection fallback nor
+/// surfaces errors of its own.
 async fn maybe_connect_via_webrtc(
     uri: Uri,
     channel: AddAuthorization<SetRequestHeader<Channel, HeaderValue>>,
     webrtc_options: Option<Options>,
+    dial_start: Instant,
+    signaling_path: ConnectionSignalingPath,
 ) -> Result<Arc<WebRTCClientChannel>> {
+    let stage = Arc::new(DialStageTracker::new());
+    let result = connect_via_webrtc(uri, channel.clone(), webrtc_options, stage.clone()).await;
+    let peer_connection = result
+        .as_ref()
+        .ok()
+        .map(|client_channel| client_channel.base_channel.peer_connection.clone());
+    report_dial_outcome(
+        channel,
+        peer_connection,
+        &stage,
+        dial_start,
+        signaling_path,
+        result.as_ref().err(),
+    );
+    result
+}
+
+async fn connect_via_webrtc(
+    uri: Uri,
+    channel: AddAuthorization<SetRequestHeader<Channel, HeaderValue>>,
+    webrtc_options: Option<Options>,
+    dial_stage: Arc<DialStageTracker>,
+) -> Result<Arc<WebRTCClientChannel>> {
+    // The caller already established the channel to the signaling server.
+    dial_stage.advance(DialStage::SignalingConnected);
     let webrtc_options = webrtc_options.unwrap_or_else(|| Options::infer_from_uri(uri.clone()));
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let response = match signaling_client
         .optional_web_rtc_config(OptionalWebRtcConfigRequest::default())
         .await
     {
-        Ok(resp) => resp,
+        Ok(resp) => {
+            dial_stage.advance(DialStage::ConfigFetched);
+            resp
+        }
         Err(e) => {
             if e.code() == tonic::Code::Unimplemented {
                 tonic::Response::new(OptionalWebRtcConfigResponse::default())
@@ -1210,8 +1266,12 @@ async fn maybe_connect_via_webrtc(
         log::debug!("TURN filter options set: turn_uri={uri:?}");
     }
 
-    let (peer_connection, data_channel) =
-        webrtc::new_peer_connection_for_client(config, webrtc_options.disable_trickle_ice).await?;
+    let (peer_connection, data_channel) = webrtc::new_peer_connection_for_client(
+        config,
+        webrtc_options.disable_trickle_ice,
+        dial_stage.clone(),
+    )
+    .await?;
 
     let sent_done_or_error = Arc::new(AtomicBool::new(false));
     let uuid_lock = Arc::new(RwLock::new("".to_string()));
@@ -1234,6 +1294,27 @@ async fn maybe_connect_via_webrtc(
     let ice_done2 = ice_done.clone();
     let caller_update_stats = Arc::new(Mutex::new(CallerUpdateStats::default()));
 
+    {
+        let caller_update_stats = caller_update_stats.clone();
+        let dial_stage = dial_stage.clone();
+        peer_connection.on_ice_connection_state_change(Box::new(
+            move |state: RTCIceConnectionState| {
+                if state == RTCIceConnectionState::Connected
+                    || state == RTCIceConnectionState::Completed
+                {
+                    dial_stage.advance(DialStage::IceConnected);
+                }
+                let caller_update_stats = caller_update_stats.clone();
+                Box::pin(async move {
+                    if state == RTCIceConnectionState::Completed {
+                        let caller_update_stats_inner = caller_update_stats.lock().unwrap();
+                        log::debug!("{}", caller_update_stats_inner);
+                    }
+                })
+            },
+        ));
+    }
+
     if !webrtc_options.disable_trickle_ice {
         let offer = peer_connection.create_offer(None).await?;
         let channel2 = channel.clone();
@@ -1244,19 +1325,7 @@ async fn maybe_connect_via_webrtc(
 
         let on_local_ice_candidate_failure = is_open_s.clone();
 
-        let caller_update_stats = caller_update_stats.clone();
         let caller_update_stats2 = caller_update_stats.clone();
-        peer_connection.on_ice_connection_state_change(Box::new(
-            move |state: RTCIceConnectionState| {
-                let caller_update_stats = caller_update_stats.clone();
-                Box::pin(async move {
-                    if state == RTCIceConnectionState::Completed {
-                        let caller_update_stats_inner = caller_update_stats.lock().unwrap();
-                        log::debug!("{}", caller_update_stats_inner);
-                    }
-                })
-            },
-        ));
         peer_connection.on_ice_candidate(Box::new(
             move |ice_candidate: Option<RTCIceCandidate>| {
                 if exchange_done.load(Ordering::Acquire) {
@@ -1390,9 +1459,11 @@ async fn maybe_connect_via_webrtc(
     let client_channel_for_ice_gathering_thread = Arc::downgrade(&client_channel);
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let mut call_client = signaling_client.call(call_request).await?.into_inner();
+    dial_stage.advance(DialStage::OfferSent);
 
     let channel2 = channel.clone();
     let sent_done_or_error2 = sent_done_or_error.clone();
+    let dial_stage2 = dial_stage.clone();
     tokio::spawn(async move {
         let uuid = uuid_for_ice_gathering_thread;
         let client_channel = client_channel_for_ice_gathering_thread;
@@ -1476,6 +1547,7 @@ async fn maybe_connect_via_webrtc(
                             break;
                         }
                     }
+                    dial_stage2.advance(DialStage::AnswerReceived);
                     let _ = remote_description_set_s.send_replace(Some(()));
                     if webrtc_options.disable_trickle_ice {
                         send_done_once(sent_done.clone(), &response.uuid, channel2.clone()).await;
@@ -1547,6 +1619,7 @@ async fn maybe_connect_via_webrtc(
         }
     }
 
+    dial_stage.advance(DialStage::Ready);
     exchange_done.store(true, Ordering::Release);
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
