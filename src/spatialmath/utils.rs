@@ -131,9 +131,7 @@ impl OrientationVector {
 
     pub fn to_quaternion(&self) -> Quaternion<f64> {
         let lat = self.o_vector.z.acos();
-        // If we are at either pole the longitude is undefined, so pin it to zero. The
-        // guard must be on the absolute value so that it triggers at both poles, matching
-        // the reference implementation in rdk (spatialmath/orientationVector.go).
+        // abs() so this fires at both poles, matching rdk spatialmath/orientationVector.go:134
         let lon = match self.o_vector.z {
             val if 1.0 - val.abs() > ANGLE_ACCEPTANCE => self.o_vector.y.atan2(self.o_vector.x),
             _ => 0.0,
@@ -370,21 +368,14 @@ mod tests {
         assert_approx_eq!(f64, diff, 0.0);
     }
 
-    // Orientation vectors whose z component is within ANGLE_ACCEPTANCE of -1, i.e. pointing
-    // very nearly straight down. The longitude is undefined at a pole, so it must be pinned
-    // to zero exactly as rdk does in spatialmath/orientationVector.go. The expected
-    // quaternions below are the ZYZ euler quaternion for (lon = 0, lat = acos(o_z), theta),
-    // computed independently of this module.
+    // The expected quaternions in the two pole tests below were computed independently of
+    // this module, so agreeing with the code under test is not enough to pass.
     #[test]
     fn orientation_vector_to_quaternion_pins_longitude_at_south_pole() {
-        // 1 - |o_z| = 1e-5, which is inside the 1e-4 band
-        let o_z = -0.99999;
-        // sin(lat), so that the vectors below are already unit length
-        let r = 0.004472124774634615;
+        let o_z = -0.99999; // 1 - |o_z| = 1e-5, inside the 1e-4 band
+        let r = 0.004472124774634615; // sin(lat), so the vectors below are already unit length
         let theta = 0.5;
 
-        // The longitude is discarded, so every azimuth in the band decodes to this one
-        // rotation.
         let expected_quat = Quaternion::new(
             0.002166554039183957,
             0.24740334074385167,
@@ -392,20 +383,17 @@ mod tests {
             0.0005532120707944279,
         );
 
-        // azimuth 45 degrees
         let ov_45 =
             OrientationVector::new(0.0031622697544564974, 0.0031622697544564965, o_z, theta);
         let diff_45 = get_quaternion_diff_norm(&expected_quat, &ov_45.to_quaternion());
         assert_approx_eq!(f64, diff_45, 0.0);
 
-        // azimuth 90 degrees
         let ov_90 = OrientationVector::new(0.0, r, o_z, theta);
         let diff_90 = get_quaternion_diff_norm(&expected_quat, &ov_90.to_quaternion());
         assert_approx_eq!(f64, diff_90, 0.0);
     }
 
-    // The north pole was already handled correctly; this guards against pinning one pole
-    // while breaking the other.
+    // The north pole was already correct; guards against breaking it while fixing the other.
     #[test]
     fn orientation_vector_to_quaternion_pins_longitude_at_north_pole() {
         let o_z = 0.99999;
@@ -429,16 +417,10 @@ mod tests {
         assert_approx_eq!(f64, diff_90, 0.0);
     }
 
-    // Quaternion -> orientation vector -> quaternion must return the original rotation for a
-    // tool pointing near the south pole away from the zero azimuth. Both directions pin the
-    // longitude near a pole, so the only remaining error is the pinning itself, which is
-    // bounded by how close the vector is to the pole: the residual shrinks by four orders of
-    // magnitude when the gap 1 - |o_z| does. Without the abs() in to_quaternion the residual
-    // is instead a fixed atan2(o_y, o_x) = 45 degrees, giving a diff norm of ~0.152 for both
-    // cases below.
+    // Tool z near the south pole at azimuth 45 degrees, which is where the bug bites. The
+    // residual is the intrinsic pinning bound and shrinks with 1 - |o_z|, hence the epsilons.
     #[test]
     fn quaternion_orientation_vector_round_trip_near_south_pole() {
-        // tool z at azimuth 45 degrees, 1 - |o_z| = 1e-5
         let quat = Quaternion::new(
             0.0017899298388043034,
             -0.1422149214452539,
@@ -449,7 +431,6 @@ mod tests {
         let diff = get_quaternion_diff_norm(&quat, &ov.to_quaternion());
         assert_approx_eq!(f64, diff, 0.0, epsilon = 1e-5);
 
-        // same rotation but with 1 - |o_z| = 1e-9
         let closer_quat = Quaternion::new(
             1.7899298135059344e-05,
             -0.14221527694833697,
