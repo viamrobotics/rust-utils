@@ -131,7 +131,7 @@ impl OrientationVector {
 
     pub fn to_quaternion(&self) -> Quaternion<f64> {
         let lat = self.o_vector.z.acos();
-        // abs() so this fires at both poles, matching rdk spatialmath/orientationVector.go:134
+        // abs() so this fires at both poles, matching rdk's OrientationVector.Quaternion
         let lon = match self.o_vector.z {
             val if 1.0 - val.abs() > ANGLE_ACCEPTANCE => self.o_vector.y.atan2(self.o_vector.x),
             _ => 0.0,
