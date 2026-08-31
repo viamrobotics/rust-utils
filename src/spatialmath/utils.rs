@@ -131,7 +131,8 @@ impl OrientationVector {
 
     pub fn to_quaternion(&self) -> Quaternion<f64> {
         let lat = self.o_vector.z.acos();
-        // abs() so this fires at both poles, matching rdk's OrientationVector.Quaternion
+        // Longitude is undefined inside the pole band; rdk's OrientationVector.Quaternion
+        // pins it at both poles via 1 - abs(OZ).
         let lon = match self.o_vector.z {
             val if 1.0 - val.abs() > ANGLE_ACCEPTANCE => self.o_vector.y.atan2(self.o_vector.x),
             _ => 0.0,
@@ -368,8 +369,8 @@ mod tests {
         assert_approx_eq!(f64, diff, 0.0);
     }
 
-    // The expected quaternions in the two pole tests below were computed independently of
-    // this module, so agreeing with the code under test is not enough to pass.
+    // Expected quaternions are computed independently of this module, as the quaternion
+    // product Rz(lon)·Ry(lat)·Rz(theta) with lon pinned to 0.
     #[test]
     fn orientation_vector_to_quaternion_pins_longitude_at_south_pole() {
         let o_z = -0.99999; // 1 - |o_z| = 1e-5, inside the 1e-4 band
@@ -393,7 +394,7 @@ mod tests {
         assert_approx_eq!(f64, diff_90, 0.0);
     }
 
-    // The north pole was already correct; guards against breaking it while fixing the other.
+    // Pinning must hold at o_z = +1 too: a sign-sensitive guard satisfies one pole only.
     #[test]
     fn orientation_vector_to_quaternion_pins_longitude_at_north_pole() {
         let o_z = 0.99999;
@@ -417,8 +418,8 @@ mod tests {
         assert_approx_eq!(f64, diff_90, 0.0);
     }
 
-    // Tool z near the south pole at azimuth 45 degrees, which is where the bug bites. The
-    // residual is the intrinsic pinning bound and shrinks with 1 - |o_z|, hence the epsilons.
+    // Tool z near the south pole at 45 degrees azimuth. The residual is the intrinsic
+    // pinning bound and shrinks with 1 - |o_z|, hence the per-case epsilons.
     #[test]
     fn quaternion_orientation_vector_round_trip_near_south_pole() {
         let quat = Quaternion::new(
