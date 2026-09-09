@@ -131,8 +131,10 @@ impl OrientationVector {
 
     pub fn to_quaternion(&self) -> Quaternion<f64> {
         let lat = self.o_vector.z.acos();
+        // Longitude is undefined inside the pole band; rdk's OrientationVector.Quaternion
+        // pins it at both poles via 1 - abs(OZ).
         let lon = match self.o_vector.z {
-            val if 1.0 - val > ANGLE_ACCEPTANCE => self.o_vector.y.atan2(self.o_vector.x),
+            val if 1.0 - val.abs() > ANGLE_ACCEPTANCE => self.o_vector.y.atan2(self.o_vector.x),
             _ => 0.0,
         };
 
@@ -365,6 +367,80 @@ mod tests {
         let calc_quat8 = ov8.to_quaternion();
         diff = get_quaternion_diff_norm(&expected_quat8, &calc_quat8);
         assert_approx_eq!(f64, diff, 0.0);
+    }
+
+    // Expected quaternions are computed independently of this module, as the quaternion
+    // product Rz(lon)·Ry(lat)·Rz(theta) with lon pinned to 0.
+    #[test]
+    fn orientation_vector_to_quaternion_pins_longitude_at_south_pole() {
+        let o_z = -0.99999; // 1 - |o_z| = 1e-5, inside the 1e-4 band
+        let r = 0.004472124774634615; // sin(lat), so the vectors below are already unit length
+        let theta = 0.5;
+
+        let expected_quat = Quaternion::new(
+            0.002166554039183957,
+            0.24740334074385167,
+            0.9689099994265626,
+            0.0005532120707944279,
+        );
+
+        let ov_45 =
+            OrientationVector::new(0.0031622697544564974, 0.0031622697544564965, o_z, theta);
+        let diff_45 = get_quaternion_diff_norm(&expected_quat, &ov_45.to_quaternion());
+        assert_approx_eq!(f64, diff_45, 0.0);
+
+        let ov_90 = OrientationVector::new(0.0, r, o_z, theta);
+        let diff_90 = get_quaternion_diff_norm(&expected_quat, &ov_90.to_quaternion());
+        assert_approx_eq!(f64, diff_90, 0.0);
+    }
+
+    // Pinning must hold at o_z = +1 too: a sign-sensitive guard satisfies one pole only.
+    #[test]
+    fn orientation_vector_to_quaternion_pins_longitude_at_north_pole() {
+        let o_z = 0.99999;
+        let r = 0.004472124774634615;
+        let theta = 0.5;
+
+        let expected_quat = Quaternion::new(
+            0.9689099994265626,
+            0.0005532120707944427,
+            0.0021665540391840148,
+            0.24740334074385167,
+        );
+
+        let ov_45 =
+            OrientationVector::new(0.0031622697544564974, 0.0031622697544564965, o_z, theta);
+        let diff_45 = get_quaternion_diff_norm(&expected_quat, &ov_45.to_quaternion());
+        assert_approx_eq!(f64, diff_45, 0.0);
+
+        let ov_90 = OrientationVector::new(0.0, r, o_z, theta);
+        let diff_90 = get_quaternion_diff_norm(&expected_quat, &ov_90.to_quaternion());
+        assert_approx_eq!(f64, diff_90, 0.0);
+    }
+
+    // Tool z near the south pole at 45 degrees azimuth. The residual is the intrinsic
+    // pinning bound and shrinks with 1 - |o_z|, hence the per-case epsilons.
+    #[test]
+    fn quaternion_orientation_vector_round_trip_near_south_pole() {
+        let quat = Quaternion::new(
+            0.0017899298388043034,
+            -0.1422149214452539,
+            0.9898332769301709,
+            0.0013402056454645229,
+        );
+        let ov: OrientationVector = quat.into();
+        let diff = get_quaternion_diff_norm(&quat, &ov.to_quaternion());
+        assert_approx_eq!(f64, diff, 0.0, epsilon = 1e-5);
+
+        let closer_quat = Quaternion::new(
+            1.7899298135059344e-05,
+            -0.14221527694833697,
+            0.9898357512751839,
+            1.34020562652243e-05,
+        );
+        let closer_ov: OrientationVector = closer_quat.into();
+        let closer_diff = get_quaternion_diff_norm(&closer_quat, &closer_ov.to_quaternion());
+        assert_approx_eq!(f64, closer_diff, 0.0, epsilon = 1e-9);
     }
 
     #[test]
