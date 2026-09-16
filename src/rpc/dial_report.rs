@@ -7,10 +7,11 @@
 //! address). Delivery is best-effort and runs in a detached background task so reporting never
 //! adds latency to, or fails, a dial.
 //!
-//! Only the app signaling server implements `ReportConnectionMetadata`, so reports are delivered
-//! only for cloud-signaled dials (those routed through `app.viam.com` / `app.viam.dev`). Unlike
-//! the Go implementation, rust-utils does not signal WebRTC over mDNS and does not reconstruct a
-//! connection to prod app for raw-IP / `.local` dials, so local-signaled dials produce no report.
+//! Only the app signaling server implements `ReportConnectionMetadata`. A cloud-signaled dial
+//! (routed through `app.viam.com` / `app.viam.dev`) reports over its own channel; a locally-signaled
+//! dial reconstructs an authenticated connection to prod app, reusing the dial's credentials (Go's
+//! `fixUpReportDialOpts`). rust-utils does not signal WebRTC over mDNS, so no report carries the
+//! `MdnsLocal` path. See [`should_deliver`] for which outcomes are reported.
 
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
@@ -73,11 +74,24 @@ impl StageTracker {
     }
 }
 
-/// Whether a dial should deliver its connection report. Disabled under `cfg(test)` so a report
-/// task can't outlive its test. In practice unit tests never dial cloud app anyway, so this is
-/// belt-and-suspenders.
+/// The env var that opts a process out of dial reporting (any non-empty value disables it).
+const DISABLE_DIAL_REPORTING_ENV: &str = "VIAM_DISABLE_DIAL_REPORTING";
+
+/// Whether a dial should deliver its connection report.
+///
+/// Disabled under `cfg(test)` (the crate's own unit tests) and whenever `VIAM_DISABLE_DIAL_REPORTING`
+/// is set to a non-empty value, so a detached report task can't outlive a test (mirrors Go
+/// disabling reports in test binaries). `cfg(test)` does not cover integration tests in `tests/` or
+/// downstream consumers, so test/CI harnesses that dial real robots should set the env var;
+/// production consumers (release builds, no env var) report normally.
 pub(crate) fn dial_reporting_enabled() -> bool {
-    !cfg!(test)
+    if cfg!(test) {
+        return false;
+    }
+    let disabled = std::env::var(DISABLE_DIAL_REPORTING_ENV)
+        .map(|value| !value.is_empty())
+        .unwrap_or(false);
+    !disabled
 }
 
 /// Derives how a WebRTC dial was signaled from the signaling server host. rust-utils only signals
@@ -174,14 +188,27 @@ pub(crate) fn failure_code(err: &anyhow::Error) -> i32 {
     STATUS_CODE_UNKNOWN
 }
 
-/// Whether a built report should actually be delivered. On a successful dial only a READY report
-/// is truthful (a non-READY furthest stage on success would count a spurious failure against a
-/// dial that succeeded); a failed dial delivers its furthest stage.
-pub(crate) fn should_deliver(reached_stage: i32, dial_succeeded: bool) -> bool {
+/// Whether a built report should actually be delivered.
+///
+/// On a successful WebRTC dial only a READY report is truthful (a non-READY furthest stage on
+/// success would count a spurious failure against a dial that succeeded).
+///
+/// A failed WebRTC dial is reported only when the failure is terminal — i.e. there is no working
+/// fallback. rust-utils falls back to a direct gRPC connection on any WebRTC failure, so:
+/// - **cloud-signaled**: direct gRPC cannot reach a cloud robot, so the WebRTC failure fails the
+///   dial and is reported;
+/// - **local-signaled**: the direct gRPC connection to the robot generally succeeds, so the WebRTC
+///   failure did not actually fail the dial — it is suppressed (mirrors Go suppressing a non-READY
+///   report when the logical dial nonetheless succeeded).
+pub(crate) fn should_deliver(
+    reached_stage: i32,
+    dial_succeeded: bool,
+    signaling_path: ConnectionSignalingPath,
+) -> bool {
     if dial_succeeded {
         reached_stage == DialStage::Ready as i32
     } else {
-        true
+        signaling_path == ConnectionSignalingPath::CloudSignaled
     }
 }
 
@@ -239,13 +266,34 @@ mod tests {
 
     #[test]
     fn should_deliver_suppresses_non_ready_on_success() {
-        // Success: only a READY report is delivered.
-        assert!(should_deliver(DialStage::Ready as i32, true));
-        assert!(!should_deliver(DialStage::IceConnected as i32, true));
-        assert!(!should_deliver(DialStage::Unspecified as i32, true));
-        // Failure: any furthest stage is delivered.
-        assert!(should_deliver(DialStage::Unspecified as i32, false));
-        assert!(should_deliver(DialStage::OfferSent as i32, false));
+        use ConnectionSignalingPath::{CloudSignaled, Local};
+        // Success: only a READY report is delivered, regardless of signaling path.
+        assert!(should_deliver(DialStage::Ready as i32, true, CloudSignaled));
+        assert!(should_deliver(DialStage::Ready as i32, true, Local));
+        assert!(!should_deliver(
+            DialStage::IceConnected as i32,
+            true,
+            CloudSignaled
+        ));
+        assert!(!should_deliver(DialStage::Unspecified as i32, true, Local));
+        // Cloud failure: reported (direct gRPC can't reach a cloud robot, so it's terminal).
+        assert!(should_deliver(
+            DialStage::Unspecified as i32,
+            false,
+            CloudSignaled
+        ));
+        assert!(should_deliver(
+            DialStage::OfferSent as i32,
+            false,
+            CloudSignaled
+        ));
+        // Local failure: suppressed (the dial falls back to a working direct gRPC connection).
+        assert!(!should_deliver(DialStage::OfferSent as i32, false, Local));
+        assert!(!should_deliver(
+            DialStage::IceConnected as i32,
+            false,
+            Local
+        ));
     }
 
     #[test]

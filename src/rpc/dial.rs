@@ -1298,8 +1298,9 @@ async fn maybe_connect_via_webrtc(
         let duration_ms = dial_start.elapsed().as_millis().min(u32::MAX as u128) as u32;
         let reached_stage = stage_tracker.reached();
         let dial_succeeded = result.is_ok();
+        let signaling_path = report_target.signaling_path();
 
-        if dial_report::should_deliver(reached_stage, dial_succeeded) {
+        if dial_report::should_deliver(reached_stage, dial_succeeded, signaling_path) {
             // On success, classify the selected ICE candidate pair from the live peer connection;
             // a failed dial has no peer connection to inspect.
             let peer_connection = result
@@ -1307,7 +1308,6 @@ async fn maybe_connect_via_webrtc(
                 .ok()
                 .map(|client_channel| client_channel.base_channel.peer_connection.clone());
             let failure_code = result.as_ref().err().map_or(0, dial_report::failure_code);
-            let signaling_path = report_target.signaling_path();
 
             // Detached so reporting (gathering stats, reconnecting to app, and the RPC) never adds
             // latency to the dial, and a cancelled dial still reports.
@@ -1337,6 +1337,13 @@ async fn maybe_connect_via_webrtc_inner(
     stage_tracker: Arc<StageTracker>,
 ) -> Result<Arc<WebRTCClientChannel>> {
     let webrtc_options = webrtc_options.unwrap_or_else(|| Options::infer_from_uri(uri.clone()));
+
+    // The channel was eagerly connected by create_channel (it uses `.connect().await`) before this
+    // function is called, so the signaling connection is already established on entry. Matching Go,
+    // set SIGNALING_CONNECTED here so a config-RPC failure against a reachable server reports
+    // SIGNALING_CONNECTED rather than UNSPECIFIED.
+    stage_tracker.advance(DialStage::SignalingConnected);
+
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let response = match signaling_client
         .optional_web_rtc_config(OptionalWebRtcConfigRequest::default())
@@ -1351,10 +1358,6 @@ async fn maybe_connect_via_webrtc_inner(
             }
         }
     };
-
-    // Reaching a response (even a synthesized Unimplemented default) proves the signaling channel
-    // is established.
-    stage_tracker.advance(DialStage::SignalingConnected);
 
     let optional_config = response.into_inner().config;
     stage_tracker.advance(DialStage::ConfigFetched);
