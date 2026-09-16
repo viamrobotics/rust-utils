@@ -1,5 +1,6 @@
 use super::{
     client_channel::*,
+    dial_report::{self, StageTracker},
     log_prefixes,
     webrtc::{webrtc_action_with_timeout, Options},
 };
@@ -13,7 +14,8 @@ use crate::gen::proto::rpc::webrtc::v1::{
     OptionalWebRtcConfigRequest, OptionalWebRtcConfigResponse,
 };
 use crate::gen::proto::rpc::webrtc::v1::{
-    CallRequest, IceCandidate, Metadata, RequestHeaders, Strings,
+    CallRequest, ConnectionSignalingPath, DialStage, IceCandidate, Metadata,
+    ReportConnectionMetadataRequest, RequestHeaders, Strings,
 };
 use crate::rpc::webrtc;
 use ::http::header::HeaderName;
@@ -725,6 +727,9 @@ impl DialBuilder<WithoutCredentials> {
             original_uri,
             self.config.signaling_server_override.as_deref(),
         );
+        // `uri` is the resolved signaling server; classify how this WebRTC dial is signaled so a
+        // connection report can be delivered (only cloud-signaled dials report).
+        let signaling_path = dial_report::classify_signaling_path(uri.host().unwrap_or_default());
         let domain = uri2.authority().to_owned().unwrap().as_str();
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
@@ -780,7 +785,23 @@ impl DialBuilder<WithoutCredentials> {
             log::debug!("{}", log_prefixes::DIALED_GRPC);
             Ok(ViamChannel::Direct(channel.clone()))
         } else {
-            match maybe_connect_via_webrtc(uri, intercepted_channel.clone(), webrtc_options).await {
+            // A cloud-signaled dial reports over its own channel. A locally-signaled dial would
+            // report to prod app reusing credentials, but this (WithoutCredentials) dial has none,
+            // so it is dropped (matches Go's fixUpReportDialOpts).
+            let report_target = match signaling_path {
+                ConnectionSignalingPath::CloudSignaled => {
+                    Some(ReportTarget::Cloud(intercepted_channel.clone()))
+                }
+                _ => None,
+            };
+            match maybe_connect_via_webrtc(
+                uri,
+                intercepted_channel.clone(),
+                webrtc_options,
+                report_target,
+            )
+            .await
+            {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!("error connecting via webrtc: {e}. Attempting to connect directly");
@@ -916,6 +937,18 @@ impl DialBuilder<WithCredentials> {
             original_uri.clone(),
             self.config.signaling_server_override.as_deref(),
         );
+        // `uri_for_auth` is the resolved signaling server; classify how this WebRTC dial is
+        // signaled so a connection report can be delivered.
+        let signaling_path =
+            dial_report::classify_signaling_path(uri_for_auth.host().unwrap_or_default());
+        // Capture credentials for the local-dial report case before they are consumed by auth
+        // below; a locally-signaled WebRTC dial reports to prod app reusing these (see
+        // ReportTarget::Local).
+        let report_creds = self
+            .config
+            .credentials
+            .as_ref()
+            .map(|c| (c.credentials.clone(), c.entity.clone()));
 
         let mdns_uri = mdns_uri.and_then(|p| Uri::from_parts(p).ok());
         let attempting_mdns = mdns_uri.is_some();
@@ -982,7 +1015,30 @@ impl DialBuilder<WithCredentials> {
             log::debug!("Connected via gRPC");
             Ok(ViamChannel::DirectPreAuthorized(channel))
         } else {
-            match maybe_connect_via_webrtc(original_uri, channel.clone(), webrtc_options).await {
+            // A cloud-signaled dial reports over its own authenticated channel; a locally-signaled
+            // dial reconstructs an app connection reusing these credentials (Go's
+            // fixUpReportDialOpts).
+            let report_target = match signaling_path {
+                ConnectionSignalingPath::CloudSignaled => {
+                    Some(ReportTarget::Cloud(channel.clone()))
+                }
+                ConnectionSignalingPath::Local => {
+                    report_creds.map(|(creds, entity)| ReportTarget::Local {
+                        creds,
+                        entity: entity.unwrap_or_else(|| domain.clone()),
+                        host: domain.clone(),
+                    })
+                }
+                _ => None,
+            };
+            match maybe_connect_via_webrtc(
+                original_uri,
+                channel.clone(),
+                webrtc_options,
+                report_target,
+            )
+            .await
+            {
                 Ok(webrtc_channel) => Ok(ViamChannel::WebRTC(webrtc_channel)),
                 Err(e) => {
                     log::error!(
@@ -1148,12 +1204,146 @@ impl fmt::Display for CallerUpdateStats {
     }
 }
 
+/// The prod app signaling server, used to deliver reports for locally-signaled dials (Go's
+/// fixUpReportDialOpts redirects such dials to prod app). Like Go, this is hard-coded to prod, so a
+/// staging robot dialed by a local address does not route its report to app.viam.dev.
+const APP_SIGNALING_ADDRESS_FOR_REPORT: &str = "app.viam.com:443";
+
+/// How to deliver a WebRTC dial's connection report to the app signaling server (only app
+/// implements ReportConnectionMetadata). Mirrors goutils#583's per-dial app-dial options.
+enum ReportTarget {
+    /// The dial was cloud-signaled (routed through app); deliver over that same authenticated,
+    /// rpc-host-stamped channel.
+    Cloud(AddAuthorization<SetRequestHeader<Channel, HeaderValue>>),
+    /// The dial was signaled through a local signaling server; reconstruct an authenticated
+    /// connection to prod app, reusing the dial's credentials, and deliver there (Go's
+    /// fixUpReportDialOpts). Only a cloud-managed robot dialed by a local address can authenticate
+    /// to app; for anything else the report RPC fails harmlessly.
+    Local {
+        creds: Credentials,
+        entity: String,
+        host: String,
+    },
+}
+
+impl ReportTarget {
+    fn signaling_path(&self) -> ConnectionSignalingPath {
+        match self {
+            ReportTarget::Cloud(_) => ConnectionSignalingPath::CloudSignaled,
+            ReportTarget::Local { .. } => ConnectionSignalingPath::Local,
+        }
+    }
+}
+
+/// Reconstructs an authenticated connection to prod app to deliver a connection report for a
+/// locally-signaled dial, reusing the dial's credentials (Go's fixUpReportDialOpts). The rpc-host
+/// is the robot's host so app can attribute the report. app is always TLS.
+async fn connect_app_signaling_for_report(
+    creds: Credentials,
+    entity: String,
+    host: String,
+) -> Result<AddAuthorization<SetRequestHeader<Channel, HeaderValue>>> {
+    let uri = Uri::from_parts(uri_parts_with_defaults(APP_SIGNALING_ADDRESS_FOR_REPORT))?;
+    let mut channel = Channel::builder(uri).connect().await?;
+    let token = get_auth_token(&mut channel, creds, entity).await?;
+    Ok(ServiceBuilder::new()
+        .layer(AddAuthorizationLayer::bearer(&token))
+        .layer(SetRequestHeaderLayer::overriding(
+            HeaderName::from_static("rpc-host"),
+            HeaderValue::from_str(&host)?,
+        ))
+        .service(channel))
+}
+
+/// Delivers a connection report to the target, reconstructing an app connection first for a
+/// locally-signaled dial. Best-effort; failures are logged at debug.
+async fn deliver_report(target: ReportTarget, request: ReportConnectionMetadataRequest) {
+    match target {
+        ReportTarget::Cloud(channel) => dial_report::send_dial_report(channel, request).await,
+        ReportTarget::Local {
+            creds,
+            entity,
+            host,
+        } => {
+            let reconstruct = connect_app_signaling_for_report(creds, entity, host);
+            match tokio::time::timeout(Duration::from_secs(5), reconstruct).await {
+                Ok(Ok(channel)) => dial_report::send_dial_report(channel, request).await,
+                Ok(Err(e)) => {
+                    log::debug!("failed to connect to app to report local dial metadata: {e:#}")
+                }
+                Err(_) => log::debug!("timed out connecting to app to report local dial metadata"),
+            }
+        }
+    }
+}
+
+/// Attempts a WebRTC dial and, on completion (success or failure), best-effort reports the dial's
+/// connection metadata to the app signaling server (a port of goutils#583). Reporting never adds
+/// latency to or fails the dial. `report_target` is None when the dial should not be reported
+/// (e.g. a locally-signaled dial with no credentials to authenticate to app with).
 async fn maybe_connect_via_webrtc(
     uri: Uri,
     channel: AddAuthorization<SetRequestHeader<Channel, HeaderValue>>,
     webrtc_options: Option<Options>,
+    report_target: Option<ReportTarget>,
+) -> Result<Arc<WebRTCClientChannel>> {
+    let dial_start = Instant::now();
+    let stage_tracker = Arc::new(StageTracker::new());
+
+    let result =
+        maybe_connect_via_webrtc_inner(uri, channel, webrtc_options, stage_tracker.clone()).await;
+
+    // Reporting is disabled under cfg(test).
+    if let Some(report_target) = report_target.filter(|_| dial_report::dial_reporting_enabled()) {
+        let duration_ms = dial_start.elapsed().as_millis().min(u32::MAX as u128) as u32;
+        let reached_stage = stage_tracker.reached();
+        let dial_succeeded = result.is_ok();
+        let signaling_path = report_target.signaling_path();
+
+        if dial_report::should_deliver(reached_stage, dial_succeeded, signaling_path) {
+            // On success, classify the selected ICE candidate pair from the live peer connection;
+            // a failed dial has no peer connection to inspect.
+            let peer_connection = result
+                .as_ref()
+                .ok()
+                .map(|client_channel| client_channel.base_channel.peer_connection.clone());
+            let failure_code = result.as_ref().err().map_or(0, dial_report::failure_code);
+
+            // Detached so reporting (gathering stats, reconnecting to app, and the RPC) never adds
+            // latency to the dial, and a cancelled dial still reports.
+            tokio::spawn(async move {
+                let (local, remote) =
+                    dial_report::classify_connection(peer_connection.as_deref()).await;
+                let request = ReportConnectionMetadataRequest {
+                    local: Some(local),
+                    remote: Some(remote),
+                    reached_stage,
+                    duration_ms,
+                    signaling_path: signaling_path as i32,
+                    failure_code,
+                };
+                deliver_report(report_target, request).await;
+            });
+        }
+    }
+
+    result
+}
+
+async fn maybe_connect_via_webrtc_inner(
+    uri: Uri,
+    channel: AddAuthorization<SetRequestHeader<Channel, HeaderValue>>,
+    webrtc_options: Option<Options>,
+    stage_tracker: Arc<StageTracker>,
 ) -> Result<Arc<WebRTCClientChannel>> {
     let webrtc_options = webrtc_options.unwrap_or_else(|| Options::infer_from_uri(uri.clone()));
+
+    // The channel was eagerly connected by create_channel (it uses `.connect().await`) before this
+    // function is called, so the signaling connection is already established on entry. Matching Go,
+    // set SIGNALING_CONNECTED here so a config-RPC failure against a reachable server reports
+    // SIGNALING_CONNECTED rather than UNSPECIFIED.
+    stage_tracker.advance(DialStage::SignalingConnected);
+
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let response = match signaling_client
         .optional_web_rtc_config(OptionalWebRtcConfigRequest::default())
@@ -1170,6 +1360,7 @@ async fn maybe_connect_via_webrtc(
     };
 
     let optional_config = response.into_inner().config;
+    stage_tracker.advance(DialStage::ConfigFetched);
 
     if webrtc_options.force_relay && webrtc_options.force_p2p {
         log::warn!(
@@ -1210,8 +1401,12 @@ async fn maybe_connect_via_webrtc(
         log::debug!("TURN filter options set: turn_uri={uri:?}");
     }
 
-    let (peer_connection, data_channel) =
-        webrtc::new_peer_connection_for_client(config, webrtc_options.disable_trickle_ice).await?;
+    let (peer_connection, data_channel) = webrtc::new_peer_connection_for_client(
+        config,
+        webrtc_options.disable_trickle_ice,
+        stage_tracker.clone(),
+    )
+    .await?;
 
     let sent_done_or_error = Arc::new(AtomicBool::new(false));
     let uuid_lock = Arc::new(RwLock::new("".to_string()));
@@ -1246,10 +1441,17 @@ async fn maybe_connect_via_webrtc(
 
         let caller_update_stats = caller_update_stats.clone();
         let caller_update_stats2 = caller_update_stats.clone();
+        let stage_tracker_ice = stage_tracker.clone();
         peer_connection.on_ice_connection_state_change(Box::new(
             move |state: RTCIceConnectionState| {
                 let caller_update_stats = caller_update_stats.clone();
+                let stage_tracker_ice = stage_tracker_ice.clone();
                 Box::pin(async move {
+                    if state == RTCIceConnectionState::Connected
+                        || state == RTCIceConnectionState::Completed
+                    {
+                        stage_tracker_ice.advance(DialStage::IceConnected);
+                    }
                     if state == RTCIceConnectionState::Completed {
                         let caller_update_stats_inner = caller_update_stats.lock().unwrap();
                         log::debug!("{}", caller_update_stats_inner);
@@ -1390,9 +1592,12 @@ async fn maybe_connect_via_webrtc(
     let client_channel_for_ice_gathering_thread = Arc::downgrade(&client_channel);
     let mut signaling_client = SignalingServiceClient::new(channel.clone());
     let mut call_client = signaling_client.call(call_request).await?.into_inner();
+    // The Call was accepted: the SDP offer has been sent to the signaling server.
+    stage_tracker.advance(DialStage::OfferSent);
 
     let channel2 = channel.clone();
     let sent_done_or_error2 = sent_done_or_error.clone();
+    let stage_tracker_task = stage_tracker.clone();
     tokio::spawn(async move {
         let uuid = uuid_for_ice_gathering_thread;
         let client_channel = client_channel_for_ice_gathering_thread;
@@ -1476,6 +1681,8 @@ async fn maybe_connect_via_webrtc(
                             break;
                         }
                     }
+                    // The answerer's SDP answer was received and applied.
+                    stage_tracker_task.advance(DialStage::AnswerReceived);
                     let _ = remote_description_set_s.send_replace(Some(()));
                     if webrtc_options.disable_trickle_ice {
                         send_done_once(sent_done.clone(), &response.uuid, channel2.clone()).await;
@@ -1548,6 +1755,8 @@ async fn maybe_connect_via_webrtc(
     }
 
     exchange_done.store(true, Ordering::Release);
+    // The data channel is open: the connection is fully ready. This is success.
+    stage_tracker.advance(DialStage::Ready);
     let uuid = uuid_lock.read().unwrap().to_string();
     send_done_once(sent_done_or_error, &uuid, channel.clone()).await;
     Ok(client_channel)

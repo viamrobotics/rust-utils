@@ -1,5 +1,6 @@
+use super::dial_report::StageTracker;
 use super::log_prefixes;
-use crate::gen::proto::rpc::webrtc::v1::{IceServer, ResponseTrailers, WebRtcConfig};
+use crate::gen::proto::rpc::webrtc::v1::{DialStage, IceServer, ResponseTrailers, WebRtcConfig};
 use anyhow::Result;
 use bytes::Bytes;
 use core::fmt;
@@ -276,6 +277,7 @@ fn create_invalid_sdp_err(err: serde_json::error::Error) -> webrtc::Error {
 pub(crate) async fn new_peer_connection_for_client(
     config: RTCConfiguration,
     disable_trickle_ice: bool,
+    stage_tracker: Arc<StageTracker>,
 ) -> Result<(Arc<RTCPeerConnection>, Arc<RTCDataChannel>)> {
     let web_api = new_webrtc_api()?;
     let peer_connection = Arc::new(web_api.new_peer_connection(config).await?);
@@ -294,9 +296,13 @@ pub(crate) async fn new_peer_connection_for_client(
 
     peer_connection.on_peer_connection_state_change(Box::new(
         move |connection: RTCPeerConnectionState| {
+            let stage_tracker = stage_tracker.clone();
             log::info!("peer connection state change: {connection}");
             if connection == RTCPeerConnectionState::Connected {
                 log::debug!("{}", log_prefixes::DIALED_WEBRTC);
+                // The peer connection reaching Connected means ICE + DTLS completed; the data
+                // channel is not necessarily open yet (that is READY).
+                stage_tracker.advance(DialStage::DtlsConnected);
             }
             Box::pin(async move {})
         },
