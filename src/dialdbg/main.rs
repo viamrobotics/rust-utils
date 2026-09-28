@@ -400,5 +400,8 @@ pub(crate) async fn main_inner(args: Args) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // dialdbg is a diagnostic tool; its dials are synthetic (and often use force_p2p/force_relay),
+    // so keep them out of the best-effort dial connection reports sent to app (see rpc::dial_report).
+    std::env::set_var("VIAM_DISABLE_DIAL_REPORTING", "1");
     main_inner(Args::parse()).await
 }
