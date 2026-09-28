@@ -9,7 +9,14 @@ use viam_rust_utils::gen::proto::rpc::examples::echo::v1::{
 };
 use viam_rust_utils::rpc::dial;
 
+// Keep the best-effort dial connection reports (see rpc::dial_report) from firing during tests, so
+// no detached report task outlives a test.
+fn disable_dial_reporting() {
+    env::set_var("VIAM_DISABLE_DIAL_REPORTING", "1");
+}
+
 async fn dial_direct() -> Result<dial::ViamChannel> {
+    disable_dial_reporting();
     let port = env::var("SERVER_PORT").unwrap().to_owned();
     let uri = ["localhost:".to_string(), port].join("");
 
@@ -107,6 +114,7 @@ async fn test_dial_direct_bidi() -> Result<()> {
 }
 
 async fn dial_webrtc() -> Result<dial::ViamChannel> {
+    disable_dial_reporting();
     let port = env::var("SERVER_PORT").unwrap().to_owned();
     let uri = ["localhost:".to_string(), port].join("");
 
