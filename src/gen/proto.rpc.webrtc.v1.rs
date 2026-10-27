@@ -26,7 +26,7 @@ pub struct Stream {
 pub struct Request {
     #[prost(message, optional, tag="1")]
     pub stream: ::core::option::Option<Stream>,
-    #[prost(oneof="request::Type", tags="2, 3, 4")]
+    #[prost(oneof="request::Type", tags="2, 3, 4, 5")]
     pub r#type: ::core::option::Option<request::Type>,
 }
 /// Nested message and enum types in `Request`.
@@ -40,6 +40,10 @@ pub mod request {
         Message(super::RequestMessage),
         #[prost(bool, tag="4")]
         RstStream(bool),
+        /// api_token lets a client authenticate with the answerer over the PeerConnection when
+        /// the signaling server could not authenticate it. In the form `<api-key-id>:<api-key>`.
+        #[prost(string, tag="5")]
+        ApiToken(::prost::alloc::string::String),
     }
 }
 /// RequestHeaders describe the unary or streaming call to make.
@@ -162,6 +166,10 @@ pub struct CallRequest {
 pub struct CallResponseInitStage {
     #[prost(string, tag="1")]
     pub sdp: ::prost::alloc::string::String,
+    /// must_auth_against_answerer tells the caller that the signaling server could not
+    /// authenticate it, so it must authenticate with the answerer over the PeerConnection.
+    #[prost(bool, tag="2")]
+    pub must_auth_against_answerer: bool,
 }
 /// CallResponseUpdateStage is multiply used to trickle in ICE candidates from
 /// the controlled (answering) side.
@@ -261,6 +269,11 @@ pub struct AnswerRequestInitStage {
     /// from the caller's auth token by the signaling server.
     #[prost(map="string, string", tag="5")]
     pub caller_auth_metadata: ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    /// a warning from the signaling server that the signaling server
+    /// could not auth the caller. if this flag is true, the answerer
+    /// must auth the caller itself
+    #[prost(bool, tag="6")]
+    pub must_auth_caller: bool,
 }
 /// AnswerRequestUpdateStage is multiply used to trickle in ICE candidates to
 /// the controlled (answerer) side.
@@ -324,6 +337,10 @@ pub mod answer_request {
 pub struct AnswerResponseInitStage {
     #[prost(string, tag="1")]
     pub sdp: ::prost::alloc::string::String,
+    /// can_auth_callers tells the signaling server that this answerer can authenticate
+    /// callers itself, so it may receive callers the signaling server could not authenticate.
+    #[prost(bool, tag="2")]
+    pub can_auth_callers: bool,
 }
 /// AnswerResponseUpdateStage is multiply used to trickle in ICE candidates to
 /// the controlling side.
