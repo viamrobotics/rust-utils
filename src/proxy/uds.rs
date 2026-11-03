@@ -1,8 +1,5 @@
-use hyper::server::accept::Accept;
 use rand::distributions::{Alphanumeric, DistString};
 use std::io::Error;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use tokio::net::{UnixListener, UnixStream};
 
 pub struct Connector {
@@ -23,21 +20,9 @@ impl Connector {
     pub fn get_path(&self) -> &str {
         &self.path
     }
-}
-
-impl Accept for Connector {
-    type Conn = UnixStream;
-    type Error = Error;
-
-    fn poll_accept(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Conn, Self::Error>>> {
-        match self.inner.poll_accept(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok((socket, _addr))) => Poll::Ready(Some(Ok(socket))),
-            Poll::Ready(Err(err)) => Poll::Ready(Some(Err(err))),
-        }
+    pub async fn accept(&self) -> Result<UnixStream, Error> {
+        let (socket, _addr) = self.inner.accept().await?;
+        Ok(socket)
     }
 }
 

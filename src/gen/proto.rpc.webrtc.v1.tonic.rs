@@ -1,7 +1,13 @@
 // @generated
 /// Generated client implementations.
 pub mod signaling_service_client {
-    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
+    #![allow(
+        unused_variables,
+        dead_code,
+        missing_docs,
+        clippy::wildcard_imports,
+        clippy::let_unit_value,
+    )]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
@@ -21,10 +27,10 @@ pub mod signaling_service_client {
     }
     impl<T> SignalingServiceClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::BoxBody>,
+        T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
-        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+        T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+        <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
     {
         pub fn new(inner: T) -> Self {
             let inner = tonic::client::Grpc::new(inner);
@@ -42,14 +48,14 @@ pub mod signaling_service_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
+                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
                 >,
             >,
             <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + Send + Sync,
+                http::Request<tonic::body::Body>,
+            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             SignalingServiceClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -95,12 +101,11 @@ pub mod signaling_service_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
+                    tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/proto.rpc.webrtc.v1.SignalingService/Call",
             );
@@ -120,12 +125,11 @@ pub mod signaling_service_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
+                    tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/proto.rpc.webrtc.v1.SignalingService/CallUpdate",
             );
@@ -147,12 +151,11 @@ pub mod signaling_service_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
+                    tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/proto.rpc.webrtc.v1.SignalingService/Answer",
             );
@@ -174,12 +177,11 @@ pub mod signaling_service_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
+                    tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/proto.rpc.webrtc.v1.SignalingService/OptionalWebRTCConfig",
             );
@@ -204,12 +206,11 @@ pub mod signaling_service_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
+                    tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/proto.rpc.webrtc.v1.SignalingService/ReportConnectionMetadata",
             );
@@ -227,16 +228,22 @@ pub mod signaling_service_client {
 }
 /// Generated server implementations.
 pub mod signaling_service_server {
-    #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
+    #![allow(
+        unused_variables,
+        dead_code,
+        missing_docs,
+        clippy::wildcard_imports,
+        clippy::let_unit_value,
+    )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with SignalingServiceServer.
     #[async_trait]
-    pub trait SignalingService: Send + Sync + 'static {
+    pub trait SignalingService: std::marker::Send + std::marker::Sync + 'static {
         /// Server streaming response type for the Call method.
-        type CallStream: futures_core::Stream<
+        type CallStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::CallResponse, tonic::Status>,
             >
-            + Send
+            + std::marker::Send
             + 'static;
         async fn call(
             &self,
@@ -250,10 +257,10 @@ pub mod signaling_service_server {
             tonic::Status,
         >;
         /// Server streaming response type for the Answer method.
-        type AnswerStream: futures_core::Stream<
+        type AnswerStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::AnswerRequest, tonic::Status>,
             >
-            + Send
+            + std::marker::Send
             + 'static;
         async fn answer(
             &self,
@@ -275,20 +282,18 @@ pub mod signaling_service_server {
         >;
     }
     #[derive(Debug)]
-    pub struct SignalingServiceServer<T: SignalingService> {
-        inner: _Inner<T>,
+    pub struct SignalingServiceServer<T> {
+        inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    struct _Inner<T>(Arc<T>);
-    impl<T: SignalingService> SignalingServiceServer<T> {
+    impl<T> SignalingServiceServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
         pub fn from_arc(inner: Arc<T>) -> Self {
-            let inner = _Inner(inner);
             Self {
                 inner,
                 accept_compression_encodings: Default::default(),
@@ -338,10 +343,10 @@ pub mod signaling_service_server {
     impl<T, B> tonic::codegen::Service<http::Request<B>> for SignalingServiceServer<T>
     where
         T: SignalingService,
-        B: Body + Send + 'static,
-        B::Error: Into<StdError> + Send + 'static,
+        B: Body + std::marker::Send + 'static,
+        B::Error: Into<StdError> + std::marker::Send + 'static,
     {
-        type Response = http::Response<tonic::body::BoxBody>;
+        type Response = http::Response<tonic::body::Body>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
         fn poll_ready(
@@ -351,7 +356,6 @@ pub mod signaling_service_server {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
-            let inner = self.inner.clone();
             match req.uri().path() {
                 "/proto.rpc.webrtc.v1.SignalingService/Call" => {
                     #[allow(non_camel_case_types)]
@@ -371,7 +375,9 @@ pub mod signaling_service_server {
                             request: tonic::Request<super::CallRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).call(request).await };
+                            let fut = async move {
+                                <T as SignalingService>::call(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -381,9 +387,8 @@ pub mod signaling_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let inner = inner.0;
                         let method = CallSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -415,7 +420,9 @@ pub mod signaling_service_server {
                             request: tonic::Request<super::CallUpdateRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).call_update(request).await };
+                            let fut = async move {
+                                <T as SignalingService>::call_update(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -425,9 +432,8 @@ pub mod signaling_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let inner = inner.0;
                         let method = CallUpdateSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -462,7 +468,9 @@ pub mod signaling_service_server {
                             >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).answer(request).await };
+                            let fut = async move {
+                                <T as SignalingService>::answer(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -472,9 +480,8 @@ pub mod signaling_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let inner = inner.0;
                         let method = AnswerSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -507,7 +514,11 @@ pub mod signaling_service_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                (*inner).optional_web_rtc_config(request).await
+                                <T as SignalingService>::optional_web_rtc_config(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
                             };
                             Box::pin(fut)
                         }
@@ -518,9 +529,8 @@ pub mod signaling_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let inner = inner.0;
                         let method = OptionalWebRTCConfigSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -555,7 +565,11 @@ pub mod signaling_service_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                (*inner).report_connection_metadata(request).await
+                                <T as SignalingService>::report_connection_metadata(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
                             };
                             Box::pin(fut)
                         }
@@ -566,9 +580,8 @@ pub mod signaling_service_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let inner = inner.0;
                         let method = ReportConnectionMetadataSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -585,20 +598,27 @@ pub mod signaling_service_server {
                 }
                 _ => {
                     Box::pin(async move {
-                        Ok(
-                            http::Response::builder()
-                                .status(200)
-                                .header("grpc-status", "12")
-                                .header("content-type", "application/grpc")
-                                .body(empty_body())
-                                .unwrap(),
-                        )
+                        let mut response = http::Response::new(
+                            tonic::body::Body::default(),
+                        );
+                        let headers = response.headers_mut();
+                        headers
+                            .insert(
+                                tonic::Status::GRPC_STATUS,
+                                (tonic::Code::Unimplemented as i32).into(),
+                            );
+                        headers
+                            .insert(
+                                http::header::CONTENT_TYPE,
+                                tonic::metadata::GRPC_CONTENT_TYPE,
+                            );
+                        Ok(response)
                     })
                 }
             }
         }
     }
-    impl<T: SignalingService> Clone for SignalingServiceServer<T> {
+    impl<T> Clone for SignalingServiceServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -610,17 +630,9 @@ pub mod signaling_service_server {
             }
         }
     }
-    impl<T: SignalingService> Clone for _Inner<T> {
-        fn clone(&self) -> Self {
-            Self(Arc::clone(&self.0))
-        }
-    }
-    impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self.0)
-        }
-    }
-    impl<T: SignalingService> tonic::server::NamedService for SignalingServiceServer<T> {
-        const NAME: &'static str = "proto.rpc.webrtc.v1.SignalingService";
+    /// Generated gRPC service name
+    pub const SERVICE_NAME: &str = "proto.rpc.webrtc.v1.SignalingService";
+    impl<T> tonic::server::NamedService for SignalingServiceServer<T> {
+        const NAME: &'static str = SERVICE_NAME;
     }
 }

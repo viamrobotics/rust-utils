@@ -17,9 +17,12 @@ use crate::rpc::dial::{
 use libc::{c_char, c_void};
 
 use crate::proxy;
-use hyper::Server;
+use hyper::server::conn::http2;
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::graceful::GracefulShutdown;
+use hyper_util::service::TowerToHyperService;
 use std::ffi::{CStr, CString};
-use tower::{make::Shared, ServiceBuilder};
+use tower::ServiceBuilder;
 use tower_http::{
     trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
     LatencyUnit,
@@ -260,7 +263,7 @@ unsafe fn dial_impl(
             return ptr::null_mut();
         }
     };
-    let (tx, rx) = oneshot::channel::<()>();
+    let (tx, mut rx) = oneshot::channel::<()>();
     let uri_str = uri.to_string();
 
     // if the uri is local then we can connect directly.
@@ -299,7 +302,7 @@ unsafe fn dial_impl(
     };
     let timeout_duration = Duration::from_secs_f32(c_timeout);
 
-    let (server, channel) = match runtime.block_on(async move {
+    let (service, channel) = match runtime.block_on(async move {
         let channel = match (r#type, payload) {
             (Some(t), Some(p)) => {
                 timeout(
@@ -342,10 +345,7 @@ unsafe fn dial_impl(
             )
             .service(g);
 
-        let server = Server::builder(conn)
-            .http2_only(true)
-            .serve(Shared::new(service));
-        Ok::<_, Box<dyn std::error::Error>>((server, channel))
+        Ok::<_, Box<dyn std::error::Error>>((service, channel))
     }) {
         Ok(s) => s,
         Err(e) => {
@@ -354,11 +354,33 @@ unsafe fn dial_impl(
         }
     };
     ctx.channels.push(channel);
-    let server = server.with_graceful_shutdown(async {
-        rx.await.ok();
-    });
-    let _ = runtime.spawn(async {
-        let _ = server.await;
+    let _ = runtime.spawn(async move {
+        let builder = http2::Builder::new(TokioExecutor::new());
+        let graceful = GracefulShutdown::new();
+        loop {
+            let stream = tokio::select! {
+                stream = conn.accept() => stream,
+                _ = &mut rx => break,
+            };
+            let stream = match stream {
+                Ok(stream) => stream,
+                Err(e) => {
+                    log::error!("Error accepting proxy connection: {e}");
+                    break;
+                }
+            };
+            let connection = builder.serve_connection(
+                TokioIo::new(stream),
+                TowerToHyperService::new(service.clone()),
+            );
+            let connection = graceful.watch(connection);
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    log::debug!("Proxy connection closed with error: {e}");
+                }
+            });
+        }
+        graceful.shutdown().await;
     });
     ctx.push_signal(tx);
     path.into_raw()

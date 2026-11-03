@@ -1,8 +1,11 @@
 version: v1
 plugins:
-  - plugin: buf.build/community/neoeinstein-prost:v0.2.3
+  - plugin: buf.build/community/neoeinstein-prost:v0.5.0
     out: src/gen/
-  - plugin: buf.build/community/neoeinstein-tonic:v0.3.0
+    opt:
+        - flat_output_dir
+  - plugin: buf.build/community/neoeinstein-tonic:v0.5.0
     out: src/gen/
     opt:
         - no_include=true
+        - flat_output_dir

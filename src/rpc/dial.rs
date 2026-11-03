@@ -30,6 +30,7 @@ use ::webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use anyhow::{Context, Result};
 use core::fmt;
 use futures::stream::FuturesUnordered;
+use futures_util::future::BoxFuture;
 use futures_util::{pin_mut, stream::StreamExt};
 use local_ip_address::list_afinet_netifas;
 use std::{
@@ -43,9 +44,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::{mpsc, watch};
-use tonic::body::BoxBody;
-use tonic::codegen::BoxFuture;
-use tonic::transport::{Body, Channel, ClientTlsConfig, Uri};
+use tonic::body::Body;
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 
 use tower::{Service, ServiceBuilder};
 use tower_http::auth::AddAuthorization;
@@ -89,7 +89,7 @@ impl ViamChannel {
     async fn create_resp(
         channel: &mut Arc<WebRTCClientChannel>,
         stream: crate::gen::proto::rpc::webrtc::v1::Stream,
-        request: http::Request<BoxBody>,
+        request: http::Request<Body>,
         response: http::response::Builder,
     ) -> http::Response<Body> {
         let (parts, body) = request.into_parts();
@@ -119,7 +119,7 @@ impl ViamChannel {
         // `to_bytes` before returning the response, which serialized send-then-receive.
         if status_code == STATUS_CODE_OK {
             let send_channel = channel.clone();
-            let send_stream = stream.clone();
+            let send_stream = stream;
             tokio::spawn(async move {
                 if let Err(e) = pump_request_body(&send_channel, &send_stream, body).await {
                     log::error!("error sending message: {e}");
@@ -134,7 +134,7 @@ impl ViamChannel {
                 log::error!("error receiving response from stream: {e}");
                 channel.close_stream_with_recv_error(stream_id, e);
                 status_code = STATUS_CODE_UNKNOWN;
-                Body::empty()
+                Body::default()
             }
         };
 
@@ -156,11 +156,11 @@ impl ViamChannel {
 async fn pump_request_body(
     channel: &Arc<WebRTCClientChannel>,
     stream: &crate::gen::proto::rpc::webrtc::v1::Stream,
-    mut body: BoxBody,
+    mut body: Body,
 ) -> Result<()> {
-    use http_body::Body as _;
+    use http_body_util::BodyExt as _;
 
-    // Abort the pump if the underlying connection dies. `body.data()` polls the
+    // Abort the pump if the underlying connection dies. `body.frame()` polls the
     // app-side request body, which is independent of the data channel, so without
     // this a dead connection with an idle-but-open send half would park this task
     // forever while it pins the channel Arc alive. Built once outside the loop so the
@@ -170,18 +170,21 @@ async fn pump_request_body(
 
     let mut buf: Vec<u8> = Vec::new();
     loop {
-        let chunk = tokio::select! {
+        let frame = tokio::select! {
             biased;
             _ = &mut cancelled => {
                 return Err(anyhow::anyhow!(
                     "connection closed before request body completed; aborting send"
                 ));
             }
-            chunk = body.data() => chunk,
+            frame = body.frame() => frame,
         };
-        let chunk = match chunk {
-            Some(chunk) => chunk.map_err(|e| anyhow::anyhow!("error reading request body: {e}"))?,
+        let frame = match frame {
+            Some(frame) => frame.map_err(|e| anyhow::anyhow!("error reading request body: {e}"))?,
             None => break, // body complete
+        };
+        let Ok(chunk) = frame.into_data() else {
+            continue; // request trailers carry no message bytes
         };
         buf.extend_from_slice(&chunk);
 
@@ -211,10 +214,10 @@ async fn pump_request_body(
     channel.write_eos(stream).await
 }
 
-impl Service<http::Request<BoxBody>> for ViamChannel {
+impl Service<http::Request<Body>> for ViamChannel {
     type Response = http::Response<Body>;
     type Error = tonic::transport::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
         match self {
@@ -224,7 +227,7 @@ impl Service<http::Request<BoxBody>> for ViamChannel {
         }
     }
 
-    fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, request: http::Request<Body>) -> Self::Future {
         match self {
             Self::Direct(channel) => Box::pin(channel.call(request)),
             Self::DirectPreAuthorized(channel) => Box::pin(channel.call(request)),
@@ -636,12 +639,10 @@ impl<T: AuthMethod> DialBuilder<T> {
             // loopback.  `domain` is the robot's canonical hostname (e.g.
             // `my-robot.abcdefg.viam.cloud`) used for SNI and SAN verification.
             log::debug!("mDNS create_channel: connecting to {host} with TLS");
-            let tls_config = ClientTlsConfig::new().domain_name(domain);
             let mut parts = uri.clone().into_parts();
             parts.scheme = Some(Scheme::HTTPS);
             let tls_uri = Uri::from_parts(parts)?;
-            match Channel::builder(tls_uri.clone())
-                .tls_config(tls_config)?
+            match endpoint(tls_uri.clone(), Some(domain))?
                 .connect()
                 .await
                 .with_context(|| format!("Connecting to {:?}", tls_uri))
@@ -668,7 +669,7 @@ impl<T: AuthMethod> DialBuilder<T> {
             }
         }
 
-        let chan = match Channel::builder(uri.clone())
+        let chan = match endpoint(uri.clone(), None)?
             .connect()
             .await
             .with_context(|| format!("Connecting to {:?}", uri.clone()))
@@ -1619,10 +1620,33 @@ fn duplicate_uri(parts: &Parts) -> Option<Parts> {
     Some(uri.build().ok()?.into_parts())
 }
 
+/// Builds an endpoint for `uri`; https endpoints trust both the OS roots and the bundled webpki roots.
+fn endpoint(uri: Uri, domain: Option<&str>) -> Result<Endpoint> {
+    let endpoint = Channel::builder(uri.clone());
+    if uri.scheme() != Some(&Scheme::HTTPS) {
+        return Ok(endpoint);
+    }
+    let mut tls_config = ClientTlsConfig::new();
+    if let Some(domain) = domain {
+        tls_config = tls_config.domain_name(domain);
+    }
+    // tonic rejects the whole config when the OS trust store is empty; dial with webpki roots alone.
+    match endpoint
+        .clone()
+        .tls_config(tls_config.clone().with_enabled_roots())
+    {
+        Ok(endpoint) => Ok(endpoint),
+        Err(e) => {
+            log::debug!("OS trust store unavailable ({e:?}); using bundled webpki roots only");
+            Ok(endpoint.tls_config(tls_config.with_webpki_roots())?)
+        }
+    }
+}
+
 fn uri_parts_with_defaults(uri: &str) -> Parts {
     let mut uri_parts = uri.parse::<Uri>().unwrap().into_parts();
     uri_parts.scheme = Some(Scheme::HTTPS);
-    uri_parts.path_and_query = Some(PathAndQuery::from_static(""));
+    uri_parts.path_and_query = Some(PathAndQuery::from_static("/"));
     uri_parts
 }
 

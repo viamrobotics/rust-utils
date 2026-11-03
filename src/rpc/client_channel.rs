@@ -5,7 +5,6 @@ use crate::gen::proto::rpc::webrtc::v1::{
 };
 use anyhow::Result;
 use dashmap::DashMap;
-use hyper::Body;
 use prost::Message;
 use std::{
     fmt::Debug,
@@ -30,7 +29,7 @@ pub struct WebRTCClientChannel {
     pub(crate) base_channel: Arc<WebRTCBaseChannel>,
     stream_id_counter: AtomicU64,
     pub(crate) streams: DashMap<u64, WebRTCClientStream>,
-    pub(crate) receiver_bodies: DashMap<u64, hyper::Body>,
+    pub(crate) receiver_bodies: DashMap<u64, BodyReceiver>,
     // String type rather than error type because anyhow::Error does not derive clone
     pub(crate) error: RwLock<Option<String>>,
 }
@@ -107,10 +106,10 @@ impl WebRTCClientChannel {
         }
         let id = self.stream_id_counter.fetch_add(1, Ordering::AcqRel);
         let stream = Stream { id };
-        let (message_sender, receiver_body) = hyper::Body::channel();
+        let (message_sender, receiver_body) = body_channel();
 
         let base_stream = WebRTCBaseStream {
-            stream: stream.clone(),
+            stream,
             message_sender,
             closed: AtomicBool::new(false),
             packet_buffer: Vec::new(),
@@ -164,9 +163,9 @@ impl WebRTCClientChannel {
         maybe_err
     }
 
-    pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<Body> {
+    pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<tonic::body::Body> {
         match self.receiver_bodies.remove(&stream_id) {
-            Some(entry) => Ok(entry.1),
+            Some(entry) => Ok(entry.1.into_body()),
             None => Err(anyhow::anyhow!(
                 "Tried to receive stream {stream_id} but it didn't exist!"
             )),
@@ -179,7 +178,7 @@ impl WebRTCClientChannel {
         headers: RequestHeaders,
     ) -> Result<()> {
         let headers = Request {
-            stream: Some(stream.clone()),
+            stream: Some(*stream),
             r#type: Some(Type::Headers(headers)),
         };
         let header_vec = Message::encode_to_vec(&headers);
@@ -206,7 +205,7 @@ impl WebRTCClientChannel {
             let (to_send, remaining) = payload.split_at(split_at);
             let eom = remaining.is_empty();
             let request = Request {
-                stream: Some(stream.clone()),
+                stream: Some(*stream),
                 r#type: Some(Type::Message(RequestMessage {
                     has_message: true,
                     eos: false,
@@ -237,7 +236,7 @@ impl WebRTCClientChannel {
     // Memorialized here so it is not forgotten.
     pub(crate) async fn write_eos(&self, stream: &Stream) -> Result<()> {
         let request = Request {
-            stream: Some(stream.clone()),
+            stream: Some(*stream),
             r#type: Some(Type::Message(RequestMessage {
                 has_message: false,
                 eos: true,
