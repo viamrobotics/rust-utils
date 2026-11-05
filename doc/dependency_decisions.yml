@@ -79,7 +79,7 @@
     :when: 2026-04-03 14:00:01.288493000 Z
 - - :permit
   - CDLA-Permissive-2.0
-  - :who:
+  - :who: ale
     :why: permissive data license covering the Mozilla root store bundled in webpki-roots 1.x
     :versions: []
-    :when: 2026-11-03 20:30:00.000000000 Z
+    :when: 2026-11-05 19:35:08.000000000 Z
