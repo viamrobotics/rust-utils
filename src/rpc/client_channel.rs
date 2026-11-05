@@ -4,7 +4,9 @@ use crate::gen::proto::rpc::webrtc::v1::{
     RequestMessage, Response, Stream,
 };
 use anyhow::Result;
+use bytes::Bytes;
 use dashmap::DashMap;
+use http_body_util::channel::Channel;
 use prost::Message;
 use std::{
     fmt::Debug,
@@ -29,7 +31,7 @@ pub struct WebRTCClientChannel {
     pub(crate) base_channel: Arc<WebRTCBaseChannel>,
     stream_id_counter: AtomicU64,
     pub(crate) streams: DashMap<u64, WebRTCClientStream>,
-    pub(crate) receiver_bodies: DashMap<u64, BodyReceiver>,
+    pub(crate) receiver_bodies: DashMap<u64, Channel<Bytes>>,
     // String type rather than error type because anyhow::Error does not derive clone
     pub(crate) error: RwLock<Option<String>>,
 }
@@ -106,7 +108,7 @@ impl WebRTCClientChannel {
         }
         let id = self.stream_id_counter.fetch_add(1, Ordering::AcqRel);
         let stream = Stream { id };
-        let (message_sender, receiver_body) = body_channel();
+        let (message_sender, receiver_body) = Channel::new(1);
 
         let base_stream = WebRTCBaseStream {
             stream,
@@ -165,7 +167,7 @@ impl WebRTCClientChannel {
 
     pub(crate) fn resp_body_from_stream(&self, stream_id: u64) -> Result<tonic::body::Body> {
         match self.receiver_bodies.remove(&stream_id) {
-            Some(entry) => Ok(entry.1.into_body()),
+            Some(entry) => Ok(tonic::body::Body::new(entry.1)),
             None => Err(anyhow::anyhow!(
                 "Tried to receive stream {stream_id} but it didn't exist!"
             )),

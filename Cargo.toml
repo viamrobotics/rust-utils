@@ -37,7 +37,7 @@ futures-core = "0.3"
 futures-util = "0.3"
 http = "1.5.0"
 http-body = "1.1.0"
-http-body-util = "0.1.5"
+http-body-util = { version = "0.1.5", features = ["channel"] }
 hyper = { version = "1.12.0", features = ["http2", "server"] }
 hyper-util = { version = "0.1.21", features = ["http2", "server", "server-graceful", "service", "tokio"] }
 interceptor = "0.12.0"
