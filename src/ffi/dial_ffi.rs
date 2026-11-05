@@ -355,7 +355,9 @@ unsafe fn dial_impl(
     };
     ctx.channels.push(channel);
     let _ = runtime.spawn(async move {
-        let builder = http2::Builder::new(TokioExecutor::new());
+        let mut builder = http2::Builder::new(TokioExecutor::new());
+        // Unbounded: SDK clients send every RPC, long-lived streams included, over one connection.
+        builder.max_concurrent_streams(None);
         let graceful = GracefulShutdown::new();
         loop {
             let stream = tokio::select! {
