@@ -1,7 +1,7 @@
 use crate::gen::proto::rpc::webrtc::v1::{PacketMessage, Stream};
 use anyhow::Result;
-use bytes::BufMut;
-use hyper::body::Sender;
+use bytes::{BufMut, Bytes};
+use http_body_util::channel::Sender;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 const MAX_MESSAGE_SIZE: usize = 1 << 25;
@@ -10,7 +10,7 @@ const MAX_MESSAGE_SIZE: usize = 1 << 25;
 #[allow(dead_code)]
 pub struct WebRTCBaseStream {
     pub(crate) stream: Stream,
-    pub(crate) message_sender: Sender,
+    pub(crate) message_sender: Sender<Bytes>,
     pub(crate) closed: AtomicBool,
     pub(crate) packet_buffer: Vec<u8>,
     pub(crate) closed_reason: AtomicPtr<Option<anyhow::Error>>,

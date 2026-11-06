@@ -1,6 +1,6 @@
 use http::uri::{Scheme, Uri};
-use hyper::body::HttpBody;
-use hyper::Request;
+use http::Request;
+use http_body_util::BodyExt;
 use std::task::{Context, Poll};
 use tower::Service;
 #[derive(Clone, Debug)]
@@ -17,8 +17,8 @@ impl<T> GRPCProxy<T> {
 
 impl<T, ReqBody> Service<Request<ReqBody>> for GRPCProxy<T>
 where
-    T: Service<Request<tonic::body::BoxBody>> + Clone,
-    ReqBody: http_body::Body<Data = hyper::body::Bytes> + Send + 'static,
+    T: Service<Request<tonic::body::Body>> + Clone,
+    ReqBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     ReqBody::Error: ToString + Send + 'static,
 {
     type Response = T::Response;
@@ -30,9 +30,9 @@ where
     }
     fn call(&mut self, request: Request<ReqBody>) -> Self::Future {
         let (mut h, b) = request.into_parts();
-        let b = b
-            .map_err(|e| tonic::Status::new(tonic::Code::Unknown, e.to_string()))
-            .boxed_unsync();
+        let b = tonic::body::Body::new(
+            b.map_err(|e| tonic::Status::new(tonic::Code::Unknown, e.to_string())),
+        );
         let mut to_uri = self.uri.clone().into_parts();
         to_uri.path_and_query = h.uri.into_parts().path_and_query;
         if to_uri.scheme.is_none() {
