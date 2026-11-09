@@ -12,3 +12,11 @@ rustflags = [ "-C", "target-feature=-crt-static" ]
 
 [target.i686-unknown-linux-musl]
 rustflags = [ "-C", "target-feature=-crt-static" ]
+
+# Pin the minimum macOS version we build for instead of inheriting it from the
+# SDK of whichever machine runs the build, so that consumers on older macOS
+# versions can link our artifacts without "built for newer macOS version"
+# warnings. Both rustc and cc - which dependencies like ring use to compile C -
+# honor this. Artifacts can be checked with etc/check_macos_min_version.sh.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"
