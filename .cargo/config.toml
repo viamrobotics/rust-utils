@@ -12,3 +12,8 @@ rustflags = [ "-C", "target-feature=-crt-static" ]
 
 [target.i686-unknown-linux-musl]
 rustflags = [ "-C", "target-feature=-crt-static" ]
+
+# Unset, cc builds C deps like ring for the build machine's SDK version, and
+# consumers linking our artifacts on older macOS get "built for newer" warnings.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"
